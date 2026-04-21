@@ -1,0 +1,293 @@
+
+
+/* PAGE */
+.page {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+}
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html, body {
+  height: 100%;
+}
+
+.header {
+  height: 200px !important; /* Ensure height is set */
+  background: #0f172a;
+  color: white;
+  display: flex;
+  align-items: center;  /* Center the children vertically */
+  justify-content: space-between;
+  padding: 0 25px;
+}
+
+.headerLeft img {
+  height: 70px; /* Ensure logo is visible */
+}
+
+.headerCenter h2 {
+  font-size: 34px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%; /* Ensure it stretches to the full header height */
+}
+
+.logoutBtn {
+  background: #5ad13d;
+  font-size: 16px;
+  font-weight: 600;
+  padding: 12px;
+  border-radius: 50%;
+  border: none;
+  cursor: pointer;
+  width: 45px;
+  height: 45px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.logoutBtn:hover {
+  background: #48ad2f;
+}
+/* MAIN */
+.container {
+  display: flex;
+  flex: 1;
+  padding: 20px;
+  gap: 20px;
+}
+
+/* MAP SECTION */
+.mapContainer {
+  flex: 3;
+  background: white;
+  border-radius: 14px;
+  padding: 15px;
+  position: relative;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+}
+
+/* TOP BAR */
+.mapTopBar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 5px;
+}
+
+.mapTitle {
+  font-size: 20px; /* 🔥 bigger */
+  font-weight: 700;
+}
+/* Container for the map and its contents */
+.mapContainer {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 20px;
+  position: relative; /* Important for absolute positioning */
+}
+
+/* Title container for the map title */
+.mapTitleContainer {
+  display: flex;
+  justify-content: center;
+  width: 100%;
+  margin-bottom: 20px; /* Space between the title and the image */
+}
+
+/* Style the title text */
+.mapTitle {
+  font-size: 24px;
+  font-weight: bold;
+  text-align: center;
+  color: #333; /* Dark gray for the title */
+}
+
+/* Top bar containing the image */
+.mapTopBar {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  width: 100%;
+  position: relative; /* Important for absolute positioning inside */
+}
+
+/* Image container */
+.mapImageContainer {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  margin-top: 10px; /* Space between the image and the title */
+}
+
+/* Resize the image to be larger */
+.resized-image {
+  width: 100px; /* Increased the size of the image */
+  height: auto;
+  position: absolute; /* Now we can freely control positioning */
+  left: 10%; /* Move the image to the left */
+  margin-top: 2%;
+}
+.compassIcon {
+  font-size: 22px;
+}
+
+/* EXPORT */
+.export {
+  position: absolute;
+  top: 65px;
+  right: 20px;
+}
+
+.export button {
+  background: #2563eb;
+  font-size: 15px;
+  font-weight: 600;
+  padding: 8px 14px;
+  border-radius: 8px;
+  color: white;
+  border: none;
+  cursor: pointer;
+}
+
+.export button:hover {
+  background: #1d4ed8;
+}
+
+/* DROPDOWN */
+.dropdown {
+  margin-top: 6px;
+  background: white;
+  border-radius: 8px;
+  border: 1px solid #ddd;
+  overflow: hidden;
+}
+
+.dropdown div {
+  padding: 10px 14px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.dropdown div:hover {
+  background: #f3f4f6;
+}
+
+/* MAP BOX */
+.mapBox {
+  width: 100%;
+  height: calc(100% - 50px);
+ 
+}
+
+/* 🔥 MAP LABEL FIX (BIGGER + BOLD) */
+.map-label {
+  font-size: 13px;
+  font-weight: 700;
+  fill: #111827;
+  pointer-events: none;
+}
+
+/* LOGO */
+/* Adjusting mapLogo for bigger size */
+.mapLogo {
+  position: absolute;
+  bottom: 15px;
+  right: 5px;
+  width: 150px; /* Increased the width of the image */
+  height: auto; /* Maintain aspect ratio */
+}
+
+.mapLogo img {
+  height: 90px;
+  opacity: 0.9;
+}
+
+/* SIDE PANEL */
+.sidePanel {
+  flex: 1.2;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+/* CARD */
+.panelCard {
+  background: white;
+  padding: 15px;
+  border-radius: 14px;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+}
+
+.panelCard h3 {
+  font-size: 18px;
+  font-weight: 700;
+  margin-bottom: 12px;
+}
+
+/* SEARCH */
+.searchBox {
+  width: 100%;
+  padding: 10px;
+  font-size: 15px;
+  border-radius: 8px;
+  border: 1px solid #ccc;
+  margin-bottom: 12px;
+}
+
+/* LIST */
+.scrollBox {
+  max-height: 300px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.scrollBox label {
+  font-size: 15px; /* 🔥 bigger */
+  font-weight: 500;
+  display: flex;
+  gap: 8px;
+  cursor: pointer;
+}
+
+/* STATUS */
+.panelCard span {
+  font-size: 15px;
+  font-weight: 600;
+}
+
+/* STATUS DOT */
+.panelCard button {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  transition: 0.2s ease;
+}
+
+.panelCard button:hover {
+  transform: scale(1.2);
+}
+
+/* RESPONSIVE */
+@media (max-width: 900px) {
+  .container {
+    flex-direction: column;
+  }
+
+  .mapContainer {
+    height: 450px;
+  }
+}
