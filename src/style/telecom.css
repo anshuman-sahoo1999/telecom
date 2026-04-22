@@ -394,3 +394,15 @@ html, body {
 .mapLogo img {
   height: 60px;
 }
+@media (max-width: 900px) {
+
+  .mapContainer {
+    height: auto;
+  }
+
+  .mapBox {
+    width: 150%;
+    height: 300px; /* fixed height for mobile */
+  }
+
+}
