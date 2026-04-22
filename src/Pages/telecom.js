@@ -10,6 +10,8 @@ import "../style/telecom.css";
 
 export default function TelecomMap() {
 
+  
+
   const [selectedStates, setSelectedStates] = useState(() => {
     return JSON.parse(localStorage.getItem("selectedStates")) || [];
   });
@@ -42,21 +44,70 @@ export default function TelecomMap() {
   };
 
   // ✅ EXPORT ONLY MAP SECTION
-const captureAndExport = async (type) => {
+ const captureAndExport = async (type) => {
   try {
-    setIsExporting(true);   // hide export button
+    setIsExporting(true);
     setShowExport(false);
 
-    // ✅ WAIT for DOM update (VERY IMPORTANT)
-    await new Promise((res) => setTimeout(res, 300));
+    await new Promise((res) => setTimeout(res, 200));
 
-    const mapEl = exportRef.current;
+    const original = exportRef.current;
+    if (!original) return;
 
-    const canvas = await html2canvas(mapEl, {
-      backgroundColor: "#ffffff",
+    // ✅ CLONE
+    const clone = original.cloneNode(true);
+
+    // ✅ FIX CONTAINER
+    clone.style.width = "1100px";
+    clone.style.position = "absolute";
+    clone.style.top = "-9999px";
+    clone.style.left = "-9999px";
+    clone.style.background = "#ffffff";
+    clone.style.overflow = "visible";
+
+    // ❌ REMOVE EXPORT BUTTON
+    const exportBtn = clone.querySelector(".export");
+    if (exportBtn) exportBtn.remove();
+
+    document.body.appendChild(clone);
+
+    // ✅ WAIT IMAGES
+    const images = clone.querySelectorAll("img");
+    await Promise.all(
+      Array.from(images).map((img) => {
+        if (img.complete) return Promise.resolve();
+        return new Promise((res) => {
+          img.onload = res;
+          img.onerror = res;
+        });
+      })
+    );
+
+    // ✅ 🔥 FIX MAP SIZE (MAIN FIX)
+    const mapBox = clone.querySelector(".mapBox");
+    if (mapBox) {
+      mapBox.style.width = "100%";
+      mapBox.style.height = "650px";
+
+      const svg = mapBox.querySelector("svg");
+      if (svg) {
+        svg.setAttribute("width", "1100");
+        svg.setAttribute("height", "650");
+        svg.style.width = "1100px";
+        svg.style.height = "650px";
+      }
+    }
+
+    // ✅ WAIT AFTER STYLE
+    await new Promise((res) => setTimeout(res, 200));
+
+    const canvas = await html2canvas(clone, {
       scale: 2,
       useCORS: true,
+      backgroundColor: "#ffffff",
     });
+
+    document.body.removeChild(clone);
 
     const imgData = canvas.toDataURL("image/png");
 
@@ -76,12 +127,11 @@ const captureAndExport = async (type) => {
     }
 
   } catch (err) {
-    console.error(err);
+    console.error("Export error:", err);
   } finally {
-    setIsExporting(false); // show button again
+    setIsExporting(false);
   }
 };
-
   const handleLogout = () => {
     alert("Logged out successfully!");
     localStorage.clear();
