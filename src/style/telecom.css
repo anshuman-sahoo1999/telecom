@@ -342,13 +342,13 @@ html, body {
   .mapContainer {
     flex: none;
     width: 100%;
-    height: 55vh;
+    height: 65vh;
     padding: 10px;
   }
 
   .mapBox {
-    width: 100%;
-    height: 100%;
+    width: 150%;
+    height: 200%;
   }
 
   /* SIDE PANEL BELOW MAP */
@@ -387,7 +387,7 @@ html, body {
 }
 .mapLogo {
   position: absolute;
-  bottom: 10px; /* was 15px → moved slightly down */
+  bottom: -10px; /* was 15px → moved slightly down */
   right: -20px;
 }
 
