@@ -44,6 +44,10 @@ export default function TelecomMap() {
   };
 
   // ✅ EXPORT ONLY MAP SECTION
+ 
+
+
+    // ✅ 🔥 FIX MAP SIZE (MAIN FIX)
  const captureAndExport = async (type) => {
   try {
     setIsExporting(true);
@@ -54,10 +58,8 @@ export default function TelecomMap() {
     const original = exportRef.current;
     if (!original) return;
 
-    // ✅ CLONE
     const clone = original.cloneNode(true);
 
-    // ✅ FIX CONTAINER
     clone.style.width = "1100px";
     clone.style.position = "absolute";
     clone.style.top = "-9999px";
@@ -65,13 +67,11 @@ export default function TelecomMap() {
     clone.style.background = "#ffffff";
     clone.style.overflow = "visible";
 
-    // ❌ REMOVE EXPORT BUTTON
     const exportBtn = clone.querySelector(".export");
     if (exportBtn) exportBtn.remove();
 
     document.body.appendChild(clone);
 
-    // ✅ WAIT IMAGES
     const images = clone.querySelectorAll("img");
     await Promise.all(
       Array.from(images).map((img) => {
@@ -83,7 +83,6 @@ export default function TelecomMap() {
       })
     );
 
-    // ✅ 🔥 FIX MAP SIZE (MAIN FIX)
     const mapBox = clone.querySelector(".mapBox");
     if (mapBox) {
       mapBox.style.width = "100%";
@@ -98,7 +97,6 @@ export default function TelecomMap() {
       }
     }
 
-    // ✅ WAIT AFTER STYLE
     await new Promise((res) => setTimeout(res, 200));
 
     const canvas = await html2canvas(clone, {
@@ -114,10 +112,24 @@ export default function TelecomMap() {
     if (type === "pdf") {
       const pdf = new jsPDF("landscape", "mm", "a4");
 
-      const width = pdf.internal.pageSize.getWidth();
-      const height = (canvas.height * width) / canvas.width;
+      const pageWidth = pdf.internal.pageSize.getWidth();
+      const pageHeight = pdf.internal.pageSize.getHeight();
 
-      pdf.addImage(imgData, "PNG", 0, 0, width, height);
+      const imgWidth = canvas.width;
+      const imgHeight = canvas.height;
+
+      const ratio = Math.min(
+        (pageWidth - 10) / imgWidth,
+        (pageHeight - 10) / imgHeight
+      );
+
+      const finalWidth = imgWidth * ratio;
+      const finalHeight = imgHeight * ratio;
+
+      const x = (pageWidth - finalWidth) / 2;
+      const y = (pageHeight - finalHeight) / 2;
+
+      pdf.addImage(imgData, "PNG", x, y, finalWidth, finalHeight);
       pdf.save("usa-map.pdf");
     } else {
       const link = document.createElement("a");
@@ -136,6 +148,7 @@ export default function TelecomMap() {
     alert("Logged out successfully!");
     localStorage.clear();
     window.location.href = "/";
+    
   };
 
   return (
