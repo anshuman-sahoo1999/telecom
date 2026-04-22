@@ -48,24 +48,17 @@ export default function TelecomMap() {
 
   const mapEl = exportRef.current;
 
-  // ✅ SAVE ORIGINAL STYLE
-  const originalStyle = {
-    width: mapEl.style.width,
-    height: mapEl.style.height,
-    overflow: mapEl.style.overflow,
-  };
-
-  // ✅ FORCE PROPER EXPORT SIZE
-  mapEl.style.width = "1100px";
-  mapEl.style.height = "700px";   // 🔥 height increase (important)
-  mapEl.style.overflow = "visible"; // 🔥 prevent cutting
+  // ✅ GET ACTUAL SIZE (IMPORTANT)
+  const rect = mapEl.getBoundingClientRect();
 
   await new Promise((res) => setTimeout(res, 300));
 
   const canvas = await html2canvas(mapEl, {
     backgroundColor: "#ffffff",
-    scale: window.devicePixelRatio,
+    scale: window.devicePixelRatio, // sharp output
     useCORS: true,
+    width: rect.width,
+    height: rect.height,
     scrollX: 0,
     scrollY: 0,
   });
@@ -75,10 +68,10 @@ export default function TelecomMap() {
   if (type === "pdf") {
     const pdf = new jsPDF("landscape", "mm", "a4");
 
-    const width = pdf.internal.pageSize.getWidth();
-    const height = pdf.internal.pageSize.getHeight();
+    const pdfWidth = pdf.internal.pageSize.getWidth();
+    const pdfHeight = (rect.height * pdfWidth) / rect.width; // maintain ratio
 
-    pdf.addImage(imgData, "PNG", 0, 0, width, height);
+    pdf.addImage(imgData, "PNG", 0, 0, pdfWidth, pdfHeight);
     pdf.save("usa-map.pdf");
   } else {
     const link = document.createElement("a");
@@ -87,13 +80,9 @@ export default function TelecomMap() {
     link.click();
   }
 
-  // ✅ RESTORE
-  mapEl.style.width = originalStyle.width;
-  mapEl.style.height = originalStyle.height;
-  mapEl.style.overflow = originalStyle.overflow;
-
   setIsExporting(false);
 };
+
   const handleLogout = () => {
     alert("Logged out successfully!");
     localStorage.clear();
