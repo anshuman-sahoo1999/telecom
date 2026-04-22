@@ -42,25 +42,37 @@ export default function TelecomMap() {
   };
 
   // ✅ EXPORT ONLY MAP SECTION
- const captureAndExport = async (type) => {
+const captureAndExport = async (type) => {
   setIsExporting(true);
   setShowExport(false);
 
   const mapEl = exportRef.current;
+  const logo = mapEl.querySelector(".mapLogo");
+  const mapBox = mapEl.querySelector("#mapBox");
 
-  // ✅ GET ACTUAL SIZE (IMPORTANT)
-  const rect = mapEl.getBoundingClientRect();
+  // ✅ Save original style
+  const originalLogoStyle = {
+    position: logo.style.position,
+    bottom: logo.style.bottom,
+    right: logo.style.right,
+    top: logo.style.top,
+  };
+
+  // ✅ Get map height
+  const mapRect = mapBox.getBoundingClientRect();
+
+  // ✅ Move logo just below map
+  logo.style.position = "absolute";
+  logo.style.top = `${mapRect.height - 60}px`; // 🔥 adjust 60px based on logo size
+  logo.style.right = "20px";
+  logo.style.bottom = "auto";
 
   await new Promise((res) => setTimeout(res, 300));
 
   const canvas = await html2canvas(mapEl, {
     backgroundColor: "#ffffff",
-    scale: window.devicePixelRatio, // sharp output
+    scale: window.devicePixelRatio,
     useCORS: true,
-    width: rect.width,
-    height: rect.height,
-    scrollX: 0,
-    scrollY: 0,
   });
 
   const imgData = canvas.toDataURL("image/png");
@@ -68,10 +80,10 @@ export default function TelecomMap() {
   if (type === "pdf") {
     const pdf = new jsPDF("landscape", "mm", "a4");
 
-    const pdfWidth = pdf.internal.pageSize.getWidth();
-    const pdfHeight = (rect.height * pdfWidth) / rect.width; // maintain ratio
+    const width = pdf.internal.pageSize.getWidth();
+    const height = (canvas.height * width) / canvas.width;
 
-    pdf.addImage(imgData, "PNG", 0, 0, pdfWidth, pdfHeight);
+    pdf.addImage(imgData, "PNG", 0, 0, width, height);
     pdf.save("usa-map.pdf");
   } else {
     const link = document.createElement("a");
@@ -79,6 +91,12 @@ export default function TelecomMap() {
     link.href = canvas.toDataURL(`image/${type}`);
     link.click();
   }
+
+  // ✅ Restore original
+  logo.style.position = originalLogoStyle.position;
+  logo.style.bottom = originalLogoStyle.bottom;
+  logo.style.right = originalLogoStyle.right;
+  logo.style.top = originalLogoStyle.top;
 
   setIsExporting(false);
 };
