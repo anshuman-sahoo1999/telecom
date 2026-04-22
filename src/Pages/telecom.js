@@ -42,38 +42,53 @@ export default function TelecomMap() {
   };
 
   // ✅ EXPORT ONLY MAP SECTION
-  const captureAndExport = async (type) => {
-    setIsExporting(true);
-    setShowExport(false);
+ const captureAndExport = async (type) => {
+  setIsExporting(true);
+  setShowExport(false);
 
-    await new Promise((res) => setTimeout(res, 300));
+  const mapEl = exportRef.current;
 
-    const canvas = await html2canvas(exportRef.current, {
-      backgroundColor: "#ffffff",
-      scale: 2,
-      useCORS: true,
-    });
-
-    const imgData = canvas.toDataURL("image/png");
-
-    if (type === "pdf") {
-      const pdf = new jsPDF("landscape", "mm", "a4");
-
-      const width = pdf.internal.pageSize.getWidth();
-      const height = pdf.internal.pageSize.getHeight();
-
-      pdf.addImage(imgData, "PNG", 0, 0, width, height);
-      pdf.save("usa-map.pdf");
-    } else {
-      const link = document.createElement("a");
-      link.download = `usa-map.${type}`;
-      link.href = canvas.toDataURL(`image/${type}`);
-      link.click();
-    }
-
-    setIsExporting(false);
+  const originalStyle = {
+    width: mapEl.style.width,
+    height: mapEl.style.height,
+    transform: mapEl.style.transform,
   };
 
+  mapEl.style.width = "1100px";
+  mapEl.style.height = "650px";
+  mapEl.style.transform = "scale(1)";
+
+  await new Promise((res) => setTimeout(res, 300));
+
+  const canvas = await html2canvas(mapEl, {
+    backgroundColor: "#ffffff",
+    scale: window.devicePixelRatio,
+    useCORS: true,
+  });
+
+  const imgData = canvas.toDataURL("image/png");
+
+  if (type === "pdf") {
+    const pdf = new jsPDF("landscape", "mm", "a4");
+    const width = pdf.internal.pageSize.getWidth();
+    const height = pdf.internal.pageSize.getHeight();
+
+    pdf.addImage(imgData, "PNG", 0, 0, width, height);
+    pdf.save("usa-map.pdf");
+  } else {
+    const link = document.createElement("a");
+    link.download = `usa-map.${type}`;
+    link.href = canvas.toDataURL(`image/${type}`);
+    link.click();
+  }
+
+  // restore
+  mapEl.style.width = originalStyle.width;
+  mapEl.style.height = originalStyle.height;
+  mapEl.style.transform = originalStyle.transform;
+
+  setIsExporting(false);
+};
   const handleLogout = () => {
     alert("Logged out successfully!");
     localStorage.clear();
@@ -201,7 +216,6 @@ export default function TelecomMap() {
       }
     </Geographies>
   </ComposableMap>
-
 
             <div className="mapLogo">
               <img src="/Image/img1.png" alt="logo" />
