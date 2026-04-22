@@ -43,62 +43,43 @@ export default function TelecomMap() {
 
   // ✅ EXPORT ONLY MAP SECTION
 const captureAndExport = async (type) => {
-  setIsExporting(true);
-  setShowExport(false);
+  try {
+    setIsExporting(true);   // hide export button
+    setShowExport(false);
 
-  const mapEl = exportRef.current;
-  const logo = mapEl.querySelector(".mapLogo");
-  const mapBox = mapEl.querySelector("#mapBox");
+    // ✅ WAIT for DOM update (VERY IMPORTANT)
+    await new Promise((res) => setTimeout(res, 300));
 
-  // ✅ Save original style
-  const originalLogoStyle = {
-    position: logo.style.position,
-    bottom: logo.style.bottom,
-    right: logo.style.right,
-    top: logo.style.top,
-  };
+    const mapEl = exportRef.current;
 
-  // ✅ Get map height
-  const mapRect = mapBox.getBoundingClientRect();
+    const canvas = await html2canvas(mapEl, {
+      backgroundColor: "#ffffff",
+      scale: 2,
+      useCORS: true,
+    });
 
-  // ✅ Move logo just below map
-  logo.style.position = "absolute";
-  logo.style.top = `${mapRect.height - 60}px`; // 🔥 adjust 60px based on logo size
-  logo.style.right = "20px";
-  logo.style.bottom = "auto";
+    const imgData = canvas.toDataURL("image/png");
 
-  await new Promise((res) => setTimeout(res, 300));
+    if (type === "pdf") {
+      const pdf = new jsPDF("landscape", "mm", "a4");
 
-  const canvas = await html2canvas(mapEl, {
-    backgroundColor: "#ffffff",
-    scale: window.devicePixelRatio,
-    useCORS: true,
-  });
+      const width = pdf.internal.pageSize.getWidth();
+      const height = (canvas.height * width) / canvas.width;
 
-  const imgData = canvas.toDataURL("image/png");
+      pdf.addImage(imgData, "PNG", 0, 0, width, height);
+      pdf.save("usa-map.pdf");
+    } else {
+      const link = document.createElement("a");
+      link.href = imgData;
+      link.download = `usa-map.${type}`;
+      link.click();
+    }
 
-  if (type === "pdf") {
-    const pdf = new jsPDF("landscape", "mm", "a4");
-
-    const width = pdf.internal.pageSize.getWidth();
-    const height = (canvas.height * width) / canvas.width;
-
-    pdf.addImage(imgData, "PNG", 0, 0, width, height);
-    pdf.save("usa-map.pdf");
-  } else {
-    const link = document.createElement("a");
-    link.download = `usa-map.${type}`;
-    link.href = canvas.toDataURL(`image/${type}`);
-    link.click();
+  } catch (err) {
+    console.error(err);
+  } finally {
+    setIsExporting(false); // show button again
   }
-
-  // ✅ Restore original
-  logo.style.position = originalLogoStyle.position;
-  logo.style.bottom = originalLogoStyle.bottom;
-  logo.style.right = originalLogoStyle.right;
-  logo.style.top = originalLogoStyle.top;
-
-  setIsExporting(false);
 };
 
   const handleLogout = () => {
