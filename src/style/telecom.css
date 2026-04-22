@@ -291,3 +291,106 @@ html, body {
     height: 450px;
   }
 }
+@media (max-width: 900px) {
+
+  /* KEEP SAME LAYOUT AS DESKTOP */
+  .page {
+    height: 100vh;
+    overflow-x: hidden;
+  }
+
+  .container {
+    flex-direction: row; /* IMPORTANT: NO COLUMN */
+    padding: 10px;
+    gap: 10px;
+  }
+
+  /* HEADER SAME ROW LIKE DESKTOP */
+  .header {
+    height: 120px; /* reduced but still horizontal */
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 15px;
+  }
+
+  .headerLeft img {
+    height: 50px;
+  }
+
+  .headerCenter h2 {
+    font-size: 20px;
+    text-align: center;
+  }
+
+  .logoutBtn {
+    width: 38px;
+    height: 38px;
+  }
+
+}
+@media (max-width: 900px) {
+
+  /* CONTAINER FIX (IMPORTANT) */
+  .container {
+    flex-direction: column;
+    padding: 10px;
+    gap: 12px;
+  }
+
+  /* MAP FULL WIDTH ON MOBILE */
+  .mapContainer {
+    flex: none;
+    width: 100%;
+    height: 55vh;
+    padding: 10px;
+  }
+
+  .mapBox {
+    width: 100%;
+    height: 100%;
+  }
+
+  /* SIDE PANEL BELOW MAP */
+  .sidePanel {
+    flex: none;
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  /* CARD FIX */
+  .panelCard {
+    width: 100%;
+    padding: 12px;
+  }
+
+  /* LIST SCROLL FIX */
+  .scrollBox {
+    max-height: 180px;
+    overflow-y: auto;
+  }
+
+  /* TEXT SCALING ONLY */
+  .panelCard h3 {
+    font-size: 16px;
+  }
+
+  .scrollBox label {
+    font-size: 13px;
+  }
+
+  .searchBox {
+    font-size: 14px;
+  }
+}
+.mapLogo {
+  position: absolute;
+  bottom: 10px; /* was 15px → moved slightly down */
+  right: -20px;
+}
+
+.mapLogo img {
+  height: 60px;
+}
