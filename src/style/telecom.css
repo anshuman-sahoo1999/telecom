@@ -387,8 +387,9 @@ html, body {
 }
 .mapLogo {
   position: absolute;
-  bottom: -10px; /* was 15px → moved slightly down */
-  right: -20px;
+  bottom: 10px;
+  right: 10px;
+  z-index: 2; /* control layering */
 }
 
 .mapLogo img {
