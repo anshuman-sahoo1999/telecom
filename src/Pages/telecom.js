@@ -48,15 +48,17 @@ export default function TelecomMap() {
 
   const mapEl = exportRef.current;
 
+  // ✅ SAVE ORIGINAL STYLE
   const originalStyle = {
     width: mapEl.style.width,
     height: mapEl.style.height,
-    transform: mapEl.style.transform,
+    overflow: mapEl.style.overflow,
   };
 
+  // ✅ FORCE PROPER EXPORT SIZE
   mapEl.style.width = "1100px";
-  mapEl.style.height = "650px";
-  mapEl.style.transform = "scale(1)";
+  mapEl.style.height = "700px";   // 🔥 height increase (important)
+  mapEl.style.overflow = "visible"; // 🔥 prevent cutting
 
   await new Promise((res) => setTimeout(res, 300));
 
@@ -64,12 +66,15 @@ export default function TelecomMap() {
     backgroundColor: "#ffffff",
     scale: window.devicePixelRatio,
     useCORS: true,
+    scrollX: 0,
+    scrollY: 0,
   });
 
   const imgData = canvas.toDataURL("image/png");
 
   if (type === "pdf") {
     const pdf = new jsPDF("landscape", "mm", "a4");
+
     const width = pdf.internal.pageSize.getWidth();
     const height = pdf.internal.pageSize.getHeight();
 
@@ -82,10 +87,10 @@ export default function TelecomMap() {
     link.click();
   }
 
-  // restore
+  // ✅ RESTORE
   mapEl.style.width = originalStyle.width;
   mapEl.style.height = originalStyle.height;
-  mapEl.style.transform = originalStyle.transform;
+  mapEl.style.overflow = originalStyle.overflow;
 
   setIsExporting(false);
 };
