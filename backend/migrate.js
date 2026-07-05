@@ -57,7 +57,9 @@ async function main() {
 
     for (let block of blocks) {
       let query = block.trim();
-      if (/^INSERT INTO/i.test(query)) {
+      const insertIndex = query.toUpperCase().indexOf('INSERT INTO');
+      if (insertIndex !== -1) {
+        query = query.substring(insertIndex);
         // Clean up MySQL specific syntax for PostgreSQL
         query = query.replace(/`/g, '');
         query = query.replace(/\\"/g, '"');
