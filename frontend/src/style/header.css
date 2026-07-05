@@ -1,0 +1,712 @@
+:root{
+    --accent-color:#2563eb;
+}
+
+.layout{
+    display:flex;
+    flex-direction:column;
+    min-height:100vh;
+}
+.layout.dark{
+    background:#0f172a;
+    color:#fff;
+}
+.main-content{
+    flex:1;
+}
+.sticky-navbar{
+    position:sticky;
+    top:0;
+    z-index:1000;
+    box-shadow:0 3px 10px rgba(0,0,0,.08);
+}
+
+/*======================
+TOP BAR
+=======================*/
+
+.top-bar{
+    background:#4ca710;
+    color:#fff;
+    padding:0 24px;
+    height:42px;
+    display:flex;
+    justify-content:space-between;
+    align-items:center;
+    font-size:14px;
+    font-weight:600;
+}
+
+.tb-right{
+    display:flex;
+    align-items:center;
+    gap:20px;
+}
+
+.dateTime{
+    display:flex;
+    align-items:center;
+    gap:8px;
+}
+
+.dateTime svg{
+    font-size:15px;
+}
+
+/*======================
+HEADER
+=======================*/
+
+.header{
+    background:#fff;
+
+    display:flex;
+
+    justify-content:space-between;
+
+    align-items:center;
+
+    padding:0 25px;
+
+    border-bottom:1px solid #e5e7eb;
+}
+
+.headerLeft{
+
+    display:flex;
+
+    align-items:center;
+
+    gap:18px;
+}
+
+.logo{
+
+    width:65px;
+
+    height:75px;
+
+    object-fit:contain;
+}
+
+.companyInfo{
+
+    display:flex;
+
+    flex-direction:column;
+}
+
+.companyInfo h2{
+
+    margin:0;
+
+    font-size:22px;
+
+    color:#1e293b;
+
+    font-weight:700;
+}
+.companyInfo h3{
+
+    margin-top:6px;
+
+    font-size:14px;
+
+    color:#64748b;
+
+    font-weight:500;
+}
+
+.headerRight{
+
+    position:relative;
+}
+
+/*==================
+USER
+==================*/
+
+.userBox {
+  width: 45px;
+  height: 45px;
+  border-radius: 50%;
+  background: var(--accent-color);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  color: #fff;
+  cursor: pointer;
+  font-size: 20px;
+  transition: 0.3s;
+}
+.logoutPopup{
+
+    position:absolute;
+
+    right:0;
+
+    top:65px;
+
+    width:150px;
+
+    background:#fff;
+
+    border-radius:10px;
+
+    box-shadow:0 8px 25px rgba(0,0,0,.15);
+
+    padding:10px;
+
+    z-index:999;
+}
+
+.popupItem{
+
+    display:flex;
+
+    align-items:center;
+
+    gap:10px;
+
+    color:#ef4444;
+
+    font-weight:600;
+
+    cursor:pointer;
+}
+
+/*====================
+SETTINGS
+=====================*/
+
+.settings-wrapper{
+
+    position:relative;
+}
+
+.settings-dropdown{
+
+    position:absolute;
+
+    top:42px;
+
+    right:0;
+
+    width:220px;
+
+    background:#fff;
+
+    color:#333;
+
+    border-radius:10px;
+
+    box-shadow:0 8px 25px rgba(0,0,0,.15);
+
+    padding:15px;
+
+    z-index:9999;
+}
+
+.s-header{
+
+    font-weight:700;
+
+    border-bottom:1px solid #eee;
+
+    padding-bottom:8px;
+
+    margin-bottom:10px;
+}
+
+.s-section{
+
+    margin-bottom:12px;
+}
+
+.s-section label{
+
+    display:block;
+
+    margin-bottom:5px;
+
+    font-size:11px;
+
+    text-transform:uppercase;
+
+    color:#888;
+
+    font-weight:700;
+}
+
+.theme-toggle{
+
+    display:flex;
+
+    border:1px solid #ddd;
+
+    border-radius:6px;
+
+    overflow:hidden;
+}
+
+.theme-toggle button{
+
+    flex:1;
+
+    border:none;
+
+    padding:7px;
+
+    cursor:pointer;
+
+    display:flex;
+
+    justify-content:center;
+
+    align-items:center;
+
+    gap:5px;
+}
+
+.theme-toggle button.active{
+
+    background:var(--accent-color);
+
+    color:#fff;
+}
+
+.color-palette{
+
+    display:flex;
+
+    gap:8px;
+}
+
+.color-palette span{
+
+    width:24px;
+
+    height:24px;
+
+    border-radius:50%;
+
+    cursor:pointer;
+}
+
+/*=====================
+SETTINGS ICON
+======================*/
+
+.settings-icon-wrapper{
+
+    width:35px;
+
+    height:35px;
+
+    border-radius:50%;
+
+    display:flex;
+
+    justify-content:center;
+
+    align-items:center;
+
+    cursor:pointer;
+
+    border:1px solid rgba(255,255,255,.3);
+
+    background:rgba(255,255,255,.1);
+
+    transition:.3s;
+}
+
+.settings-icon{
+   color:#fff;
+    font-size:18px;
+}
+.settings-icon-wrapper.active{
+    background:#fff;
+}
+.settings-icon-wrapper.active .settings-icon{
+    color:var(--accent-color);
+}
+
+/* =====================================================
+TABLET (992px)
+===================================================== */
+
+@media (max-width:992px){
+
+.header{
+    padding:15px;
+}
+
+.headerLeft{
+    gap:12px;
+}
+
+.logo{
+    width:55px;
+    height:65px;
+}
+
+.companyInfo h2{
+    font-size:20px;
+}
+
+.companyInfo h3{
+    font-size:13px;
+}
+
+.top-bar{
+    padding:0 15px;
+    font-size:13px;
+}
+
+.tb-right{
+    gap:12px;
+}
+
+.settings-dropdown{
+    right:0;
+}
+.headerRight{
+    position:absolute;
+    top:90px;
+    right:40px;
+    display:flex;          /* added */
+    align-items:center;    /* added */
+    gap:10px;              /* added for spacing */
+}
+
+.menu-icon span{
+    display:block;
+    width:22px;
+    background:#000;
+}
+
+.userWrapper {
+  position: relative;
+  display: inline-block;
+}
+
+.menu-icon {
+  position: absolute;
+  top: 80px; /* user icon ke upar */
+  left:-30%;
+  transform: translateX(-50%);
+}
+
+.userBox {
+  position: absolute;   /* or relative (depending on layout) */
+  top: -30px;
+  right:-25px;
+  width: 50px;
+  height: 50px;
+}
+
+}
+
+
+/* =====================================================
+TABLET (768px)
+===================================================== */
+
+@media (max-width:768px){
+
+.top-bar{
+    height:auto;
+    padding:10px;
+    flex-direction:column;
+    gap:8px;
+    text-align:center;
+}
+
+.tb-left{
+    font-size:13px;
+    line-height:20px;
+}
+
+.tb-right{
+    width:100%;
+    justify-content:center;
+    flex-wrap:wrap;
+    gap:12px;
+}
+
+.header{
+    padding:12px;
+    flex-direction:column;
+    gap:15px;
+}
+
+.headerLeft{
+    width:100%;
+}
+
+.companyInfo{
+    flex:1;
+}
+
+.companyInfo h2{
+    font-size:19px;
+}
+
+.companyInfo h3{
+    font-size:13px;
+    line-height:20px;
+}
+
+.headerRight{
+    width:100%;
+    display:flex;
+    justify-content:flex-end;
+}
+
+.logoutPopup{
+    top:55px;
+}
+.headerRight{
+    position:absolute;
+    top:90px;
+    right:40px;
+    display:flex;          /* added */
+    align-items:center;    /* added */
+    gap:10px;              /* added for spacing */
+}
+
+.menu-icon span{
+    display:block;
+    width:22px;
+    background:#000;
+}
+
+.userWrapper {
+  position: relative;
+  display: inline-block;
+}
+
+.menu-icon {
+  position: absolute;
+  top: 80px; /* user icon ke upar */
+  left:-30%;
+  transform: translateX(-50%);
+}
+
+.userBox {
+  position: absolute;   /* or relative (depending on layout) */
+  top: -30px;
+  right:-25px;
+  width: 50px;
+  height: 50px;
+}
+}
+
+
+/* =====================================
+   MOBILE VIEW
+===================================== */
+
+@media (max-width:768px){
+
+.top-bar{
+
+    flex-direction:column;
+
+    height:auto;
+
+    padding:8px 10px;
+
+    gap:8px;
+
+    text-align:center;
+}
+
+.tb-left{
+
+    font-size:12px;
+
+    line-height:18px;
+}
+
+.tb-right{
+
+    width:100%;
+
+    justify-content:center;
+
+    flex-wrap:wrap;
+
+    gap:10px;
+}
+
+.header{
+
+    flex-direction:column;
+
+    align-items:flex-start;
+
+    padding:15px;
+}
+
+.headerLeft{
+
+    width:100%;
+
+    align-items:center;
+
+    gap:12px;
+}
+
+.logo{
+
+    width:50px;
+
+    height:60px;
+}
+
+.companyInfo{
+
+    flex:1;
+}
+
+.companyInfo h2{
+
+    font-size:18px;
+
+    line-height:24px;
+}
+
+.companyInfo h3{
+
+    font-size:13px;
+
+    line-height:20px;
+}
+
+.headerRight{
+    position: absolute;
+    top: 12px;      /* 👈 same line as header */
+    right: 12px;
+
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.userBox{
+margin-top:45px;
+    width:42px;
+
+    height:42px;
+
+    font-size:18px;
+}
+
+.logoutPopup{
+
+    top:55px;
+
+    right:0;
+}
+
+.settings-dropdown{
+
+    width:230px;
+
+    right:-15px;
+}
+
+.theme-toggle{
+
+    flex-direction:column;
+}
+
+.theme-toggle button{
+
+    width:100%;
+}
+
+.color-palette{
+
+    flex-wrap:wrap;
+}
+}
+
+@media (max-width:400px){
+.header{
+    display:flex;
+    justify-content:space-between;
+    align-items:flex-start;
+    padding:10px;
+}
+
+.headerLeft{
+    display:flex;
+    flex-direction:column;
+    align-items:flex-start;
+    gap:2px;
+}
+
+/* optional small fixes */
+.companyInfo{
+    grid-column:1 / span 2;
+}
+
+.companyInfo h2{
+    font-size:18px;
+    margin:0;
+}
+
+.companyInfo h3{
+    font-size:13px;
+}
+
+/* ✅ MAIN FIX HERE */
+.headerRight{
+    position:absolute;
+    top:90px;
+    right:40px;
+    display:flex;          /* added */
+    align-items:center;    /* added */
+    gap:10px;              /* added for spacing */
+}
+
+.menu-icon span{
+    display:block;
+    width:22px;
+    background:#000;
+}
+
+.userWrapper {
+  position: relative;
+  display: inline-block;
+}
+
+.menu-icon {
+  position: absolute;
+  top: 80px; /* user icon ke upar */
+  left:-30%;
+  transform: translateX(-50%);
+}
+
+.userBox {
+  position: absolute;   /* or relative (depending on layout) */
+  top: -30px;
+  right:-25px;
+  width: 50px;
+  height: 50px;
+}
+.logo{
+    height:50px;
+    width:20%;
+}
+
+.settings-dropdown{
+    right:-18px;
+}
+
+.logoutPopup{
+    width:130px;
+}
+}

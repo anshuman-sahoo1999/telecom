@@ -1,0 +1,777 @@
+.user-management {
+    min-height: 100vh;
+    font-family: "Segoe UI", sans-serif;
+    max-width: 1250px;
+    margin: 0 auto;
+}
+.top-section {
+  text-align: center;
+  margin-bottom: 28px;
+}
+
+.top-section h2 {
+  font-size: 32px;
+  font-weight: 700;
+  color: #1e3a8a;
+  margin-bottom: 20px;
+  text-align: center;
+}
+
+.tab-wrapper {
+  display: flex;
+  justify-content: center;
+  gap: 20px;
+  flex-wrap: wrap;
+}
+
+.tab-card {
+  width: 220px;
+  height: 80px;
+  background: #ffffff;
+  border-radius: 22px;
+  padding: 12px;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  border: 2px solid transparent;
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.06);
+  position: relative;
+  overflow: hidden;
+}
+
+.tab-card::before {
+  content: "";
+  position: absolute;
+  top: -35px;
+  right: -35px;
+  width: 90px;
+  height: 90px;
+  background: rgba(99, 102, 241, 0.08);
+  border-radius: 50%;
+}
+
+.tab-card:hover {
+  transform: translateY(-5px);
+  box-shadow: 0 14px 28px rgba(15, 23, 42, 0.12);
+}
+
+.tab-icon {
+  width: 48px;
+  height: 48px;
+  border-radius: 16px;
+  background: linear-gradient(135deg, #44a4d1, #7d50ca);
+  color: #ffffff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 22px;
+  flex-shrink: 0;
+}
+
+.tab-info h3 {
+  font-size: 18px;
+  color: #111827;
+  margin-bottom: 4px;
+  font-weight: 700;
+}
+
+.tab-info span {
+  font-size: 12px;
+  color: #6b7280;
+  line-height: 1.4;
+}
+
+.tab-card.active {
+  background: linear-gradient(135deg, #385a92, #683db1);
+  border-color: #4f46e5;
+}
+
+.tab-card.active .tab-icon {
+  background: rgba(255, 255, 255, 0.16);
+  backdrop-filter: blur(5px);
+}
+
+.tab-card.active .tab-info h3,
+.tab-card.active .tab-info span {
+  color: #ffffff;
+}
+
+@media (max-width: 768px) {
+  .tab-wrapper {
+    flex-direction: column;
+    align-items: center;
+  }
+
+  .tab-card {
+    width: 100%;
+    max-width: 320px;
+  }
+
+  .top-section h2 {
+    font-size: 24px;
+  }
+}
+.table-section {
+  margin-top: 30px;
+  background: #fff;
+  border-radius: 15px;
+  box-shadow: 0 4px 18px rgba(0,0,0,0.08);
+  overflow-x: auto;
+  overflow-y: visible;
+  position: relative;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.table-section table {
+    width: max-content;
+  min-width: 100%;
+  white-space: nowrap;
+  border-collapse: collapse;
+}
+
+.table-section thead {
+  background: #4f46e5;
+  color: white;
+}
+
+.table-section th,
+.table-section td {
+  padding: 12px;
+  text-align: left;
+  border-bottom: 1px solid #eee;
+  font-size: 14px;
+}
+
+.table-section tbody tr:hover {
+  background: #f9fafb;
+}
+
+/* EDIT BUTTON (SAVE STYLE) */
+.edit-btn {
+  padding: 6px 14px;
+  border: none;
+  border-radius: 6px;
+  background: #2563eb;
+  color: white;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  margin-right: 8px;
+  transition: 0.2s ease;
+}
+
+.edit-btn:hover {
+  background: #1d4ed8;
+  transform: translateY(-1px);
+}
+
+/* DELETE BUTTON (CANCEL STYLE ALSO USING SAME CLASS) */
+.delete-btn {
+  padding: 6px 14px;
+  border: none;
+  border-radius: 6px;
+  background: #dc2626;
+  color: white;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: 0.2s ease;
+}
+
+.delete-btn:hover {
+  background: #b91c1c;
+  transform: translateY(-1px);
+}
+.toast {
+  position: fixed;
+  top: 20px;
+  right: 20px;
+  padding: 12px 18px;
+  border-radius: 8px;
+  color: #fff;
+  font-weight: 500;
+  z-index: 9999;
+  animation: slideIn 0.3s ease, fadeOut 0.3s ease 2.7s;
+}
+
+.toast.success {
+  background: linear-gradient(135deg, #28a745, #20c997);
+}
+
+.toast.error {
+  background: linear-gradient(135deg, #dc3545, #ff6b6b);
+}
+
+@keyframes slideIn {
+  from {
+    transform: translateX(120%);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+@keyframes fadeOut {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}
+/* ================= DOMAIN BAR (PROFESSIONAL UI) ================= */
+
+.domain-bar {
+  width: 80%;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 16px;
+  margin: 12px auto; /* 👈 center fix */
+  background: linear-gradient(135deg, #ffffff, #f1f5f9);
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+  gap: 12px;
+}
+/* LEFT DOMAIN LIST */
+.domain-list {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+/* DOMAIN BUTTONS */
+.domain-list button {
+  padding: 7px 14px;
+  font-size: 13px;
+  font-weight: 500;
+  border-radius: 999px;
+  border: 1px solid #d1d5db;
+  background: #ffffff;
+  color: #334155;
+  cursor: pointer;
+  transition: all 0.25s ease;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+}
+
+/* HOVER EFFECT */
+.domain-list button:hover {
+  background: #e2e8f0;
+  transform: translateY(-1px);
+}
+
+/* ACTIVE DOMAIN */
+.domain-list button.active {
+  background: linear-gradient(135deg, #0f172a, #1e293b);
+  color: #ffffff;
+  border-color: #0f172a;
+  box-shadow: 0 6px 14px rgba(15, 23, 42, 0.25);
+}
+
+/* RIGHT CREATE BUTTON */
+.create-user-btn button {
+  padding: 9px 16px;
+  background: linear-gradient(135deg, #699e2d, #3ba038);
+  color: #ffffff;
+  border: none;
+  border-radius: 10px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.25s ease;
+  box-shadow: 0 6px 14px rgba(15, 23, 42, 0.2);
+}
+
+/* HOVER */
+.create-user-btn button:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 10px 18px rgba(15, 23, 42, 0.3);
+}
+
+/* CLICK EFFECT */
+.create-user-btn button:active {
+  transform: scale(0.97);
+}
+/* =========================
+   MODAL OVERLAY (BACKDROP)
+========================= */
+.modalOverlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100vh;
+  background: rgba(15, 23, 42, 0.65);
+  backdrop-filter: blur(6px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 999;
+  animation: fadeIn 0.25s ease-in-out;
+}
+
+/* =========================
+   MODAL BOX
+========================= */
+.modalBoxes {
+  width: 50%;
+  background: #ffffff;
+  border-radius: 14px;
+  padding: 25px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.25);
+  transform: scale(0.9);
+  animation: popUp 0.25s ease-in-out forwards;
+}
+
+/* TITLE */
+.modalBox h2 {
+  margin-bottom: 18px;
+  font-size: 20px;
+  font-weight: 600;
+  color: #0f172a;
+  text-align: center;
+}
+
+/* FORM */
+.userForm {
+  display: flex;
+  flex-direction: column;
+}
+
+/* INPUTS */
+.userForm input,
+.userForm select {
+  padding: 10px 12px;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  font-size: 14px;
+  outline: none;
+  transition: 0.2s;
+}
+
+.userForm input:focus,
+.userForm select:focus {
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.2);
+}
+
+/* BUTTONS */
+.modalActions {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 10px;
+}
+
+.modalActions button {
+  flex: 1;
+  padding: 10px;
+  border: none;
+  border-radius: 8px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: 0.2s;
+}
+
+.modalActions button[type="submit"] {
+  background: #2563eb;
+  color: #fff;
+  margin-right: 8px;
+}
+
+.modalActions button[type="submit"]:hover {
+  background: #1d4ed8;
+}
+
+.modalActions button[type="button"] {
+  background: #e5e7eb;
+  color: #111827;
+}
+
+.modalActions button[type="button"]:hover {
+  background: #d1d5db;
+}
+
+/* =========================
+   ANIMATIONS
+========================= */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes popUp {
+  from {
+    transform: scale(0.85);
+    opacity: 0;
+  }
+  to {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+.multi-select {
+  position: relative;
+  width: 100%;
+}
+
+.multi-select-box {
+  min-height: 45px;
+  border: 1px solid #ccc;
+  border-radius: 6px;
+  padding: 6px 10px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+}
+
+.tag {
+  background: #e8f0fe;
+  padding: 4px 8px;
+  border-radius: 20px;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.remove {
+  cursor: pointer;
+  color: red;
+}
+
+.arrow {
+  margin-left: auto;
+}
+
+.dropdowned{
+    position: absolute;
+    top: calc(100% + 5px);
+    left: 0;
+    width: 100%;
+    background: #fff;
+    border: 1px solid #ddd;
+    border-radius: 8px;
+    max-height: 220px;
+    overflow-y: auto;
+    z-index: 99999;
+    box-shadow: 0 8px 20px rgba(0,0,0,.15);
+}
+
+.option {
+  padding: 10px;
+  cursor: pointer;
+}
+
+.option:hover {
+  background: #f2f2f2;
+}
+.emailBox {
+    display: flex;
+    border: 1px solid #ccc;
+    border-radius: 6px;
+    overflow: hidden;
+    width: 100%;
+    background: white;
+    margin-bottom: 10px; /* optional spacing */
+}
+
+.emailBox input {
+    border: none;
+    outline: none;
+    padding: 8px;
+    flex: 1;
+}
+
+.emailSuffix {
+    display: flex;
+    align-items: center;
+    background: #f5f5f5;
+    padding: 0 8px;
+    gap: 4px;
+    border-left: 1px solid #ddd;
+}
+
+.emailSuffix span {
+    font-weight: bold;
+}
+
+.emailSuffix select {
+    border: none;
+    outline: none;
+    background: transparent;
+    padding: 6px;
+    cursor: pointer;
+}
+.passwordBox {
+  position: relative;
+  width: 100%;
+}
+
+.passwordBox input {
+  width: 100%;
+  padding-right: 45px;
+}
+
+.eyeIcon {
+  position: absolute;
+  right: 15px;
+  top: 50%;
+  transform: translateY(-50%);
+  cursor: pointer;
+  font-size: 18px;
+  color: #666;
+}
+.roleTag {
+  margin-left: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 2px 6px;
+  border-radius: 6px;
+}
+
+/* QA */
+.roleTag.qa {
+  color: #16a34a;
+}
+
+/* QC */
+.roleTag.qc {
+  background: #ffedd5;
+  color: #ea580c;
+}
+.multi-select {
+  position: relative;
+  width: 100%;
+}
+
+.multi-select-box {
+  min-height: 42px;
+  width: 100%;
+  border: 1px solid #d1d5db;
+  border-radius: 8px;
+  padding: 8px 12px;
+  background: #fff;
+  cursor: pointer;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+}
+
+.option {
+  padding: 10px 12px;
+  cursor: pointer;
+}
+
+.option:hover {
+  background: #f3f4f6;
+}
+@media (max-width: 768px) {
+
+  /* BACKDROP */
+  .modalOverlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.6);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    padding: 12px;
+    z-index: 999;
+  }
+
+  /* MODAL BOX */
+  .modalBoxes {
+    width: 95%;
+    max-width: 420px;
+    height: 70vh;
+    background: #fff;
+    border-radius: 14px;
+    padding: 14px;
+    box-sizing: border-box;
+    overflow-y: auto;
+  }
+
+  /* TITLE */
+  .modalBoxes h2 {
+    font-size: 18px;
+    text-align: center;
+    margin-bottom: 10px;
+  }
+
+  /* FORM */
+  .userForm {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .userForm input,
+  .userForm select {
+    width: 100%;
+    font-size: 14px;
+    padding: 10px;
+    border-radius: 8px;
+    border: 1px solid #ddd;
+    box-sizing: border-box;
+  }
+
+  /* EMAIL BOX */
+  .emailBox {
+    display: flex;
+ 
+  }
+
+  .emailSuffix select {
+    width: 100%;
+  }
+
+  /* MULTI SELECT */
+  .multi-select-box {
+    width: 100%;
+    min-height: 42px;
+    padding: 10px;
+    border: 1px solid #ddd;
+    border-radius: 8px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    box-sizing: border-box;
+  }
+
+  .tag {
+    font-size: 11px;
+    padding: 4px 6px;
+    background: #e8f0ff;
+    border-radius: 6px;
+  }
+
+  /* DROPDOWN */
+  .dropdowned {
+    max-height: 160px;
+    overflow-y: auto;
+    border: 1px solid #ddd;
+    border-radius: 8px;
+    background: #fff;
+  }
+
+  .option {
+    padding: 10px;
+    font-size: 13px;
+  }
+
+  /* BUTTONS ROW (LEFT-RIGHT) */
+  .modalActions {
+    display: flex;
+    flex-direction: row;
+    justify-content: space-between;
+    gap: 10px;
+    margin-top: 12px;
+  }
+
+  .modalActions button {
+    flex: 1;
+    padding: 11px;
+    font-size: 14px;
+    border-radius: 10px;
+    border: none;
+  }
+
+  /* CREATE BUTTON */
+  .modalActions button[type="submit"] {
+    background: #2d6cdf;
+    color: #fff;
+  }
+
+  /* CANCEL BUTTON */
+  .modalActions button[type="button"] {
+    background: #e5e5e5;
+    color: #000;
+  }
+}
+@media (max-width: 768px) {
+
+  .create-user-btn {
+    width: 100%;
+    display: flex;
+    justify-content: center;
+    margin-top: 10px;
+  }
+
+  .create-user-btn button {
+    max-width: 320px;
+    font-size: 14px;
+    border-radius: 10px;
+    font-weight: 600;
+    background: linear-gradient(135deg, #699e2d, #3ba038);
+    color: #ffffff;
+    border: none;
+    box-shadow: 0 6px 14px rgba(15, 23, 42, 0.2);
+  }
+
+  /* remove hover effect on mobile */
+  .create-user-btn button:hover {
+    transform: none;
+    box-shadow: 0 6px 14px rgba(15, 23, 42, 0.2);
+  }
+
+  /* tap effect */
+  .create-user-btn button:active {
+    transform: scale(0.97);
+  }
+}
+@media (max-width: 768px) {
+
+  .domain-bar {
+    width: 95%;
+    flex-direction: column;
+    align-items: stretch;
+    justify-content: flex-start;
+    padding: 12px;
+    margin: 10px auto;
+    gap: 10px;
+    border-radius: 12px;
+  }
+
+  /* LEFT DOMAIN LIST STACK */
+  .domain-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    width: 100%;
+  }
+
+  .domain-list button {
+    flex: 1 1 auto;
+    padding: 8px 10px;
+    font-size: 12px;
+    border-radius: 8px;
+    text-align: center;
+  }
+
+  /* CREATE USER BUTTON FULL WIDTH */
+  .create-user-btn {
+    width: 100%;
+    display: flex;
+    justify-content: center;
+  }
+
+  .create-user-btn button {
+    width: 100%;
+    padding: 10px;
+    font-size: 13px;
+    border-radius: 10px;
+  }
+}

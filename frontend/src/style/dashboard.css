@@ -1,0 +1,595 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+
+:root {
+  --navy: #0f172a;
+  --sky: #0ea5e9;
+  --blue: #2563eb;
+  --green: #16a34a;
+  --red: #ef4444;
+  --bg: #f4f7fb;
+  --gray: #6b7280;
+  --border: #d1d5db;
+}
+
+*{
+  margin:0;
+  padding:0;
+  box-sizing:border-box;
+}
+
+body{
+  font-family:'Inter', sans-serif;
+  background:var(--bg);
+}
+
+/* MAIN */
+.dashboard{
+  min-height:100vh;
+  padding:40px 20px;
+}
+
+.mainContent{
+  max-width:1100px;
+  margin:auto;
+}
+
+/* TITLE */
+.mainTitle{
+  text-align:center;
+  font-size:40px;
+  font-weight:700;
+  color:var(--navy);
+}
+
+.mainDesc{
+  text-align:center;
+  color:var(--gray);
+  margin-top:8px;
+  margin-bottom:40px;
+}
+
+/* TOP CARDS */
+.topCards{
+  display:flex;
+  justify-content:center;
+  gap:25px;
+  flex-wrap:wrap;
+  margin-bottom:35px;
+}
+.buttonContainer {
+  margin-top: -10px;
+  display: flex;
+  justify-content: flex-end;
+}
+
+.updatePasswordBtn {
+  padding: 10px 15px;
+  margin-bottom: 10px;
+  cursor: pointer;
+  background: #388d10;
+  color: #ffffff;
+  border-radius: 6px;
+  border: none; /* optional but usually needed */
+}
+/* CARD */
+.actionCard{
+  width:260px;
+  height:240px;
+  border-radius:22px;
+  overflow:hidden;
+  cursor:pointer;
+  position:relative;
+  transition:0.3s;
+  border:2px solid transparent;
+  background: var(--navy);
+}
+
+.actionCard:hover{
+  transform:translateY(-6px);
+  box-shadow:0 15px 35px rgba(0,0,0,0.12);
+}
+
+.activeCard{
+  border-color:var(--navy);
+}
+
+/* FULL BACKGROUND ICON */
+.fullIcon{
+  position:absolute;
+  top:0;
+  left:0;
+  width:100%;
+  height:100%;
+  display:flex;
+  justify-content:center;
+  align-items:center;
+}
+
+.fullIcon svg{
+  font-size:120px;
+  color:#90d4cb !important;
+  opacity:0.28;
+  transition:all 0.3s ease;
+}
+
+.actionCard:hover .fullIcon svg{
+  opacity:0.4;
+  transform:scale(1.05);
+}
+
+/* REMOVE OLD BACKGROUNDS */
+.blue{
+  background:transparent !important;
+}
+
+.purple{
+  background:transparent !important;
+}
+
+/* OVERLAY */
+.cardOverlay{
+  position:absolute;
+  bottom:0;
+  width:100%;
+  padding:20px;
+  color:white;
+  background:linear-gradient(to top, rgba(15, 23, 42, 0.85), transparent);
+}
+
+.cardNumber{
+  font-size:13px;
+  opacity:0.8;
+  font-weight:600;
+}
+
+.cardOverlay h2{
+  font-size:22px;
+  margin-top:5px;
+}
+
+.cardOverlay p{
+  font-size:13px;
+  opacity:0.9;
+  margin-top:5px;
+}
+
+/* BOX */
+.contentBox{
+  background:white;
+  border-radius:18px;
+  padding:25px;
+}
+
+/* FORM */
+.userForm{
+  display:grid;
+  grid-template-columns:repeat(2,1fr);
+  gap:18px;
+}
+
+.userForm input,
+.userForm select{
+  height:50px;
+  border:1px solid var(--border);
+  border-radius:10px;
+  padding:0 15px;
+  outline:none;
+}
+
+.userForm input:focus,
+.userForm select:focus{
+  border-color:var(--sky);
+}
+
+/* FORM BUTTON */
+.userForm button {
+  grid-column: span 2;
+  width: 120px;
+  height: 50px;
+  border: none;
+  background: #218015;
+  color: white;
+  border-radius: 10px;
+  font-weight: 600;
+  cursor: pointer;
+  justify-self: center;
+}
+
+.userForm button:hover{
+  background:#15803d;
+}
+
+/* TABLE */
+.tableWrapper{
+  overflow-x:auto;
+}
+
+table{
+  width:100%;
+  border-collapse:collapse;
+}
+
+table th{
+  background:var(--navy);
+  color:white;
+  padding:14px;
+  text-align:left;
+}
+
+table td{
+  padding:14px;
+  border-bottom:1px solid #e5e7eb;
+}
+
+table tr:hover td{
+  background:#f9fafb;
+}
+
+/* ACTION BUTTONS */
+.editBtn,
+.deleteBtn {
+  border: none;
+  padding: 6px 12px;
+  margin: 0 4px;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease-in-out;
+}
+
+.editBtn {
+  background: var(--blue);
+  color: #fff;
+}
+
+.editBtn:hover {
+  background: var(--navy);
+}
+
+.deleteBtn {
+  background: var(--red);
+  color: #fff;
+}
+
+.deleteBtn:hover {
+  background: #b91c1c;
+}
+
+/* INLINE TABLE BUTTONS */
+table td button {
+  border: none;
+  padding: 6px 10px;
+  margin: 0 4px;
+  border-radius: 6px;
+  font-size: 13px;
+  cursor: pointer;
+  transition: 0.2s;
+}
+
+table td button:nth-child(1) {
+  background: var(--blue);
+  color: white;
+}
+
+table td button:nth-child(1):hover {
+  background: var(--navy);
+}
+
+table td button:has(+ button) {
+  background: var(--green);
+  color: white;
+}
+
+table td button + button {
+  background: var(--sky);
+  color: white;
+}
+
+/* INPUTS IN TABLE EDIT MODE */
+table td input,
+table td select {
+  width: 100%;
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  outline: none;
+}
+
+table td input:focus,
+table td select:focus {
+  border-color: var(--sky);
+}
+
+/* PASSWORD MODAL OVERLAY */
+.passwordModalOverlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(15, 23, 42, 0.6);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 999;
+}
+
+/* MODAL BOX */
+.passwordModalBox {
+  background: #fff;
+  padding: 20px;
+  width: 85%;
+  max-width: 900px;
+  max-height: 85vh;
+  overflow-y: auto;
+  border-radius: 12px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+}
+
+.passwordModalBox h2 {
+  margin: 0;
+  font-size: 22px;
+  font-weight: 600;
+  color: var(--navy);
+}
+
+/* SEARCH */
+.passwordSearchInput {
+  width: 100%;
+  padding: 10px 14px;
+  margin: 12px 0 18px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font-size: 14px;
+  outline: none;
+}
+
+.passwordSearchInput:focus {
+  border-color: var(--sky);
+}
+
+/* PASSWORD TABLE */
+.passwordTable {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+}
+
+.passwordTable thead {
+  background: var(--navy);
+  color: #fff;
+}
+
+.passwordTable th {
+  text-align: left;
+  padding: 12px;
+}
+
+.passwordTable td {
+  padding: 10px 12px;
+  border-bottom: 1px solid #eee;
+}
+
+.passwordTable tbody tr:hover {
+  background: #f7f7f7;
+}
+
+/* PASSWORD BUTTONS */
+.passwordBtn {
+  padding: 6px 10px;
+  margin-right: 6px;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 13px;
+}
+
+.passwordBtn.update {
+  background: var(--navy);
+  color: #fff;
+}
+
+.passwordBtn.update:hover {
+  background: #020617;
+}
+
+.passwordBtn.save {
+  background: var(--green);
+  color: #fff;
+}
+
+.passwordBtn.save:hover {
+  background: #2a8015;
+}
+
+/* CLOSE BUTTON */
+.passwordCloseBtn {
+  margin-top: 15px;
+  padding: 10px 14px;
+  border: none;
+  background: var(--red);
+  color: white;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.passwordCloseBtn:hover {
+  background: #b91c1c;
+}
+
+/* PASSWORD INPUTS */
+.passwordTable input {
+  padding: 6px 8px;
+  margin-right: 5px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font-size: 13px;
+  width: 140px;
+}
+
+.passwordTable input:focus {
+  border-color: var(--sky);
+}
+
+/* RESPONSIVE */
+@media(max-width:768px){
+  .userForm{
+    grid-template-columns:1fr;
+  }
+
+  .userForm button{
+    grid-column:span 1;
+  }
+
+  .actionCard{
+    width:100%;
+  }
+}
+.emailBox {
+    display: flex;
+    align-items: center;
+    border: 1px solid #ccc;
+    border-radius: 6px;
+    overflow: hidden;
+    width: 100%;
+    background: white;
+}
+
+/* left input */
+.emailBox input {
+    border: none;
+    outline: none;
+    padding: 8px;
+    flex: 1;
+    min-width: 120px;
+}
+
+/* right side @ + dropdown box */
+.emailSuffix {
+    display: flex;
+    align-items: center;
+    background: #f5f5f5;
+    padding: 0 8px;
+    gap: 4px;
+    border-left: 1px solid #ddd;
+}
+
+/* @ symbol */
+.emailSuffix span {
+    font-weight: bold;
+}
+
+/* dropdown clean look */
+.emailSuffix select {
+    border: none;
+    outline: none;
+    background: transparent;
+    padding: 6px;
+    cursor: pointer;
+}
+.qa-tag {
+    margin-left: 6px;
+    font-size: 12px;
+    font-weight: 600;
+    padding: 2px 6px;
+    border-radius: 6px;
+    background: #dcfce7;
+    color: #16a34a;
+}
+
+.qc-tag {
+    margin-left: 6px;
+    font-size: 12px;
+    font-weight: 600;
+    padding: 2px 6px;
+    border-radius: 6px;
+    background: #ffedd5;
+    color: #ea580c;
+}
+.multi-select {
+  position: relative;
+  width: 100%;
+}
+.multi-select-box{
+    width:100%;
+    min-height:42px;
+    border:1px solid #d9d9d9;
+    border-radius:8px;
+    padding:8px 35px 8px 10px;
+    display:flex;
+    align-items:center;
+    flex-wrap:wrap;
+    gap:6px;
+    background:#fff;
+    cursor:pointer;
+    position:relative;
+}
+/* EDIT DOMAIN DROPDOWN */
+.dropeddown {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  width: 100%;
+  max-height: 220px;
+  overflow-y: auto;
+  background: #fff;
+  border: 1px solid #dcdcdc;
+  border-radius: 10px;
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.12);
+  z-index: 9999;
+}
+
+.dropeddown .option {
+  padding: 10px 14px;
+  cursor: pointer;
+  font-size: 14px;
+  color: #333;
+  transition: all 0.2s ease;
+  border-bottom: 1px solid #f1f1f1;
+}
+
+.dropeddown .option:last-child {
+  border-bottom: none;
+}
+
+.dropeddown .option:hover {
+  background: #0d6efd;
+  color: #fff;
+}
+
+.dropeddown::-webkit-scrollbar {
+  width: 6px;
+}
+
+.dropeddown::-webkit-scrollbar-thumb {
+  background: #bdbdbd;
+  border-radius: 10px;
+}
+
+.dropeddown::-webkit-scrollbar-track {
+  background: #f5f5f5;
+}
+.dropdowned{
+    position: absolute;
+    top: calc(100% + 5px);
+    left: 0;
+    width: 100%;
+    background: #fff;
+    border: 1px solid #ddd;
+    border-radius: 8px;
+    max-height: 220px;
+    overflow-y: auto;
+    z-index: 99999;
+    box-shadow: 0 8px 20px rgba(0,0,0,.15);
+}
+
+
+.option {
+  padding: 10px 12px;
+  cursor: pointer;
+}
+
+.option:hover {
+  background: #f3f4f6;
+}

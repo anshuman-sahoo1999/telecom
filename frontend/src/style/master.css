@@ -1,0 +1,385 @@
+/* ================= GLOBAL ================= */
+body {
+  margin: 0;
+  font-family: "Segoe UI", Arial, sans-serif;
+  background: #f4f7fb;
+  color: #333;
+}
+
+/* ================= MAIN LAYOUT ================= */
+/* ================= MAIN LAYOUT ================= */
+.master-container {
+  display: flex;
+  gap: 15px;
+  padding: 15px;
+  box-sizing: border-box;
+
+  height:105vh;   /* ADD THIS */
+  overflow: hidden; /* ADD THIS */
+}
+
+
+/* ================= LEFT PANEL ================= */
+.left-side {
+  width: 30%;
+  min-width: 280px;
+  background: #ffffff;
+  border-radius: 12px;
+  padding: 15px;
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.08);
+  overflow: hidden;
+  height: 100%;
+}
+
+/* ================= RIGHT PANEL ================= */
+.right-side {
+  flex: 1;
+  background: #ffffff;
+  border-radius: 12px;
+  padding: 15px;
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.08);
+  overflow-y: auto;
+  height: 100%;
+}
+
+/* ================= TITLE ================= */
+.title {
+  text-align: center;
+  margin-bottom: 15px;
+  color: #1e3a8a;
+}
+
+/* ================= CARD ================= */
+.card {
+  background: #f9fbff;
+  border: 1px solid #e6ecf5;
+  border-radius: 10px;
+  padding: 12px;
+  margin-bottom: 15px;
+}
+
+.card h3 {
+  margin: 0 0 10px;
+  color: #2563eb;
+}
+
+/* ================= INPUT ================= */
+input,
+select {
+  width: 100%;
+  padding: 8px 10px;
+  border-radius: 6px;
+  border: 1px solid #cbd5e1;
+  outline: none;
+  transition: 0.2s;
+  box-sizing: border-box;
+}
+
+input:focus,
+select:focus {
+  border-color: #3b82f6;
+}
+
+/* ================= BUTTON BASE ================= */
+button {
+  padding: 6px 10px;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font-weight: 500;
+  transition: 0.2s ease;
+}
+
+button:hover {
+  opacity: 0.9;
+}
+
+/* ================= INPUT ROW ================= */
+.input-row {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 8px;
+  align-items: center;
+}
+
+.input-row input {
+  flex: 1;
+}
+
+/* PLUS BUTTON */
+.input-row button:first-of-type:not(:last-of-type),
+.input-row button:only-of-type {
+  background: #16a34a !important;
+  color: #fff !important;
+}
+
+/* MINUS BUTTON */
+.input-row button:last-of-type:not(:first-of-type) {
+  background: #ef4444 !important;
+  color: #fff !important;
+}
+
+.save-all-btn {
+  width: 100%;
+  background: #3b82f6;
+  color: white;
+  border: none;
+  padding: 10px 14px;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: 0.2s ease;
+}
+
+.save-all-btn:hover {
+  background: #2563eb;
+  transform: translateY(-1px);
+}
+/* ================= TABLE ================= */
+.master-table {
+  width: 100%;
+  border-collapse: collapse;
+  background: #ffffff;
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+/* ================= TABLE HEADER ================= */
+.master-table thead {
+  background: linear-gradient(90deg, #3b82f6, #06b6d4);
+  color: white;
+  position: sticky;
+  top: 0;
+  z-index: 2;
+}
+
+.master-table th {
+  padding: 14px 12px;
+  text-align: left;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+/* ================= TABLE BODY ================= */
+.master-table td {
+  padding: 12px;
+  font-size: 14px;
+  border-bottom: 1px solid #eef2f7;
+  text-align: justify;
+  text-justify: inter-word;
+  word-break: break-word;
+  white-space: normal;
+  vertical-align: middle;
+  color: #374151;
+}
+
+/* ================= ROW EFFECTS ================= */
+.master-table tbody tr:hover {
+  background: #f0fdf4;
+}
+
+.master-table tbody tr:nth-child(even) {
+  background: #fafcff;
+}
+
+/* ================= ACTION COLUMN ================= */
+.master-table td:last-child {
+  width: 120px;
+  min-width: 120px;
+  text-align: center;
+}
+
+/* ================= EDIT + DELETE BUTTON ================= */
+.master-table td button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 48%;
+  margin: 0 2px;
+  padding: 6px 0;
+  font-size: 12px;
+  border-radius: 6px;
+  border: none;
+  cursor: pointer;
+  transition: 0.2s ease;
+}
+
+/* EDIT BUTTON */
+.master-table td button:first-child {
+  background: #84cc16;
+  color: white;
+}
+
+/* DELETE BUTTON */
+.master-table td button:last-child {
+  background: #ef4444;
+  color: white;
+}
+
+/* BUTTON HOVER */
+.master-table td button:hover {
+  opacity: 0.9;
+  transform: scale(1.05);
+}
+
+
+/* ================= DOMAIN HEADER ================= */
+.domain-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 10px;
+}
+
+/* ================= CREATE DOMAIN BUTTON ================= */
+.create-domain-btn {
+  background: #16a34a;
+  color: white;
+  border: none;
+  padding: 8px 14px;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.create-domain-btn:hover {
+  background: #15803d;
+}
+
+/* ================= CREATE DOMAIN FORM ================= */
+.create-domain-form {
+  margin-top: 15px;
+}
+
+/* ================= DOMAIN BUTTON ROW ================= */
+.domain-btn-row {
+  display: flex;
+  gap: 10px;
+  margin-top: 10px;
+}
+
+.domain-btn-row button {
+  flex: 1;
+}
+
+/* ================= DELETE BUTTON ================= */
+.delete-btn {
+  background: #dc2626;
+  color: white;
+}
+
+.delete-btn:hover {
+  background: #b91c1c;
+}
+
+/* ================= RIGHT PANEL SCROLL ================= */
+.right-panel {
+  overflow-y: auto;
+}
+.domain-create-btn {
+  background: #22c55e;
+  color: #fff;
+  border: none;
+  padding: 8px 16px;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+.item-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-right: 8px;
+}
+
+.cross-btn {
+  border: none !important;
+  background: #d3d3d3 !important;
+  color: #444 !important;
+
+  min-width: 26px;
+  width: 26px;
+  height: 26px;
+
+  border-radius: 6px;
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  cursor: pointer;
+
+  font-size: 12px;
+  font-weight: 600;
+
+  padding: 0;
+}
+
+.cross-btn:hover {
+  background: #b5b5b5 !important;
+}
+.page-top-bar {
+  width: 100%;
+  padding: 15px 15px 0 15px;
+  box-sizing: border-box;
+}
+
+.standalone-back-btn {
+  background: #2e435c;
+  color: #fff;
+  border: none;
+  padding: 8px 18px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+/* ================= RESPONSIVE ================= */
+@media (max-width: 900px) {
+  .master-container {
+    flex-direction: column;
+  }
+
+  .left-side,
+  .right-side {
+    width: 100%;
+  }
+}
+.toast {
+  position: fixed;
+  top: 20px;
+  right: 20px;
+  padding: 12px 18px;
+  border-radius: 8px;
+  color: #fff;
+  font-weight: 500;
+  z-index: 9999;
+  animation: slideIn 0.3s ease, fadeOut 0.3s ease 2.7s;
+}
+
+.toast.success {
+  background: linear-gradient(135deg, #28a745, #20c997);
+}
+
+.toast.error {
+  background: linear-gradient(135deg, #dc3545, #ff6b6b);
+}
+
+@keyframes slideIn {
+  from {
+    transform: translateX(120%);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+@keyframes fadeOut {
+  from { opacity: 1; }
+  to { opacity: 0; }
+}

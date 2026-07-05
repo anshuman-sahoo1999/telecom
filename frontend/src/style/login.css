@@ -1,0 +1,383 @@
+
+.auth-page {
+  height: 100vh;
+  display: flex;
+  font-family: "Segoe UI", sans-serif;
+  background: #0b1220;
+}
+
+.auth-left {
+  flex: 1.2;
+  position: relative;
+  background: url("https://img.freepik.com/premium-photo/tower-with-blue-background-blue-light_670021-8761.jpg?semt=ais_hybrid&w=740&q=80") center/cover;
+}
+
+.auth-left::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    135deg,
+    rgba(0, 120, 255, 0.55),
+    rgba(0, 0, 0, 0.6)
+  );
+}
+
+.logo-box {
+  position: absolute;
+  top: 20px;
+  left: 70px;   
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  z-index: 2;
+  transform: scale(2.9);
+}
+
+.logo-box img {
+  width: 40px;
+  height: 40px;
+}
+
+.logo-box h2 {
+  color: white;
+  font-size: 18px;
+  letter-spacing: 1px;
+}
+
+
+.auth-right {
+  flex: 1.1;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  background: #f5f7fb;
+}
+
+.auth-card input {
+  width: 100%;
+  padding: 13px;
+  border-radius: 10px;
+  border: 1px solid #ddd;
+  outline: none;
+  transition: 0.3s;
+}
+
+.auth-card input:focus {
+  border-color: #007bff;
+  box-shadow: 0 0 10px rgba(0,123,255,0.2);
+}
+
+.auth-links {
+  margin-top: 15px;
+  display: flex;
+  justify-content: space-between;
+  font-size: 12px;
+  color: #007bff;
+  cursor: pointer;
+}
+
+.error {
+  color: red;
+  font-size: 12px;
+  margin-bottom: 10px;
+}
+
+html, body {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+  font-family: "Segoe UI", sans-serif;
+}
+
+.auth-page {
+  min-height: 100vh;
+  display: flex;
+  background: #0b1220;
+}
+
+.auth-left {
+  flex: 1.2;
+  position: relative;
+  background: url("https://img.freepik.com/premium-photo/tower-with-blue-background-blue-light_670021-8761.jpg?semt=ais_hybrid&w=740&q=80") center/cover no-repeat;
+}
+
+.auth-left::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    135deg,
+    rgba(0, 120, 255, 0.55),
+    rgba(0, 0, 0, 0.6)
+  );
+}
+
+.logo-box {
+  position: absolute;
+  top: 100px;
+  left: 60px;
+  display: flex;
+  align-items: center;
+  gap: 15px;
+  z-index: 2;
+  transform: scale(1.4);
+}
+
+.logo-box img {
+  width: 120px;
+  height: 120px;
+}
+
+.logo-box h2 {
+  color: white;
+  font-size: 18px;
+}
+
+.left-content {
+  position: absolute;
+  bottom: 180px;
+  left: 50px;
+  z-index: 2;
+  color: white;
+  max-width: 350px;
+}
+
+.left-content h1 {
+  font-size: 42px;
+  margin-bottom: 10px;
+}
+
+.left-content p {
+  font-size: 14px;
+  opacity: 0.9;
+  line-height: 1.5;
+}
+
+.auth-right {
+  flex: 1;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+   background: linear-gradient(
+    135deg,
+    rgba(11, 18, 32, 0.9),
+    rgba(17, 26, 46, 0.95)
+  );
+}
+
+.auth-card {
+  width: 430px;
+  padding: 35px;
+  margin-top: -10%;
+  border-radius: 18px;
+
+  /* STRONG GLASS */
+  background: rgba(255, 255, 255, 0.08);
+
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(3px);
+
+  border: 1px solid rgba(255, 255, 255, 0.15);
+
+  box-shadow: 0 15px 45px rgba(77, 76, 76, 0.5);
+
+  position: relative;
+  z-index: 10;
+}
+
+.auth-card h2 {
+  margin-bottom: 6px;
+  color: #7abe22;
+}
+
+.auth-card p {
+  font-size: 13px;
+  color: #666;
+  margin-bottom: 20px;
+}
+
+
+.auth-card input:focus {
+  border-color: #007bff;
+  box-shadow: 0 0 10px rgba(0,123,255,0.2);
+}
+
+.auth-card button {
+  width: 60%;
+  padding: 13px;
+  border: none;
+  border-radius: 10px;
+  background: linear-gradient(90deg, #21477c, #093d4b);
+  color: white;
+  font-weight: bold;
+  cursor: pointer;
+
+  display: block;
+  margin: 20px auto; 
+}
+
+.auth-card button:hover {
+  transform: translateY(-2px);
+}
+
+.auth-links {
+  margin-top: 15px;
+  display: flex;
+  justify-content: space-between;
+  font-size: 8px;
+  color: #296406;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight:500;
+}
+
+.error {
+  color: red;
+  font-size: 12px;
+  margin-bottom: 10px;
+}
+
+@media (max-width: 768px) {
+
+  .auth-page {
+    flex-direction: column;
+    min-height: 100vh;
+  }
+
+  .auth-left {
+    width: 100%;
+    height: 42vh;       
+    min-height: 220px;   
+    flex: none;
+  }
+
+  .logo-box {
+    top: 30px;
+    left: 20px;
+    transform: scale(1);
+    gap: 10px;
+  }
+
+  .logo-box img {
+    width: 118px;
+    height: 118px;
+  }
+
+  .logo-box h2 {
+    font-size: 14px;
+  }
+
+  .left-content {
+    bottom: 55px;   /* pehle 180px tha, mobile me niche aa jayega */
+    left: 20px;
+    max-width: 90%;
+  }
+
+  .left-content h1 {
+    font-size: 20px;
+    margin-bottom: 8px;
+  }
+
+  .left-content p {
+    font-size: 12px;
+    line-height: 1.4;
+  }
+
+  .auth-right {
+    flex: 1;  
+    width: 100%;
+    padding: 15px;
+  }
+
+  .auth-card {
+    width: 100%;
+    max-width: 100%;
+    padding: 20px;
+    border-radius: 12px;
+  }
+}
+
+.password-wrapper {
+  position: relative;
+  width: 100%;
+}
+
+.password-wrapper input {
+  width: 100%;
+  padding-right: 45px;
+  box-sizing: border-box;
+}
+
+.password-eye {
+  position: absolute;
+  top: 50%;
+  right: 15px;
+  transform: translateY(-50%);
+  cursor: pointer;
+  color: #64748b;
+  font-size: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10;
+}
+
+.password-eye:hover {
+  color: #2563eb;
+}
+.email-input-group {
+  width: 100%;
+  height: 55px;
+  display: flex;
+  align-items: center;
+  background: #fff;
+  border: 1.5px solid #dce3eb;
+  border-radius: 12px;
+  overflow: hidden;
+  transition: all 0.3s ease;
+  margin-bottom: 18px;
+}
+
+.email-input-group:focus-within {
+  border-color: #2563eb;
+  box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.12);
+}
+
+.email-input-field {
+  height: 100%;
+  border: none;
+  outline: none;
+  padding: 0 18px;
+  font-size: 15px;
+  font-weight: 500;
+  color: #1e293b;
+  background: transparent;
+}
+
+.email-input-field::placeholder {
+  color: #94a3b8;
+  font-weight: 400;
+}
+
+.email-domain-select {
+  width: 150px;
+  height: 100%;
+  border: none;
+  border-left: 1px solid #e2e8f0;
+  outline: none;
+  background: #f8fafc;
+  padding: 0 15px;
+  font-size: 14px;
+  font-weight: 600;
+  color: #334155;
+  cursor: pointer;
+}
+
+.email-domain-select:hover {
+  background: #f1f5f9;
+}
+
+.email-domain-select option {
+  color: #000;
+}

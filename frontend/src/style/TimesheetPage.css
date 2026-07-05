@@ -1,0 +1,219 @@
+.timesheet-page {
+  width: 100%;
+  font-family: Arial, sans-serif;
+  box-sizing: border-box;
+}
+
+.timesheet-page h2 {
+  text-align: center;
+  color: #0b3d91;
+  margin-bottom: 35px;
+  font-size: 32px;
+}
+
+.table-sheet {
+  width: 100%;
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+
+.timesheet-table {
+  width: 100%;
+  border-collapse: collapse;
+  background: #fff;
+}
+
+.timesheet-table th,
+.timesheet-table td {
+  border: 1px solid #ddd;
+  padding: 10px;
+  font-size: 14px;
+  text-align: center;
+  vertical-align: top;
+}
+
+.timesheet-table th {
+  background: #4a90e2;
+  color: white;
+  font-weight: 600;
+}
+
+/* ================= WORK DONE FIX ================= */
+
+.timesheet-table th:nth-child(4),
+.timesheet-table td:nth-child(4) {
+  width: 350px;
+  min-width: 350px;
+  max-width: 350px;
+  overflow-y:auto;
+}
+
+.work-done-cell {
+  text-align: left !important;
+  white-space: normal;
+  word-break: break-word;
+  overflow-wrap: break-word;
+  line-height: 1.5;
+}
+
+/* ================= STATUS ================= */
+
+.status {
+  padding: 5px 10px;
+  border-radius: 5px;
+  font-size: 12px;
+  font-weight: 600;
+  display: inline-block;
+}
+
+.status.verified {
+  background: #ffffff;
+  color: #28a745;
+  font-size: 14px;
+
+}
+
+.status.pending {
+  color: #868282;
+}
+
+.status.rejected {
+  background: #dc3545;
+  color: white;
+}
+
+/* ================= QC ================= */
+
+.qc-yes {
+  background: #28a745;
+  color: white;
+  padding: 4px 8px;
+  border-radius: 5px;
+  font-size: 12px;
+}
+
+.qc-no {
+  color: #000;
+  padding: 4px 8px;
+  border-radius: 5px;
+  font-size: 12px;
+}
+
+/* ================= HOVER ================= */
+
+.timesheet-table tbody tr:hover {
+  background: #f5f9ff;
+}
+
+/* ================= SCROLLBAR ================= */
+
+.table-wrapper::-webkit-scrollbar {
+  height: 8px;
+}
+
+.table-wrapper::-webkit-scrollbar-track {
+  background: #f1f1f1;
+}
+
+.table-wrapper::-webkit-scrollbar-thumb {
+  background: #4a90e2;
+  border-radius: 10px;
+}
+
+.table-wrapper::-webkit-scrollbar-thumb:hover {
+  background: #357abd;
+}
+.status.revised {
+  background-color: #ffe5e5;
+  color: #d32f2f;
+  border: 1px solid #d32f2f;
+  padding: 4px 10px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: 0.2s ease-in-out;
+}
+
+.status.revised:hover {
+  background-color: #d32f2f;
+  color: #ffffff;
+}
+
+/* ================= MOBILE ================= */
+
+@media (max-width: 768px) {
+  .timesheet-page {
+    padding: 10px;
+  }
+
+  .timesheet-table {
+    min-width: 1300px;
+  }
+}
+/* popup text view */
+.work-modal-card p {
+  background: #f5f5f5;
+  padding: 10px;
+  border-radius: 6px;
+  white-space: pre-wrap;
+  margin-top: 10px;
+}
+
+/* update button */
+.work-modal-card button {
+  margin-right: 10px;
+  padding: 6px 12px;
+  cursor: pointer;
+}
+
+/* revised highlight */
+.status.revised {
+  color: red;
+  font-weight: bold;
+}
+.ts-close-icon {
+  position: absolute;
+  top: 10px;
+  right: 20px;
+
+  width: 28px;
+  height: 28px;
+
+  background: #e0e0e0; /* gray circle */
+  color: #333;
+
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  font-size: 18px;
+  font-weight: bold;
+  cursor: pointer;
+  transition: 0.2s ease;
+}
+
+.ts-close-icon:hover {
+  background: #c7c7c7;
+  color: #e22727;
+}
+.work-modal-card {
+  position: relative; /* IMPORTANT for cross positioning */
+}
+
+.ts-modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 15px;
+}
+
+.ts-success {
+  background: #2ecc71;
+  color: white;
+  border: none;
+  padding: 8px 14px;
+  cursor: pointer;
+  border-radius: 6px;
+  font-weight: 500;
+}

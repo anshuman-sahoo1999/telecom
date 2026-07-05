@@ -1,0 +1,949 @@
+/* --- Global Dashboard Variables & Resets --- */
+* { 
+  margin: 0; 
+  padding: 0; 
+  box-sizing: border-box; 
+}
+html,
+body{
+    min-height:100%;
+    overflow-x:hidden;
+}
+body{
+    font-family:'Segoe UI',Roboto,Helvetica,Arial,sans-serif;
+    background:#f8fafc;
+    color:#1e293b;
+}
+
+.page{
+    display:flex;
+    width:100%;
+}
+/* --- Left Sidebar Navigation --- */
+.topMenu{
+  height:calc(100vh - 110px);
+position:sticky;
+top:0;
+    width:280px;
+    background:#0f172a;
+    display:flex;
+    flex-direction:column;
+    gap:8px;
+    padding:20px 14px;
+ overflow-y:auto;
+    transition:
+        width .35s cubic-bezier(.4,0,.2,1),
+        padding .35s cubic-bezier(.4,0,.2,1);
+
+    box-shadow:4px 0 25px rgba(0,0,0,.12);
+}
+
+.topMenu.collapsed{
+    width:78px;
+    padding:20px 8px;
+}
+
+/* Navigation Heading */
+.topMenu::before {
+  font-size: 16px;
+  font-weight: 800;
+  color: #38bdf8;
+  letter-spacing: 1.5px;
+  margin-bottom: 24px;
+  padding-left: 12px;
+  display: block;
+}
+
+/* Sidebar Menu Controls */
+.menuBtn {
+  width: 100%;
+  padding: 12px 16px;
+  border: none;
+  border-radius: 10px;
+  background: transparent;
+  color: #94a3b8;
+  font-size: 16px;
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.menuBtn:hover { 
+  background: rgba(255, 255, 255, 0.06); 
+  color: #f8fafc;
+  transform: translateX(4px); 
+}
+
+/* State management tracking via utility classes or standard hooks */
+.menuBtn.active {
+  background: linear-gradient(135deg, #3b82f6, #1d4ed8);
+  color: #ffffff;
+  box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
+}
+
+.menuBtn:active { 
+  transform: scale(0.98); 
+}
+.menuIcon {
+  font-size: 22px;
+  min-width: 20px;
+  color: #5db622;   /* Sky Blue */
+  transition: all 0.3s ease;
+}
+
+.menuBtn:hover .menuIcon {
+  transform: scale(1.15);
+  transition: 0.2s;
+}
+
+.menuBtn.active .menuIcon {
+  color: #fff;
+}
+.mainContentContainer{
+    padding:22px;
+    display:flex;
+    flex-direction:column;
+    gap:28px;
+
+    max-height:calc(100vh - 120px);
+        flex: 1;
+    overflow-y: auto;
+    overflow-x: hidden;
+
+    scrollbar-width: none;   /* Firefox */
+    -ms-overflow-style: none;
+}
+.main-content::-webkit-scrollbar{
+    display: none;           /* Chrome, Edge, Safari */
+}
+
+
+.menu-icon {
+  display: block;
+  float: left;
+  cursor: pointer;
+  -webkit-transition: all 0.2s ease-in;
+  -moz-transition: all 0.2s ease-in;
+  -o-transition: all 0.2s ease-in;
+  transition: all 0.2s ease-in;
+}
+.menu-icon span{
+    display:block;
+    position:relative;
+
+    width:22px;
+    height:4px;
+
+    margin-bottom:3px;
+    border-radius:50px;
+
+    background:#000000;
+
+    box-shadow:
+        0 0 4px rgba(126, 125, 125, 0.7),
+        0 0 10px rgba(56, 56, 56, 0.45);
+
+    transition:.35s ease;
+}
+.menu-icon span.bar1 {
+  margin-top: 2px;
+}
+.menu-icon:hover span {
+  margin-bottom: 4px;
+}
+.menu-icon:hover span.bar1 {
+  margin-top: 0px;
+}
+.menu-icon.active {
+  -webkit-transform: rotate(-45deg);
+  -moz-transform: rotate(-45deg);
+  -ms-transform: rotate(-45deg);
+  -o-transform: rotate(-45deg);
+  transform: rotate(-45deg);
+}
+.menu-icon.active:hover span {
+  margin-top: 2px;
+  margin-bottom: 2px;
+}
+.menu-icon.active .bar1 {
+  -webkit-transform: rotate(0deg) translateY(6px);
+  -moz-transform: rotate(0deg) translateY(6px);
+  -ms-transform: rotate(0deg) translateY(6px);
+  -o-transform: rotate(0deg) translateY(6px);
+  transform: rotate(0deg) translateY(6px);
+}
+.menu-icon.active .bar2 {
+  opacity: 0;
+}
+.menu-icon.active .bar3 {
+  -webkit-transform: rotate(-90deg) translateX(5px);
+  -moz-transform: rotate(-90deg) translateX(5px);
+  -ms-transform: rotate(-90deg) translateX(5px);
+  -o-transform: rotate(-90deg) translateX(5px);
+  transform: rotate(-90deg) translateX(5px);
+}
+
+/* --- Card Grids & Map Canvas Configs --- */
+.container { 
+  display: flex; 
+  width: 100%;
+  gap: 24px; 
+}
+
+.mapContainer { 
+  flex: 3; 
+  background: #ffffff; 
+  border-radius: 16px; 
+  padding: 64px; 
+  position: relative; 
+ height: 820px; 
+  box-shadow: 0 4px 20px rgba(0,0,0,0.05); 
+  display: flex; 
+  flex-direction: column; 
+  align-items: center;
+  border: 1px solid #e2e8f0;
+}
+
+.mapTitleContainer { 
+  display: flex; 
+  justify-content: center; 
+  width: 100%; 
+  margin-bottom: 24px; 
+  font-size: 22px; 
+  font-weight: 700;
+  color: #1e293b;
+}
+
+.mapTopBar { 
+  display: flex; 
+  justify-content: center; 
+  align-items: center; 
+  width: 100%; 
+  position: relative; 
+}
+
+.resized-image { 
+  width: 100px; 
+  height: auto; 
+  position: absolute; 
+  left: -30px; 
+  top: -70px;
+  opacity: 0.8;
+}
+
+.export { 
+  position: absolute; 
+  top: 24px; 
+  right: 24px; 
+  z-index: 10;
+}
+
+.export button { 
+  background: #2563eb; 
+  font-size: 14px; 
+  font-weight: 600; 
+  padding: 10px 16px; 
+  border-radius: 8px; 
+  color: white; 
+  border: none; 
+  cursor: pointer; 
+  box-shadow: 0 2px 8px rgba(37, 99, 235, 0.25);
+  transition: all 0.2s ease;
+}
+
+.export button:hover { 
+  background: #1d4ed8; 
+  box-shadow: 0 4px 12px rgba(37, 99, 235, 0.35);
+}
+
+.dropdown { 
+  position: absolute;
+  right: 0;
+  margin-top: 6px; 
+  width: 130px; 
+  background: white; 
+  border-radius: 8px; 
+  border: 1px solid #e2e8f0; 
+  box-shadow: 0 10px 25px rgba(0,0,0,0.1);
+  overflow: hidden; 
+}
+
+.dropdown div { 
+  padding: 10px 16px; 
+  font-size: 13px; 
+  font-weight: 600; 
+  color: #475569;
+  cursor: pointer; 
+}
+
+.dropdown div:hover { 
+  background: #f1f5f9; 
+  color: #1e293b;
+}
+
+.mapBox { 
+  width: 125%; 
+  margin-top: -25px;
+  height: auto;
+  min-height: 520px;
+}
+
+.mapLegend { 
+  display: flex;
+  justify-content: flex-start; 
+  gap: 32px; 
+  width: 100%;
+  padding-left: 50px;
+  margin-top: -170px;
+  font-size: 18px; 
+  font-weight: 700; 
+  color: #334155; 
+}
+
+.legendItem { 
+  display: flex; 
+  align-items: center; 
+  gap: 8px; 
+}
+
+.greenDot { 
+  width: 16px; 
+  height: 16px; 
+  border-radius: 50%; 
+  background: #15803d; 
+}
+
+.redDot { 
+  width: 16px; 
+  height: 16px; 
+  border-radius: 50%; 
+  background: #ef4444; 
+}
+
+.mapFooter {
+  display: flex;
+  width: 100%;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 20px;
+}
+
+.mapLogo img{
+    position: relative;
+    top:-85px;   /* ya -20px */
+    width: 130%;
+    right: 50px;
+    height:85px;
+    object-fit:contain;
+    opacity:.85;
+}
+
+/* --- Filter & Control Side Panels --- */
+.sidePanel { 
+  flex: 1.1; 
+  display: flex; 
+  flex-direction: column; 
+  gap: 10px; 
+}
+
+.panelCard { 
+  background: white; 
+  padding: 20px; 
+  border-radius: 16px; 
+  box-shadow: 0 4px 16px rgba(0,0,0,0.04); 
+  border: 1px solid #e2e8f0;
+}
+
+.panelCard1 {
+  font-size: 15px; 
+  font-weight: 700; 
+  color: #0f172a; 
+  margin-bottom: 12px;
+}
+
+.panelCard select.dropdown {
+  position: relative;
+  width: 100%;
+  max-width: 100%;
+  box-shadow: none;
+  padding: 10px;
+  font-weight: 500;
+}
+
+.searchBox { 
+  width: 100%; 
+  padding: 10px 14px; 
+  font-size: 14px; 
+  border-radius: 8px; 
+  border: 1px solid #cbd5e1; 
+  margin-bottom: 12px; 
+  outline: none;
+}
+.searchBox:focus {
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15);
+}
+
+.scrollBox { 
+  max-height: 180px; 
+  overflow-y: auto; 
+}
+
+.scrollBox label { 
+  font-size: 14px; 
+  font-weight: 500; 
+  display: flex; 
+  align-items: center;
+  padding: 6px 4px;
+  color: #475569;
+}
+
+.scrollBox::-webkit-scrollbar { width: 5px; }
+.scrollBox::-webkit-scrollbar-thumb { background-color: #cbd5e1; border-radius: 10px; }
+
+/* --- Modern Glassmorphic KPI Grid Cards --- */
+.kpiContainer { 
+  padding: 24px; 
+  background: linear-gradient(135deg, #f8fafc, #edf2f9); 
+  border-radius: 16px; 
+  border: 1px solid #e2e8f0;
+}
+
+.kpiTitle { 
+  font-size: 22px; 
+  font-weight: 700; 
+  margin-bottom: 20px; 
+  text-align: left; 
+  color: #0f172a; 
+}
+
+.kpiGridModern { 
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 16px; 
+  width: 100%;
+}
+
+.kpiCardModern { 
+  padding: 20px; 
+  border-radius: 14px; 
+  background: #ffffff;
+  border: 1px solid #e2e8f0; 
+  box-shadow: 0 4px 12px rgba(0,0,0,0.03); 
+  position: relative; 
+  transition: all 0.25s ease; 
+  overflow: hidden; 
+}
+
+.kpiCardModern::before { 
+  content: ""; 
+  position: absolute; 
+  top: 0; 
+  left: 0; 
+  height: 4px; 
+  width: 100%; 
+  background: var(--themeColor); 
+}
+
+.kpiCardModern:hover { 
+  transform: translateY(-4px); 
+  box-shadow: 0 10px 20px rgba(0,0,0,0.08); 
+}
+
+.kpiDomainModern { 
+  font-size: 16px; 
+  font-weight: 700; 
+  color: #0f172a; 
+}
+
+.kpiSubModern { 
+  font-size: 12px; 
+  margin-top: 6px; 
+  color: #64748b; 
+  line-height: 1.4;
+}
+
+.kpiValueModern { 
+  font-size: 24px; 
+  font-weight: 800; 
+  margin-top: 12px; 
+  color: var(--themeColor); 
+}
+
+.kpiValueModern span { 
+  font-size: 13px; 
+  color: #64748b; 
+  font-weight: 500;
+}
+
+.kpiEyeBtnLeft { 
+  position: absolute; 
+  top: 16px; 
+  right: 16px; 
+  border-radius: 6px; 
+  width: 24px; 
+  height: 24px; 
+  cursor: pointer; 
+  display: flex; 
+  align-items: center; 
+  justify-content: center; 
+  transition: 0.2s; 
+}
+
+/* --- Responsive Layout Charts Rows --- */
+.bottomChartsRow { 
+  display: flex; 
+  flex-direction: row; 
+  gap: 24px; 
+  width: 100%; 
+}
+
+.bottomChartsRow .chartBox { 
+  flex: 1; 
+  background: #fff; 
+  padding: 24px; 
+  border-radius: 16px; 
+  box-shadow: 0 4px 16px rgba(0,0,0,0.04); 
+  border: 1px solid #e2e8f0;
+}
+
+.chartTitle { 
+  font-size: 16px; 
+  font-weight: 700; 
+  color: #0f172a;
+  margin-bottom: 20px; 
+}
+
+.tooltipBox { 
+  position: fixed; 
+  width: 320px; 
+  background: #fff; 
+  border-radius: 12px; 
+  box-shadow: 0 10px 30px rgba(0,0,0,0.15); 
+  z-index: 99999; 
+  border: 1px solid #e2e8f0;
+}
+
+/* --- Media Queries for Device Optimization --- */
+@media (max-width:1100px){
+
+  .page{
+      display:block;
+  }
+
+  /* ===== SIDEBAR ===== */
+  .topMenu{
+      position: fixed;
+      top: 140px;
+      left: -260px;   /* (FIX: match width properly) */
+
+      width: 260px;
+
+      height: calc(100vh - 95px);
+
+      display: flex;
+      flex-direction: column;
+
+      padding: 20px 12px;
+
+      background: rgba(15, 23, 42, 0.82);
+      backdrop-filter: blur(18px);
+      -webkit-backdrop-filter: blur(18px);
+
+      border-right: 1px solid rgba(255,255,255,.08);
+
+      box-shadow: 8px 0 30px rgba(0,0,0,.35);
+
+      transition: left .35s ease;
+
+      z-index: 9999;
+  }
+
+  /* OPEN STATE */
+  .topMenu.expanded{
+      left: 0;
+  }
+
+  /* ===== MAIN CONTENT ===== */
+  .mainContentContainer{
+      width:100%;
+      padding:16px;
+  }
+
+  .container{
+      flex-direction:column;
+  }
+
+  .menuBtn{
+      width:100%;
+  }
+
+  /* ===== OVERLAY (NEW - IMPORTANT) ===== */
+  .sidebarOverlay{
+      position: fixed;
+      top: 95px;
+      left: 0;
+      width: 100%;
+      height: calc(100vh - 95px);
+
+      background: rgba(0,0,0,0.35);
+      backdrop-filter: blur(2px);
+
+      z-index: 9998;
+  }
+}
+@media (max-width:768px){
+  .topMenu{
+      position: fixed;
+      top: 95px;
+      left: -260px;   /* (FIX: match width properly) */
+
+      width: 260px;
+
+      height: calc(100vh - 95px);
+
+      display: flex;
+      flex-direction: column;
+
+      padding: 20px 12px;
+
+      background: rgba(15, 23, 42, 0.82);
+      backdrop-filter: blur(18px);
+      -webkit-backdrop-filter: blur(18px);
+
+      border-right: 1px solid rgba(255,255,255,.08);
+
+      box-shadow: 8px 0 30px rgba(0,0,0,.35);
+
+      transition: left .35s ease;
+
+      z-index: 9999;
+  }
+}
+@media (max-width: 1100px) {
+  .page {
+    display: block;
+    width: 100%;
+  }
+
+  .topMenu {
+    position: fixed;
+    top: 95px;
+    left: -280px;
+    width: 260px;
+    height: calc(100vh - 95px);
+    padding: 20px 12px;
+    background: rgba(15, 23, 42, 0.92);
+    backdrop-filter: blur(18px);
+    -webkit-backdrop-filter: blur(18px);
+    border-right: 1px solid rgba(255, 255, 255, 0.08);
+    box-shadow: 8px 0 30px rgba(0, 0, 0, 0.35);
+    z-index: 9999;
+    transition: left 0.35s ease;
+  }
+
+  .topMenu.expanded {
+    left: 0;
+  }
+
+  .mainContentContainer {
+    width: 100%;
+    padding: 16px;
+    max-height: none;
+    overflow-y: visible;
+  }
+
+  .container {
+    flex-direction: column;
+    gap: 18px;
+  }
+
+  .sidebarOverlay {
+    position: fixed;
+    top: 95px;
+    left: 0;
+    width: 100%;
+    height: calc(100vh - 95px);
+    background: rgba(0, 0, 0, 0.35);
+    backdrop-filter: blur(2px);
+    z-index: 9998;
+  }
+
+  .mapContainer {
+    width: 100%;
+    padding: 24px 16px;
+  }
+
+  .mapTitleContainer {
+    font-size: 20px;
+    text-align: center;
+  }
+
+  .mapBox {
+    width: 100%;
+    min-height: 420px;
+    margin-top: 30px;
+  }
+
+  .mapLegend {
+    margin-top:-76px;
+    gap: 20px;
+    font-size: 15px;
+  }
+
+  .mapFooter {
+    flex-direction: column;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .mapLogo img {
+    width: 120px;
+    right: -260px;
+    top: -80px;
+    height: auto;
+  }
+
+  .sidePanel {
+    width: 100%;
+    gap: 16px;
+  }
+
+  .panelCard {
+    width: 100%;
+    padding: 16px;
+  }
+
+  .panelCard1 {
+    font-size: 14px;
+    margin-bottom: 10px;
+  }
+
+  .searchBox {
+    width: 100%;
+  }
+
+  .scrollBox {
+    max-height: 160px;
+    overflow-y: auto;
+    overflow-x: hidden;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .scrollBox label {
+    font-size: 13px;
+    padding: 5px 4px;
+    gap: 6px;
+  }
+
+  .kpiContainer {
+    padding: 18px;
+  }
+
+  .kpiGridModern {
+    grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  }
+
+  .bottomChartsRow {
+    flex-direction: column;
+    gap: 16px;
+  }
+
+  .bottomChartsRow .chartBox {
+    padding: 18px;
+  }
+
+  .tooltipBox {
+    width: 280px;
+  }
+}
+
+@media (max-width: 768px) {
+  .topMenu {
+    top: 95px;
+    left: -280px;
+    width: 260px;
+    height: calc(100vh - 95px);
+    padding: 18px 10px;
+  }
+
+  .topMenu.expanded {
+    left: 0;
+  }
+
+  .mainContentContainer {
+    width: 100%;
+    padding: 12px;
+    gap: 18px;
+  }
+
+  .menuBtn {
+    font-size: 14px;
+    padding: 10px 12px;
+  }
+
+  .menuIcon {
+    font-size: 20px;
+  }
+
+  .container {
+    flex-direction: column;
+    gap: 14px;
+  }
+
+  .mapContainer {
+    padding: 14px 10px;
+    border-radius: 12px;
+  }
+
+  .mapTitleContainer {
+    font-size: 17px;
+    line-height: 1.4;
+  }
+
+  .resized-image {
+    width: 94px;
+    top: 8px;
+    left: 8px;
+  }
+
+  .export {
+    top: 10px;
+    right: 10px;
+  }
+
+  .export button {
+    margin-top: 40px;
+    padding: 7px 10px;
+    font-size: 12px;
+    border-radius: 6px;
+  }
+
+  .dropdown {
+    width: 120px;
+  }
+
+  .mapBox {
+    width: 100%;
+    min-height: 340px;
+    margin-top: 24px;
+  }
+
+    .mapLegend{
+        flex-direction:column;
+        align-items:flex-start;
+        gap: 10px;
+        padding-left: 10px;
+        margin-top: -78px;
+        font-size: 11px;
+    }
+
+  .legendItem {
+    gap: 6px;
+  }
+
+  .greenDot,
+  .redDot {
+    width: 12px;
+    height: 12px;
+  }
+
+  .mapFooter {
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .mapLogo img {
+    width: 100px;
+    right: -100px;
+    top: -80px;
+    height: auto;
+  }
+
+  .sidePanel {
+    width: 100%;
+    gap: 12px;
+  }
+
+  .panelCard {
+    width: 100%;
+    padding: 12px;
+    border-radius: 12px;
+  }
+
+  .panelCard1 {
+    font-size: 13px;
+    margin-bottom: 8px;
+  }
+
+  .searchBox {
+    padding: 9px 12px;
+    font-size: 13px;
+  }
+
+  .scrollBox {
+    max-height: 130px;
+    overflow-y: auto;
+    overflow-x: hidden;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .scrollBox label {
+    font-size: 12px;
+    padding: 4px 2px;
+    gap: 6px;
+    line-height: 1.25;
+    word-break: break-word;
+  }
+
+  .scrollBox input[type="checkbox"] {
+    width: 13px;
+    height: 13px;
+    flex-shrink: 0;
+  }
+
+  .kpiContainer {
+    padding: 16px;
+    border-radius: 12px;
+  }
+
+  .kpiTitle {
+    font-size: 18px;
+    margin-bottom: 16px;
+  }
+
+  .kpiGridModern {
+    grid-template-columns: 1fr;
+  }
+
+  .kpiCardModern {
+    padding: 16px;
+  }
+
+  .kpiDomainModern {
+    font-size: 14px;
+  }
+
+  .kpiValueModern {
+    font-size: 20px;
+  }
+
+  .bottomChartsRow .chartBox {
+    padding: 14px;
+    border-radius: 12px;
+  }
+
+  .chartTitle {
+    font-size: 14px;
+    margin-bottom: 14px;
+  }
+
+  .tooltipBox {
+    width: calc(100vw - 24px);
+    left: 12px !important;
+    right: 12px;
+  }
+}

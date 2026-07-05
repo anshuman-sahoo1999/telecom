@@ -1,0 +1,151 @@
+* {
+  box-sizing: border-box;
+}
+
+.job-page {
+  min-height: 100vh;
+  background: #f4f7fb;
+}
+
+.job-card {
+  max-width: 950px;
+  margin: auto;
+  background: #fff;
+  border-radius: 18px;
+  padding: 35px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.08);
+}
+
+.job-header {
+  margin-bottom: 30px;
+  text-align: center;
+}
+
+.job-header h2 {
+  font-size: 32px;
+  font-weight: 700;
+  color: #1e3a8a;
+  margin-bottom: 20px;
+  text-align: center;
+}
+
+.job-header p {
+  margin-top: 8px;
+  color: #6b7280;
+  font-size: 15px;
+}
+
+.job-form {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 22px;
+}
+
+.form-group {
+  display: flex;
+  flex-direction: column;
+}
+
+.form-group label {
+  margin-bottom: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  color: #374151;
+}
+
+.form-group input {
+  height: 46px;
+  padding: 0 14px;
+  border: 1px solid #d8dde6;
+  border-radius: 10px;
+  font-size: 14px;
+  transition: 0.3s;
+  outline: none;
+}
+
+.form-group input:focus {
+  border-color: #2563eb;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.15);
+}
+.form-group select {
+  width: 100%;
+  height: 45px;
+  padding: 0 12px;
+  border: 1px solid #dcdcdc;
+  border-radius: 6px;
+  outline: none;
+  font-size: 14px;
+  background: #fff;
+  cursor: pointer;
+}
+
+.form-group select:focus {
+  border-color: #1976d2;
+}
+
+.button-wrapper {
+  grid-column: 1 / -1;
+  display: flex;
+  justify-content: center;
+  margin-top: 10px;
+}
+
+.button-wrapper button {
+  background: #448d13;
+  color: #fff;
+  border: none;
+  padding: 13px 30px;
+  border-radius: 10px;
+  cursor: pointer;
+  font-size: 15px;
+  font-weight: 600;
+  transition: 0.3s;
+}
+
+.button-wrapper button:hover {
+  background: #23490a;
+}
+.date-row {
+  grid-column: 1 / -1;
+  display: flex;
+  gap: 20px;
+  width: 100%;
+}
+
+.date-row .form-group {
+  flex: 1;
+}
+
+.form-group select {
+  width: 100%;
+  height: 45px;
+  padding: 0 12px;
+  border: 1px solid #dcdcdc;
+  border-radius: 6px;
+  outline: none;
+  background: #fff;
+}
+@media (max-width: 768px) {
+  .job-page {
+    padding: 15px;
+  }
+
+  .job-card {
+    padding: 20px;
+  }
+
+  .job-header h2 {
+    font-size: 24px;
+  }
+
+  .job-form {
+    grid-template-columns: 1fr;
+  }
+
+  .button-wrapper button {
+    width: 100%;
+  }
+    .date-row {
+    flex-direction: column;
+  }
+}
