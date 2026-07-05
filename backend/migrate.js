@@ -59,7 +59,7 @@ async function main() {
       let query = block.trim();
       if (/^INSERT INTO/i.test(query)) {
         // Clean up MySQL specific syntax for PostgreSQL
-        query = query.replace(/`/g, '"');
+        query = query.replace(/`/g, '');
         query = query.replace(/\\"/g, '"');
         
         insertQueries.push(query);
