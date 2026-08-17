@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect, useCallback } from "react";
+import React, { useState, useRef, useEffect, useCallback, useMemo } from "react";
 import { useOutletContext } from "react-router-dom";
 import { ComposableMap, Geographies, Geography } from "react-simple-maps";
 import { geoCentroid } from "d3-geo";
@@ -175,9 +175,9 @@ export default function TelecomMap() {
     return () => {
       window.removeEventListener("focus", handleFocus);
       document.removeEventListener("visibilitychange", handleVisibility);
-       };
+    };
   }, []);
- 
+
   const [expandedDomains, setExpandedDomains] = useState({});
 
   const toggleExpand = (d) => {
@@ -203,25 +203,34 @@ export default function TelecomMap() {
   useEffect(() => {
     fetchAllData();
   }, []);
+  const stateJobsMap = useMemo(() => {
+    const map = {};
 
-  const getStateColor = (stateName) => {
-    const totalJobs = currentFilterData
-      .filter(item => item.state === stateName)
-      .reduce((sum, item) => {
-        return sum + Number(item.jobsDelivered || 0);
-      }, 0);
-    if (totalJobs === 0) return "#FFC491";
-    const totals = allStates.map(state => {
-      return currentFilterData
-        .filter(item => item.state === state)
-        .reduce((sum, item) => {
-          return sum + Number(item.jobsDelivered || 0);
-        }, 0);
+    currentFilterData.forEach((item) => {
+      map[item.state] =
+        (map[item.state] || 0) + Number(item.jobsDelivered || 0);
     });
-    const maxJobs = Math.max(...totals, 1);
+
+    return map;
+  }, [currentFilterData]);
+
+  const maxJobs = useMemo(() => {
+    return Math.max(...Object.values(stateJobsMap), 1);
+  }, [stateJobsMap]);
+  const getStateColor = (stateName) => {
+    const totalJobs = stateJobsMap[stateName] || 0;
+    if (totalJobs === 0) return "#FFC491";
     const ratio = totalJobs / maxJobs;
-    const colors = ["#738F52", "#9ACD32", "#78BE21", "#32CD32", "#90EE90", "#00FF00", "#66FF00", "#008000", "#006400"];
-    const index = Math.min(colors.length - 1, Math.floor(ratio * colors.length));
+    const colors = [
+      "#738F52", "#9ACD32", "#78BE21", "#32CD32", "#90EE90",
+      "#00FF00", "#66FF00", "#008000", "#006400",
+    ];
+
+    const index = Math.min(
+      colors.length - 1,
+      Math.floor(ratio * colors.length)
+    );
+
     return colors[index];
   };
 
@@ -292,7 +301,7 @@ export default function TelecomMap() {
       const mapTitle = clone.querySelector(".mapTitleContainer");
 
       if (mapTitle) {
-        mapTitle.style.fontSize = "36px";      
+        mapTitle.style.fontSize = "36px";
         mapTitle.style.fontWeight = "700";
         mapTitle.style.textAlign = "center";
         mapTitle.style.padding = "15px 0";
@@ -308,7 +317,7 @@ export default function TelecomMap() {
 
         if (isMobile) {
           logoBox.style.display = "flex";
-          logoBox.style.justifyContent = "flex-end"; 
+          logoBox.style.justifyContent = "flex-end";
           logoBox.style.width = "100%";
           logo.style.width = "120px";
           logo.style.height = "auto";
@@ -325,7 +334,7 @@ export default function TelecomMap() {
       }
       const Legend = clone.querySelector(".mapLegend");
       if (Legend) {
-        Legend.style.fontSize = "16px"; 
+        Legend.style.fontSize = "16px";
         Legend.style.fontWeight = "700";
         Legend.style.marginLeft = "90px";
       }
@@ -333,8 +342,8 @@ export default function TelecomMap() {
       if (compass) {
         if (isMobile) {
           compass.style.width = "140px";
-          compass.style.marginTop = "-10px";   
-          compass.style.marginLeft = "10px";   
+          compass.style.marginTop = "-10px";
+          compass.style.marginLeft = "10px";
         } else {
           compass.style.width = "120px";
           compass.style.height = "auto";
@@ -488,12 +497,14 @@ export default function TelecomMap() {
                               if (typeof uom === "string") { try { uom = JSON.parse(uom); } catch { uom = {}; } }
                               if (typeof uom === "object" && !Array.isArray(uom)) {
                                 Object.entries(uom).forEach(([key, value]) => {
+                                  if (!key || key === "undefined") return;
                                   let displayKey = key;
                                   if (item.domain === "MRE") displayKey = "Total Poles";
                                   else if (item.domain === "PLA") displayKey = "Total Wolp";
                                   else if (item.domain === "TCP") displayKey = "Total Plans";
                                   else if (item.domain === "JPA") displayKey = "JPA Count";
-                                  uomTotals[displayKey] = (uomTotals[displayKey] || 0) + Number(value || 0);
+                                  uomTotals[displayKey] =
+                                    (uomTotals[displayKey] || 0) + Number(value || 0);
                                 });
                               }
                             });
@@ -627,7 +638,7 @@ export default function TelecomMap() {
                 <ResponsiveContainer width="100%" height={350}>
                   <BarChart data={monthlyJobsSorted} barGap={0} barCategoryGap={25}>
                     <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis dataKey="name" />
+                    <XAxis dataKey="name" interval={0} angle={-45} textAnchor="end" height={60} />
                     <YAxis />
                     <Tooltip />
                     <Legend />
@@ -641,8 +652,34 @@ export default function TelecomMap() {
                 <h3 className="chartTitle">🥧 Domain % Share</h3>
                 <ResponsiveContainer width="100%" height={360}>
                   <PieChart>
-                    <Pie data={pieChartData} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={window.innerWidth < 768 ? 80 : 120} innerRadius={0} paddingAngle={2} stroke="#fff" strokeWidth={2} startAngle={90} endAngle={-270} clockwise={true} isAnimationActive={true} animationBegin={0} animationDuration={2500} animationEasing="ease-out" label={({ name, value, cx, cy, midAngle, outerRadius }) => { const RADIAN = Math.PI / 180; const radius = outerRadius + 30; const x = cx + radius * Math.cos(-midAngle * RADIAN); const y = cy + radius * Math.sin(-midAngle * RADIAN); return (<text x={x} y={y} fill="#111827" textAnchor={x > cx ? "start" : "end"} dominantBaseline="central" style={{ fontSize: "13px", fontWeight: "700" }}>{name} {value}%</text>); }} labelLine={{ stroke: "#4b5563", strokeWidth: 1.3 }}>
-                      {pieChartData.map((entry, index) => (<Cell key={index} fill={COLORS[index % COLORS.length]} opacity={hiddenDomains.includes(entry.name) ? 0.15 : 1} />))}
+                    <Pie
+                      data={pieChartData}
+                      dataKey="value"
+                      nameKey="name"
+                      cx="50%"
+                      cy="50%"
+                      outerRadius={window.innerWidth < 768 ? 80 : 120}
+                      innerRadius={0}
+                      paddingAngle={2}
+                      stroke="#fff"
+                      strokeWidth={2}
+                      startAngle={90}
+                      endAngle={-270}
+                      clockwise={true}
+                      isAnimationActive={true}
+                      animationBegin={0}
+                      animationDuration={1000}
+                      animationEasing="ease-out"
+                      label={false}
+                      labelLine={false}
+                    >
+                      {pieChartData.map((entry, index) => (
+                        <Cell
+                          key={index}
+                          fill={COLORS[index % COLORS.length]}
+                          opacity={hiddenDomains.includes(entry.name) ? 0.15 : 1}
+                        />
+                      ))}
                     </Pie>
                     <Tooltip formatter={(v) => `${v}%`} />
                     <Legend content={() => (
