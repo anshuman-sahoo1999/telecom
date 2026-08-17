@@ -8,7 +8,7 @@ export default function Reports({ domain, states }) {
   const [open, setOpen] = useState(false);
   const [selectedPeriod, setSelectedPeriod] = useState("");
   const [lastUpdateMap, setLastUpdateMap] = useState({});
-  
+
 
   useEffect(() => {
     setTimeout(() => setOpen(true), 50);
@@ -53,195 +53,200 @@ export default function Reports({ domain, states }) {
       });
   }, []);
 
-const currentLastUpdate =
-  domain && domain !== "All"
-    ? lastUpdateMap[domain]
-    : null;
+  const currentLastUpdate =
+    domain && domain !== "All"
+      ? lastUpdateMap[domain]
+      : null;
 
-const formattedLastUpdate = currentLastUpdate
-  ? new Date(currentLastUpdate).toLocaleDateString("en-IN", {
+  const formattedLastUpdate = currentLastUpdate
+    ? new Date(currentLastUpdate).toLocaleDateString("en-IN", {
       day: "2-digit",
       month: "short",
       year: "numeric",
     })
-  : "-";
+    : "-";
 
-// ================= FETCH DATA =================
-useEffect(() => {
-  axios
-    .get("http://localhost:5000/api/work/all")
-    .then((res) => setData(res.data || []))
-    .catch((err) => {
-      console.log(err);
-      setData([]);
-    });
-}, [domain, states]);
+  // ================= FETCH DATA =================
+  useEffect(() => {
+    axios
+      .get("http://localhost:5000/api/work/all")
+      .then((res) => {
+        setData(res.data || []);
+      })
+  }, [domain, states]);
 
-// ================= MONTH-YEAR OPTIONS =================
-const monthOrder = [
-  "Jan", "Feb", "Mar", "Apr", "May", "Jun",
-  "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"
-];
+  // ================= MONTH-YEAR OPTIONS =================
+  const monthOrder = [
+    "Jan", "Feb", "Mar", "Apr", "May", "Jun",
+    "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"
+  ];
 
-const monthYearOptions = Array.from(
-  new Set(
-    data.flatMap((item) =>
-      (item.months || []).map((m) => {
-        if (!m) return null;
+  const monthYearOptions = Array.from(
+    new Set(
+      data
+        .filter((item) => {
+          if (domain && domain !== "All") {
+            return item.domain === domain;
+          }
+          return true;
+        })
+        .flatMap((item) =>
+          (item.months || []).map((m) => {
+            if (!m) return null;
+
+            const [month, year] = m.split("-");
+
+            return `${month} 20${year}`;
+          })
+        )
+        .filter(Boolean)
+    )
+  ).sort((a, b) => {
+    const [am, ay] = a.split(" ");
+    const [bm, by] = b.split(" ");
+
+    if (Number(by) !== Number(ay)) {
+      return Number(by) - Number(ay);
+    }
+
+    return monthOrder.indexOf(am) - monthOrder.indexOf(bm);
+  });
+
+
+  // ================= JOB FORMAT =================
+  const getJobData = (item) => {
+
+    return {
+      main: 1,
+      sub: `Jobs Delivered`,
+    };
+  };
+
+  // ================= FILTERED DATA =================
+  const filteredData = data.filter((item) => {
+    if (domain && domain !== "All") {
+      if (item.domain !== domain) return false;
+    }
+
+    const months = Array.isArray(item.months) ? item.months : [];
+    if (selectedPeriod) {
+      return months.some((m) => {
+        if (!m) return false;
 
         const [month, year] = m.split("-");
 
-        return `${month} 20${year}`;
-      })
-    ).filter(Boolean)
-  )
-).sort((a, b) => {
-  const [am, ay] = a.split(" ");
-  const [bm, by] = b.split(" ");
-
-  if (by !== ay) return Number(by) - Number(ay);
-
-  return monthOrder.indexOf(am) - monthOrder.indexOf(bm);
-});
-
-
-// ================= JOB FORMAT =================
-const getJobData = (item) => {
-
-  return {
-    main: 1,
-    sub: `Jobs Delivered`,
-  };
-};
-
-// ================= FILTERED DATA =================
-const filteredData = data.filter((item) => {
-  if (domain && domain !== "All") {
-    if (item.domain !== domain) return false;
-  }
-
-  const months = Array.isArray(item.months) ? item.months : [];
-
-if (selectedPeriod) {
-
-  const found = months.some((m) => {
-
-    if (!m) return false;
-
-    const [month, year] = m.split("-");
-
-    return `${month} 20${year}` === selectedPeriod;
+        return (
+          month.trim() === selectedPeriod.split(" ")[0] &&
+          `20${year}` === selectedPeriod.split(" ")[1]
+        );
+      });
+    }
+    return true;
   });
+  // ================= TOTAL JOBS =================
+  const totalJobs = filteredData.length;
 
-  return found;
-}
+  return (
+    <div className={`reports ${open ? "open" : "close"}`}>
 
-  return true;
-});
-// ================= TOTAL JOBS =================
-const totalJobs = filteredData.length;
+      {/* ================= FILTER ================= */}
+      <div className="headerRight">
+        <select
+          className="month-select"
+          value={selectedPeriod}
+          onChange={(e) => setSelectedPeriod(e.target.value)}
+        >
+          <option value="">All Months</option>
+          {monthYearOptions.map((p, i) => (
+            <option key={i} value={p}>
+              {p}
+            </option>
+          ))}
+        </select>
+      </div>
 
-return (
-  <div className={`reports ${open ? "open" : "close"}`}>
+      {/* ================= TABLE ================= */}
+      <div className="reportsBox">
 
-    {/* ================= FILTER ================= */}
-    <div className="headerRight">
-      <select
-        className="month-select"
-        value={selectedPeriod}
-        onChange={(e) => setSelectedPeriod(e.target.value)}
-      >
-        <option value="">All Months</option>
-        {monthYearOptions.map((p, i) => (
-          <option key={i} value={p}>
-            {p}
-          </option>
-        ))}
-      </select>
-    </div>
+        {filteredData.length === 0 ? (
+          <div className="empty">No data found</div>
+        ) : (
+          <>
+            <table className="reportTable">
+              <thead>
+                <tr>
+                  <th>Sl.No</th>
+                  <th>Domain</th>
+                  <th>Region</th>
+                  <th>Market Name</th>
+                  <th>No.of Job Delivered</th>
+                </tr>
+              </thead>
 
-    {/* ================= TABLE ================= */}
-    <div className="reportsBox">
+              <tbody>
 
-      {filteredData.length === 0 ? (
-        <div className="empty">No data found</div>
-      ) : (
-        <>
-          <table className="reportTable">
-            <thead>
-              <tr>
-                <th>Sl.No</th>
-                <th>Domain</th>
-                <th>Region</th>
-                <th>Market Name</th>
-                <th>No.of Job Delivered</th>
-              </tr>
-            </thead>
+                {filteredData.map((item, index) => {
+                  const job = getJobData(item);
 
-            <tbody>
+                  return (
+                    <tr key={index}>
+                      <td>{index + 1}</td>
 
-              {filteredData.map((item, index) => {
-                const job = getJobData(item);
+                      <td className="domain-cell">
+                        <div className="domain-main">
+                          {item.domain || "-"}
+                        </div>
 
-                return (
-                  <tr key={index}>
-                    <td>{index + 1}</td>
+                        <div className="domain-sub">
+                          {Array.isArray(item.subDomain)
+                            ? item.subDomain.join(" | ")
+                            : typeof item.subDomain === "object"
+                              ? Object.values(item.subDomain || {}).join(" | ")
+                              : item.subDomain || "-"}
+                        </div>
+                      </td>
 
-                    <td className="domain-cell">
-                      <div className="domain-main">
-                        {item.domain || "-"}
-                      </div>
+                      <td>{item.region || getRegion(item.state)}</td>
+                      <td>{item.state}</td>
 
-                      <div className="domain-sub">
-                        {Array.isArray(item.subDomain)
-                          ? item.subDomain.join(" | ")
-                          : typeof item.subDomain === "object"
-                            ? Object.values(item.subDomain || {}).join(" | ")
-                            : item.subDomain || "-"}
-                      </div>
-                    </td>
+                      <td className="job-cell">
+                        <div className="job-main">{job.main}</div>
+                        <div className="job-sub">{job.sub}</div>
+                      </td>
+                    </tr>
+                  );
+                })}
 
-                    <td>{item.region || getRegion(item.state)}</td>
-                    <td>{item.state}</td>
+                {/* TOTAL ROW */}
+                <tr className="totalRow">
+                  <td></td>
+                  <td></td>
+                  <td></td>
+                  <td>Total Jobs Delivered</td>
+                  <td className="highlight">{totalJobs}</td>
+                </tr>
 
-                    <td className="job-cell">
-                      <div className="job-main">{job.main}</div>
-                      <div className="job-sub">{job.sub}</div>
-                    </td>
-                  </tr>
-                );
-              })}
+              </tbody>
+            </table>
 
-              {/* TOTAL ROW */}
-              <tr className="totalRow">
-                <td></td>
-                <td></td>
-                <td></td>
-                <td>Total Jobs Delivered</td>
-                <td className="highlight">{totalJobs}</td>
-              </tr>
+            {/* ================= SUMMARY ================= */}
+            <div className="summaryWrap">
+              <div className="summaryBox">
+                <div className="iconBox">📶</div>
 
-            </tbody>
-          </table>
-
-          {/* ================= SUMMARY ================= */}
-          <div className="summaryWrap">
-            <div className="summaryBox">
-              <div className="iconBox">📶</div>
-
-              <div className="summaryText">
-                <p>Jobs Delivered</p>
-                <span className="dateText">
-                  As on {formattedLastUpdate}
-                </span>
-                <h1>{totalJobs}</h1>
+                <div className="summaryText">
+                  <p>Jobs Delivered</p>
+                  <span className="dateText">
+                    As on {formattedLastUpdate}
+                  </span>
+                  <h1>{totalJobs}</h1>
+                </div>
               </div>
             </div>
-          </div>
-        </>
-      )}
+          </>
+        )}
 
+      </div>
     </div>
-  </div>
-);
+  );
 }
