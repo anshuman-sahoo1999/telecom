@@ -5,6 +5,7 @@
   --sky: #0ea5e9;
   --blue: #2563eb;
   --green: #16a34a;
+  --orange: #ea580c;
   --red: #ef4444;
   --bg: #f4f7fb;
   --gray: #6b7280;
@@ -69,7 +70,7 @@ body{
   background: #388d10;
   color: #ffffff;
   border-radius: 6px;
-  border: none; /* optional but usually needed */
+  border: none;
 }
 /* CARD */
 .actionCard{
@@ -117,7 +118,6 @@ body{
   transform:scale(1.05);
 }
 
-/* REMOVE OLD BACKGROUNDS */
 .blue{
   background:transparent !important;
 }
@@ -136,12 +136,6 @@ body{
   background:linear-gradient(to top, rgba(15, 23, 42, 0.85), transparent);
 }
 
-.cardNumber{
-  font-size:13px;
-  opacity:0.8;
-  font-weight:600;
-}
-
 .cardOverlay h2{
   font-size:22px;
   margin-top:5px;
@@ -158,6 +152,40 @@ body{
   background:white;
   border-radius:18px;
   padding:25px;
+}
+
+.contentBox .userListHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 15px;
+  margin-bottom: 20px;
+}
+
+.contentBox .userListHeader .sectionTitle {
+  margin: 0;
+}
+
+.userSearchContainer {
+  display: flex;
+  align-items: center;
+}
+
+.userSearchInput {
+  width: 100%;
+  max-width: 300px;
+  padding: 10px 14px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font-size: 14px;
+  outline: none;
+  background: #fff;
+  transition: border-color 0.2s;
+}
+
+.userSearchInput:focus {
+  border-color: var(--sky);
 }
 
 /* FORM */
@@ -181,7 +209,6 @@ body{
   border-color:var(--sky);
 }
 
-/* FORM BUTTON */
 .userForm button {
   grid-column: span 2;
   width: 120px;
@@ -199,11 +226,26 @@ body{
   background:#15803d;
 }
 
-/* TABLE */
-.tableWrapper{
-  overflow-x:auto;
+/* TABLE CONTAINERS - X-AXIS HIDDEN & Y-AXIS SCROLL ADDED */
+.tableWrapper.x-axis-hidden {
+  overflow-x: hidden !important;
+  max-width: 100% !important;
 }
 
+.tableWrapper.y-axis-scroll {
+  max-height: 400px !important; /* Y-Axis height constraint */
+  overflow-y: auto !important;   /* Enables vertical scrollbar */
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+}
+
+.tableWrapper.y-axis-scroll table th {
+  position: sticky !important;
+  top: 0;
+  z-index: 10;
+}
+
+/* TABLE */
 table{
   width:100%;
   border-collapse:collapse;
@@ -225,42 +267,22 @@ table tr:hover td{
   background:#f9fafb;
 }
 
-/* ACTION BUTTONS */
-.editBtn,
-.deleteBtn {
-  border: none;
-  padding: 6px 12px;
-  margin: 0 4px;
-  border-radius: 6px;
-  font-size: 13px;
-  font-weight: 500;
-  cursor: pointer;
-  transition: all 0.2s ease-in-out;
+.action-th,
+.action-td {
+  width: 130px;
+  min-width: 130px;
+  text-align: center;
 }
 
-.editBtn {
-  background: var(--blue);
-  color: #fff;
+.action-btn-group {
+  display: flex;
+  justify-content: center;
+  gap: 6px;
 }
 
-.editBtn:hover {
-  background: var(--navy);
-}
-
-.deleteBtn {
-  background: var(--red);
-  color: #fff;
-}
-
-.deleteBtn:hover {
-  background: #b91c1c;
-}
-
-/* INLINE TABLE BUTTONS */
 table td button {
   border: none;
-  padding: 6px 10px;
-  margin: 0 4px;
+  padding: 6px 12px;
   border-radius: 6px;
   font-size: 13px;
   cursor: pointer;
@@ -276,17 +298,11 @@ table td button:nth-child(1):hover {
   background: var(--navy);
 }
 
-table td button:has(+ button) {
-  background: var(--green);
-  color: white;
-}
-
 table td button + button {
   background: var(--sky);
   color: white;
 }
 
-/* INPUTS IN TABLE EDIT MODE */
 table td input,
 table td select {
   width: 100%;
@@ -301,138 +317,6 @@ table td select:focus {
   border-color: var(--sky);
 }
 
-/* PASSWORD MODAL OVERLAY */
-.passwordModalOverlay {
-  position: fixed;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  background: rgba(15, 23, 42, 0.6);
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  z-index: 999;
-}
-
-/* MODAL BOX */
-.passwordModalBox {
-  background: #fff;
-  padding: 20px;
-  width: 85%;
-  max-width: 900px;
-  max-height: 85vh;
-  overflow-y: auto;
-  border-radius: 12px;
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
-}
-
-.passwordModalBox h2 {
-  margin: 0;
-  font-size: 22px;
-  font-weight: 600;
-  color: var(--navy);
-}
-
-/* SEARCH */
-.passwordSearchInput {
-  width: 100%;
-  padding: 10px 14px;
-  margin: 12px 0 18px;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  font-size: 14px;
-  outline: none;
-}
-
-.passwordSearchInput:focus {
-  border-color: var(--sky);
-}
-
-/* PASSWORD TABLE */
-.passwordTable {
-  width: 100%;
-  border-collapse: collapse;
-  font-size: 14px;
-}
-
-.passwordTable thead {
-  background: var(--navy);
-  color: #fff;
-}
-
-.passwordTable th {
-  text-align: left;
-  padding: 12px;
-}
-
-.passwordTable td {
-  padding: 10px 12px;
-  border-bottom: 1px solid #eee;
-}
-
-.passwordTable tbody tr:hover {
-  background: #f7f7f7;
-}
-
-/* PASSWORD BUTTONS */
-.passwordBtn {
-  padding: 6px 10px;
-  margin-right: 6px;
-  border: none;
-  border-radius: 6px;
-  cursor: pointer;
-  font-size: 13px;
-}
-
-.passwordBtn.update {
-  background: var(--navy);
-  color: #fff;
-}
-
-.passwordBtn.update:hover {
-  background: #020617;
-}
-
-.passwordBtn.save {
-  background: var(--green);
-  color: #fff;
-}
-
-.passwordBtn.save:hover {
-  background: #2a8015;
-}
-
-/* CLOSE BUTTON */
-.passwordCloseBtn {
-  margin-top: 15px;
-  padding: 10px 14px;
-  border: none;
-  background: var(--red);
-  color: white;
-  border-radius: 8px;
-  cursor: pointer;
-}
-
-.passwordCloseBtn:hover {
-  background: #b91c1c;
-}
-
-/* PASSWORD INPUTS */
-.passwordTable input {
-  padding: 6px 8px;
-  margin-right: 5px;
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  font-size: 13px;
-  width: 140px;
-}
-
-.passwordTable input:focus {
-  border-color: var(--sky);
-}
-
-/* RESPONSIVE */
 @media(max-width:768px){
   .userForm{
     grid-template-columns:1fr;
@@ -446,6 +330,7 @@ table td select:focus {
     width:100%;
   }
 }
+
 .emailBox {
     display: flex;
     align-items: center;
@@ -456,7 +341,6 @@ table td select:focus {
     background: white;
 }
 
-/* left input */
 .emailBox input {
     border: none;
     outline: none;
@@ -465,7 +349,6 @@ table td select:focus {
     min-width: 120px;
 }
 
-/* right side @ + dropdown box */
 .emailSuffix {
     display: flex;
     align-items: center;
@@ -475,12 +358,6 @@ table td select:focus {
     border-left: 1px solid #ddd;
 }
 
-/* @ symbol */
-.emailSuffix span {
-    font-weight: bold;
-}
-
-/* dropdown clean look */
 .emailSuffix select {
     border: none;
     outline: none;
@@ -488,25 +365,40 @@ table td select:focus {
     padding: 6px;
     cursor: pointer;
 }
-.qa-tag {
-    margin-left: 6px;
-    font-size: 12px;
+
+.member-tag-qa {
+    display: inline-block;
+    margin-left: 4px;
+    font-size: 11px;
     font-weight: 600;
     padding: 2px 6px;
-    border-radius: 6px;
-    background: #dcfce7;
-    color: #16a34a;
+    border-radius: 4px;
+    background: #ffedd5 !important;
+    color: var(--orange) !important;
 }
 
-.qc-tag {
-    margin-left: 6px;
-    font-size: 12px;
+.member-tag-qc {
+    display: inline-block;
+    margin-left: 4px;
+    font-size: 11px;
     font-weight: 600;
     padding: 2px 6px;
-    border-radius: 6px;
-    background: #ffedd5;
-    color: #ea580c;
+    border-radius: 4px;
+    background: #dcfce7 !important;
+    color: var(--green) !important;
 }
+
+.member-tag-production {
+    display: inline-block;
+    margin-left: 4px;
+    font-size: 11px;
+    font-weight: 600;
+    padding: 2px 6px;
+    border-radius: 4px;
+    background: #e0f2fe !important;
+    color: var(--sky) !important;
+}
+
 .multi-select {
   position: relative;
   width: 100%;
@@ -525,7 +417,38 @@ table td select:focus {
     cursor:pointer;
     position:relative;
 }
-/* EDIT DOMAIN DROPDOWN */
+
+.multi-select-box .placeholder {
+  color: #9ca3af;
+  font-size: 14px;
+}
+
+.multi-select-box .tag {
+  background: #e2e8f0;
+  color: #0f172a;
+  padding: 3px 8px;
+  border-radius: 6px;
+  font-size: 12px;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.multi-select-box .tag .remove {
+  cursor: pointer;
+  color: #ef4444;
+  font-weight: bold;
+}
+
+.multi-select-box .arrow {
+  position: absolute;
+  right: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 11px;
+  color: #6b7280;
+}
+
 .dropeddown {
   position: absolute;
   top: calc(100% + 6px);
@@ -558,18 +481,6 @@ table td select:focus {
   color: #fff;
 }
 
-.dropeddown::-webkit-scrollbar {
-  width: 6px;
-}
-
-.dropeddown::-webkit-scrollbar-thumb {
-  background: #bdbdbd;
-  border-radius: 10px;
-}
-
-.dropeddown::-webkit-scrollbar-track {
-  background: #f5f5f5;
-}
 .dropdowned{
     position: absolute;
     top: calc(100% + 5px);
@@ -584,12 +495,13 @@ table td select:focus {
     box-shadow: 0 8px 20px rgba(0,0,0,.15);
 }
 
-
-.option {
+.dropdowned .option {
   padding: 10px 12px;
   cursor: pointer;
+  font-size: 14px;
+  border-bottom: 1px solid #f1f1f1;
 }
 
-.option:hover {
+.dropdowned .option:hover {
   background: #f3f4f6;
 }
