@@ -119,9 +119,12 @@ exports.createUser = async (req, res) => {
       ? domain.join(",")
       : domain || null;
 
-    const finalMemberType = Array.isArray(memberType)
+    // memberType ki length limit varchar(10) ko dhyan me rakhte hue slice kar diya hai
+    let rawMemberType = Array.isArray(memberType)
       ? memberType.join(",")
       : memberType || null;
+      
+    const finalMemberType = rawMemberType ? rawMemberType.slice(0, 10) : null;
 
     const sql = `
       INSERT INTO users 
@@ -232,9 +235,11 @@ exports.updateUser = (req, res) => {
     ? domain.join(",")
     : domain || null;
 
-  const finalMemberType = Array.isArray(memberType)
+  let rawMemberType = Array.isArray(memberType)
     ? memberType.join(",")
     : memberType || null;
+    
+  const finalMemberType = rawMemberType ? rawMemberType.slice(0, 10) : null;
 
   const sql = `
     UPDATE users
@@ -338,13 +343,19 @@ exports.updateUserPosition = (req, res) => {
   const { id } = req.params;
   const { domain, memberType } = req.body;
 
+  let rawMemberType = Array.isArray(memberType)
+    ? memberType.join(",")
+    : memberType || null;
+    
+  const finalMemberType = rawMemberType ? rawMemberType.slice(0, 10) : null;
+
   const sql = `
     UPDATE users
     SET domain = ?, memberType = ?
     WHERE id = ?
   `;
 
-  db.query(sql, [domain, memberType, id], (err) => {
+  db.query(sql, [domain, finalMemberType, id], (err) => {
     if (err) {
       console.error("UpdateUserPosition Error:", err);
       return res.status(500).json({ success: false, message: err.sqlMessage || err });
