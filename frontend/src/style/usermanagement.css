@@ -120,20 +120,38 @@
   box-shadow: 0 4px 18px rgba(0,0,0,0.08);
   overflow-x: auto;
   overflow-y: visible;
+  max-height: 320px;
   position: relative;
   scrollbar-width: none;
   -ms-overflow-style: none;
 }
+.table-scroll-container {
+  max-height: 320px;
+  overflow-x: auto;
+  overflow-y: auto;
+  position: relative;
+  &::-webkit-scrollbar {
+    display: none;
+  }
+  -ms-overflow-style: none;  
+  scrollbar-width: none; 
+}
 
+.table-section thead th {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: #19202b;
+}
 .table-section table {
-    width: max-content;
+  width: max-content;
   min-width: 100%;
   white-space: nowrap;
   border-collapse: collapse;
 }
 
 .table-section thead {
-  background: #4f46e5;
+  background: #19202b;
   color: white;
 }
 
@@ -232,7 +250,7 @@
   justify-content: space-between;
   align-items: center;
   padding: 12px 16px;
-  margin: 12px auto; /* 👈 center fix */
+  margin: 12px auto;
   background: linear-gradient(135deg, #ffffff, #f1f5f9);
   border: 1px solid #e2e8f0;
   border-radius: 12px;
@@ -456,17 +474,17 @@
 }
 
 .dropdowned{
-    position: absolute;
-    top: calc(100% + 5px);
-    left: 0;
-    width: 100%;
-    background: #fff;
-    border: 1px solid #ddd;
-    border-radius: 8px;
-    max-height: 220px;
-    overflow-y: auto;
-    z-index: 99999;
-    box-shadow: 0 8px 20px rgba(0,0,0,.15);
+  position: absolute;
+  top: calc(100% + 5px);
+  left: 0;
+  width: 100%;
+  background: #fff;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  max-height: 220px;
+  overflow-y: auto;
+  z-index: 99999;
+  box-shadow: 0 8px 20px rgba(0,0,0,.15);
 }
 
 .option {
@@ -478,41 +496,41 @@
   background: #f2f2f2;
 }
 .emailBox {
-    display: flex;
-    border: 1px solid #ccc;
-    border-radius: 6px;
-    overflow: hidden;
-    width: 100%;
-    background: white;
-    margin-bottom: 10px; /* optional spacing */
+  display: flex;
+  border: 1px solid #ccc;
+  border-radius: 6px;
+  overflow: hidden;
+  width: 100%;
+  background: white;
+  margin-bottom: 10px;
 }
 
 .emailBox input {
-    border: none;
-    outline: none;
-    padding: 8px;
-    flex: 1;
+  border: none;
+  outline: none;
+  padding: 8px;
+  flex: 1;
 }
 
 .emailSuffix {
-    display: flex;
-    align-items: center;
-    background: #f5f5f5;
-    padding: 0 8px;
-    gap: 4px;
-    border-left: 1px solid #ddd;
+  display: flex;
+  align-items: center;
+  background: #f5f5f5;
+  padding: 0 8px;
+  gap: 4px;
+  border-left: 1px solid #ddd;
 }
 
 .emailSuffix span {
-    font-weight: bold;
+  font-weight: bold;
 }
 
 .emailSuffix select {
-    border: none;
-    outline: none;
-    background: transparent;
-    padding: 6px;
-    cursor: pointer;
+  border: none;
+  outline: none;
+  background: transparent;
+  padding: 6px;
+  cursor: pointer;
 }
 .passwordBox {
   position: relative;
@@ -533,6 +551,8 @@
   font-size: 18px;
   color: #666;
 }
+
+/* ================= ROLE TAG COLORS ================= */
 .roleTag {
   margin-left: 6px;
   font-size: 12px;
@@ -541,16 +561,24 @@
   border-radius: 6px;
 }
 
-/* QA */
-.roleTag.qa {
+/* QC - Green */
+.roleTag.qc {
+  background: #dcfce7;
   color: #16a34a;
 }
 
-/* QC */
-.roleTag.qc {
+/* QA - Orange */
+.roleTag.qa {
   background: #ffedd5;
   color: #ea580c;
 }
+
+/* Production - Steel / Sky Blue Style */
+.roleTag.production {
+  background: #e0f2fe;
+  color: #0284c7;
+}
+
 .multi-select {
   position: relative;
   width: 100%;
@@ -578,9 +606,8 @@
 .option:hover {
   background: #f3f4f6;
 }
-@media (max-width: 768px) {
 
-  /* BACKDROP */
+@media (max-width: 768px) {
   .modalOverlay {
     position: fixed;
     inset: 0;
@@ -592,7 +619,6 @@
     z-index: 999;
   }
 
-  /* MODAL BOX */
   .modalBoxes {
     width: 95%;
     max-width: 420px;
@@ -604,14 +630,12 @@
     overflow-y: auto;
   }
 
-  /* TITLE */
   .modalBoxes h2 {
     font-size: 18px;
     text-align: center;
     margin-bottom: 10px;
   }
 
-  /* FORM */
   .userForm {
     display: flex;
     flex-direction: column;
@@ -628,17 +652,10 @@
     box-sizing: border-box;
   }
 
-  /* EMAIL BOX */
-  .emailBox {
-    display: flex;
- 
-  }
-
   .emailSuffix select {
     width: 100%;
   }
 
-  /* MULTI SELECT */
   .multi-select-box {
     width: 100%;
     min-height: 42px;
@@ -658,7 +675,6 @@
     border-radius: 6px;
   }
 
-  /* DROPDOWN */
   .dropdowned {
     max-height: 160px;
     overflow-y: auto;
@@ -672,7 +688,6 @@
     font-size: 13px;
   }
 
-  /* BUTTONS ROW (LEFT-RIGHT) */
   .modalActions {
     display: flex;
     flex-direction: row;
@@ -689,20 +704,18 @@
     border: none;
   }
 
-  /* CREATE BUTTON */
   .modalActions button[type="submit"] {
     background: #2d6cdf;
     color: #fff;
   }
 
-  /* CANCEL BUTTON */
   .modalActions button[type="button"] {
     background: #e5e5e5;
     color: #000;
   }
 }
-@media (max-width: 768px) {
 
+@media (max-width: 768px) {
   .create-user-btn {
     width: 100%;
     display: flex;
@@ -721,19 +734,17 @@
     box-shadow: 0 6px 14px rgba(15, 23, 42, 0.2);
   }
 
-  /* remove hover effect on mobile */
   .create-user-btn button:hover {
     transform: none;
     box-shadow: 0 6px 14px rgba(15, 23, 42, 0.2);
   }
 
-  /* tap effect */
   .create-user-btn button:active {
     transform: scale(0.97);
   }
 }
-@media (max-width: 768px) {
 
+@media (max-width: 768px) {
   .domain-bar {
     width: 95%;
     flex-direction: column;
@@ -745,7 +756,6 @@
     border-radius: 12px;
   }
 
-  /* LEFT DOMAIN LIST STACK */
   .domain-list {
     display: flex;
     flex-wrap: wrap;
@@ -761,7 +771,6 @@
     text-align: center;
   }
 
-  /* CREATE USER BUTTON FULL WIDTH */
   .create-user-btn {
     width: 100%;
     display: flex;
