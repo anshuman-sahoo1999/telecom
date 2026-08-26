@@ -129,34 +129,35 @@ exports.createUser = async (req, res) => {
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `;
 
-    db.query(
-      sql,
-      [
-        name,
-        emp_id,
-        email,
-        hashedPassword,
-        role,
-        finalDomain,
-        finalMemberType,
-        ["Team Lead", "Team Member"].includes(role) ? totalExperience : null,
-        ["Team Lead", "Team Member"].includes(role) ? telecomExperience : null,
-        ["Team Lead", "Team Member"].includes(role) ? skillSets : null,
-        ["Team Lead", "Team Member"].includes(role) ? region : null,
-        ["Team Lead", "Team Member"].includes(role) ? mobileNo : null
-      ],
-      (err) => {
-        if (err) {
-          console.error("SQL Error in createUser:", err);
-          return res.status(500).json({ success: false, message: err.sqlMessage || err });
-        }
+    const values = [
+      name,
+      emp_id,
+      email,
+      hashedPassword,
+      role,
+      finalDomain,
+      finalMemberType,
+      ["Team Lead", "Team Member"].includes(role) ? totalExperience : null,
+      ["Team Lead", "Team Member"].includes(role) ? telecomExperience : null,
+      ["Team Lead", "Team Member"].includes(role) ? skillSets : null,
+      ["Team Lead", "Team Member"].includes(role) ? region : null,
+      ["Team Lead", "Team Member"].includes(role) ? mobileNo : null
+    ];
 
-        res.json({
-          success: true,
-          message: "User Created Successfully"
+    db.query(sql, values, (err) => {
+      if (err) {
+        console.error("SQL Error in createUser:", err);
+        return res.status(500).json({ 
+          success: false, 
+          message: err.sqlMessage || err.message || "Database insert failed" 
         });
       }
-    );
+
+      res.json({
+        success: true,
+        message: "User Created Successfully"
+      });
+    });
   } catch (e) {
     console.error("Catch Error in createUser:", e);
     return res.status(500).json({ success: false, message: e.message });
