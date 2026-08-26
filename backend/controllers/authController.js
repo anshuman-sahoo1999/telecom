@@ -105,9 +105,15 @@ exports.createUser = async (req, res) => {
 
   const hashedPassword = await bcrypt.hash(finalPassword, SALT_ROUNDS);
 
+  // Domain ko string banayein agar array hai
   const finalDomain = Array.isArray(domain)
     ? domain.join(",")
     : domain || null;
+
+  // MemberType ko bhi string banayein agar array hai (MULTI-SELECT FIX)
+  const finalMemberType = Array.isArray(memberType)
+    ? memberType.join(",")
+    : memberType || null;
 
   const sql = `
     INSERT INTO users 
@@ -124,7 +130,7 @@ VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       hashedPassword,
       role,
       finalDomain,
-      memberType || null,
+      finalMemberType, // Fixed here
       ["Team Lead", "Team Member"].includes(role) ? totalExperience : null,
       ["Team Lead", "Team Member"].includes(role) ? telecomExperience : null,
       ["Team Lead", "Team Member"].includes(role) ? skillSets : null,
@@ -196,25 +202,28 @@ totalExperience, telecomExperience, skillSets, region, mobileNo
 // =======================================
 // UPDATE USER
 // =======================================
+// =======================================
+// UPDATE USER
+// =======================================
 exports.updateUser = (req, res) => {
   let { name, emp_id, email, password, role, domain, memberType, totalExperience, telecomExperience, skillSets, region, mobileNo } = req.body;
 
   email = (email || "").trim().toLowerCase();
 
-  const finalDomain =
-    ["Team Lead", "Team Member"].includes(role)
-      ? Array.isArray(domain)
-        ? domain.join(",")
-        : domain
-      : null;
+  // Domain agar array hai toh comma separated string banayein, warna direct string lein
+  const finalDomain = Array.isArray(domain)
+    ? domain.join(",")
+    : domain || null;
 
-  const finalMemberType =
-    role === "Team Member" ? memberType || null : null;
+  // MemberType agar array hai toh comma separated string banayein
+  const finalMemberType = Array.isArray(memberType)
+    ? memberType.join(",")
+    : memberType || null;
 
   const sql = `
   UPDATE users
   SET
-    name = ?,emp_id = ?,email = ?,role = ?,domain = ?,memberType = ?,totalExperience = ?,telecomExperience = ?,skillSets = ?,region = ?,mobileNo = ?
+    name = ?, emp_id = ?, email = ?, role = ?, domain = ?, memberType = ?, totalExperience = ?, telecomExperience = ?, skillSets = ?, region = ?, mobileNo = ?
   WHERE id = ?
 `;
 
