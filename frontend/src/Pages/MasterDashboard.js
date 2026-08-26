@@ -20,7 +20,10 @@ const MasterDashboard = () => {
     const [email, setEmail] = useState("");
     const [password, setPassword] = useState("");
     const [role, setRole] = useState("");
-    const [memberType, setMemberType] = useState("");
+    
+    const [memberType, setMemberType] = useState([]);
+    const [openCreateMemberType, setOpenCreateMemberType] = useState(false);
+    const [openEditMemberType, setOpenEditMemberType] = useState(false);
 
     const [editingRowId, setEditingRowId] = useState(null);
     const [editRowData, setEditRowData] = useState({});
@@ -32,12 +35,14 @@ const MasterDashboard = () => {
     const [domain, setDomain] = useState([]);
     const [openCreateDomain, setOpenCreateDomain] = useState(false);
     const [openEditDomain, setOpenEditDomain] = useState(false);
-    const [domains, setDomains] = useState([])
+    const [domains, setDomains] = useState([]);
 
     const [searchTerm, setSearchTerm] = useState("");
 
+    const memberTypeOptions = ["QA", "QC", "Production"];
+
     const filteredUsers = users.filter((u) =>
-        `${u.name} ${u.email}`
+        `${u.name} ${u.email} ${u.emp_id} ${u.role}`
             .toLowerCase()
             .includes(searchTerm.toLowerCase())
     );
@@ -53,51 +58,42 @@ const MasterDashboard = () => {
 
     useEffect(() => {
         getUsers();
+        fetchDomains();
     }, []);
 
     useEffect(() => {
-        getUsers();
-        fetchDomains();
+        const loadDomains = async () => {
+            try {
+                const masterRes = await axios.get("http://localhost:5000/api/master");
+                const workRes = await axios.get("http://localhost:5000/api/work/bydomain");
+
+                const masterDomains = Object.keys(masterRes.data || {});
+                const workDomains = (workRes.data || []).map((d) => d.domain);
+                const merged = [...masterDomains, ...workDomains];
+                const unique = [...new Set(merged)];
+
+                setDomains(unique);
+            } catch (err) {
+                console.log(err);
+            }
+        };
+
+        loadDomains();
     }, []);
-useEffect(() => {
-  const loadDomains = async () => {
-    try {
-      const masterRes = await axios.get("http://localhost:5000/api/master");
-      const workRes = await axios.get("http://localhost:5000/api/work/bydomain");
-
-      const masterDomains = Object.keys(masterRes.data || {});
-
-      const workDomains = (workRes.data || []).map((d) => d.domain);
-
-      const merged = [...masterDomains, ...workDomains];
-
-      const unique = [...new Set(merged)];
-
-      setDomains(unique);
-
-    } catch (err) {
-      console.log(err);
-    }
-  };
-
-  loadDomains();
-}, []);
 
     const fetchDomains = async () => {
         try {
             const res = await axios.get("http://localhost:5000/api/work/bydomain");
-
             const data = res.data || [];
-
             const cleanDomains = data.map(d =>
                 typeof d === "string" ? d : d.domain
             );
-
             setDomains([...new Set(cleanDomains)]);
         } catch (err) {
             console.log(err);
         }
     };
+
     const handleSubmit = async (e) => {
         e.preventDefault();
 
@@ -105,7 +101,7 @@ useEffect(() => {
             let cleanEmail = email.trim().replace(/@/g, "");
             const finalEmail = `${cleanEmail}${emailDomain}`;
 
-            const res = await axios.post(
+            await axios.post(
                 "http://localhost:5000/api/auth/create-user",
                 {
                     name,
@@ -118,8 +114,6 @@ useEffect(() => {
                 }
             );
 
-            console.log("CREATE RESPONSE:", res.data);
-
             await getUsers();
 
             setName("");
@@ -127,6 +121,7 @@ useEffect(() => {
             setEmail("");
             setPassword("");
             setRole("");
+            setMemberType([]);
             setDomain([]);
 
             setToast({
@@ -135,11 +130,6 @@ useEffect(() => {
             });
 
         } catch (err) {
-            console.log(
-                "CREATE ERROR:",
-                err.response?.data || err.message
-            );
-
             setToast({
                 message: "User Creation Failed ❌",
                 type: "error"
@@ -153,6 +143,7 @@ useEffect(() => {
             });
         }, 3000);
     };
+
     const deleteUser = (id) => {
         Swal.fire({
             title: "Are you sure?",
@@ -193,17 +184,24 @@ useEffect(() => {
 
     const startEdit = (user) => {
         let normalizedDomain = [];
-
         if (Array.isArray(user.domain)) {
             normalizedDomain = user.domain;
         } else if (typeof user.domain === "string") {
             normalizedDomain = user.domain.split(",").map(d => d.trim());
         }
 
+        let normalizedMemberType = [];
+        if (Array.isArray(user.memberType)) {
+            normalizedMemberType = user.memberType;
+        } else if (typeof user.memberType === "string" && user.memberType.trim() !== "") {
+            normalizedMemberType = user.memberType.split(",").map(m => m.trim());
+        }
+
         setEditingRowId(user.id || user._id);
         setEditRowData({
             ...user,
-            domain: normalizedDomain
+            domain: normalizedDomain,
+            memberType: normalizedMemberType
         });
     };
 
@@ -219,13 +217,7 @@ useEffect(() => {
                 editRowData
             );
 
-            setUsers((prev) =>
-                prev.map((u) =>
-                    (u.id || u._id) === id
-                        ? { ...u, ...editRowData }
-                        : u
-                )
-            );
+            await getUsers();
 
             setToast({
                 message: "User Updated Successfully ✔",
@@ -261,34 +253,37 @@ useEffect(() => {
     };
 
     const savePassword = async () => {
-
-        try {
-
-            console.log("USER ID:", passEditId);
-
-            console.log("PASSWORD:", newPass);
-
-            await axios.put(
-                `http://localhost:5000/api/auth/update-password/${passEditId}`,
-                {
-                    password: newPass
-                }
-            );
-
-            await getUsers();
-
-            alert("Password Updated");
-
-            closePassModal();
-
-        } catch (error) {
-
-            console.log(error);
-
+        if (!passEditId) {
+            Swal.fire("Error", "Please select a user first!", "error");
+            return;
+        }
+        if (!newPass || newPass !== confirmPass) {
+            Swal.fire("Error", "Passwords do not match or are empty!", "error");
+            return;
         }
 
+        try {
+            await axios.put(`http://localhost:5000/api/auth/update-password/${passEditId}`, {
+                password: newPass
+            });
+
+            Swal.fire("Success", "Password updated successfully ✔", "success");
+            closePassModal();
+        } catch (err) {
+            console.error(err);
+            Swal.fire("Error", "Failed to update password ❌", "error");
+        }
     };
 
+    const getMemberTypesArray = (mtData) => {
+        if (Array.isArray(mtData)) {
+            return mtData.map(m => String(m).trim()).filter(Boolean);
+        }
+        if (typeof mtData === "string" && mtData.trim() !== "") {
+            return mtData.split(",").map(m => m.trim()).filter(Boolean);
+        }
+        return [];
+    };
 
     return (
         <div className="dashboard">
@@ -309,7 +304,6 @@ useEffect(() => {
                 </div>
 
                 <div className="topCards">
-
                     <div
                         className={`actionCard ${activeTab === "create" ? "activeCard" : ""}`}
                         onClick={() => setActiveTab("create")}
@@ -335,7 +329,6 @@ useEffect(() => {
                             <p>All registered users</p>
                         </div>
                     </div>
-
                 </div>
 
                 {/* CREATE USER */}
@@ -348,7 +341,6 @@ useEffect(() => {
                             onSubmit={handleSubmit}
                             autoComplete="off"
                         >
-                            {/* anti autofill trap */}
                             <input style={{ display: "none" }} type="text" />
                             <input style={{ display: "none" }} type="password" />
 
@@ -357,6 +349,7 @@ useEffect(() => {
                                 value={name}
                                 autoComplete="off"
                                 onChange={(e) => setName(e.target.value)}
+                                required
                             />
 
                             <input
@@ -364,6 +357,7 @@ useEffect(() => {
                                 value={emp_id}
                                 autoComplete="off"
                                 onChange={(e) => setEmpId(e.target.value)}
+                                required
                             />
 
                             <div className="emailBox">
@@ -374,9 +368,7 @@ useEffect(() => {
                                     onChange={(e) => setEmail(e.target.value)}
                                     required
                                 />
-
                                 <div className="emailSuffix">
-
                                     <select
                                         value={emailDomain}
                                         onChange={(e) => setEmailDomain(e.target.value)}
@@ -394,7 +386,13 @@ useEffect(() => {
                             <select
                                 value={role}
                                 autoComplete="off"
-                                onChange={(e) => setRole(e.target.value)}
+                                onChange={(e) => {
+                                    setRole(e.target.value);
+                                    if (e.target.value !== "TeamMember") {
+                                        setMemberType([]);
+                                    }
+                                }}
+                                required
                             >
                                 <option value="">Select Role</option>
                                 <option value="Admin">Admin</option>
@@ -403,19 +401,55 @@ useEffect(() => {
                                 <option value="TeamMember">Team Member</option>
                             </select>
 
-                            {/* 🔥 ADD THIS */}
                             {role === "TeamMember" && (
-                                <select
-                                    value={memberType}
-                                    onChange={(e) => setMemberType(e.target.value)}
-                                >
-                                    <option value="">Member Type</option>
-                                    <option value="QA">QA</option>
-                                    <option value="QC">QC</option>
-                                    <option value="Production">Production</option>
-                                </select>
+                                <div className="multi-select">
+                                    <div
+                                        className="multi-select-box"
+                                        onClick={() => setOpenCreateMemberType(!openCreateMemberType)}
+                                    >
+                                        {memberType.length === 0 && (
+                                            <span className="placeholder">Select Member Type</span>
+                                        )}
+
+                                        {memberType.map((item, i) => (
+                                            <span className="tag" key={i}>
+                                                {item}
+                                                <span
+                                                    className="remove"
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        setMemberType(memberType.filter((m) => m !== item));
+                                                    }}
+                                                >
+                                                    ✖
+                                                </span>
+                                            </span>
+                                        ))}
+
+                                        <span className="arrow">▼</span>
+                                    </div>
+
+                                    {openCreateMemberType && (
+                                        <div className="dropdowned">
+                                            {memberTypeOptions.map((m, i) => (
+                                                <div
+                                                    key={i}
+                                                    className="option"
+                                                    onClick={() => {
+                                                        if (!memberType.includes(m)) {
+                                                            setMemberType([...memberType, m]);
+                                                        }
+                                                        setOpenCreateMemberType(false);
+                                                    }}
+                                                >
+                                                    {m}
+                                                </div>
+                                            ))}
+                                        </div>
+                                    )}
+                                </div>
                             )}
-                            {/* DOMAIN MULTI SELECT */}
+
                             <div className="multi-select">
                                 <div
                                     className="multi-select-box"
@@ -479,9 +513,21 @@ useEffect(() => {
                 {/* VIEW USERS */}
                 {activeTab === "view" && (
                     <div className="contentBox">
-                        <h2 className="sectionTitle">User List</h2>
+                        <div className="userListHeader">
+                            <h2 className="sectionTitle">User List</h2>
 
-                        <div className="tableWrapper">
+                            <div className="userSearchContainer">
+                                <input
+                                    type="text"
+                                    className="userSearchInput"
+                                    placeholder="Search by name, email, ID..."
+                                    value={searchTerm}
+                                    onChange={(e) => setSearchTerm(e.target.value)}
+                                />
+                            </div>
+                        </div>
+
+                        <div className="tableWrapper x-axis-hidden y-axis-scroll">
                             <table>
                                 <thead>
                                     <tr>
@@ -491,14 +537,15 @@ useEffect(() => {
                                         <th>Email</th>
                                         <th>Role</th>
                                         <th>Domain</th>
-                                        <th>Action</th>
+                                        <th className="action-th">Action</th>
                                     </tr>
                                 </thead>
 
                                 <tbody>
-                                    {users.map((u, index) => {
+                                    {filteredUsers.map((u, index) => {
                                         const id = u.id || u._id;
                                         const isEditing = editingRowId === id;
+                                        const memberTypesList = getMemberTypesArray(u.memberType);
 
                                         return (
                                             <tr key={id}>
@@ -516,17 +563,38 @@ useEffect(() => {
                                                             }
                                                         />
                                                     ) : (
-                                                        <>
-                                                            {u.name}
+                                                        <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: "4px" }}>
+                                                            <span>{u.name}</span>
+                                                            {memberTypesList.map((mt, idx) => {
+                                                                const cleanMt = mt.toLowerCase();
+                                                                
+                                                                let tagStyle = {
+                                                                    display: "inline-block",
+                                                                    fontSize: "11px",
+                                                                    fontWeight: "600",
+                                                                    padding: "2px 6px",
+                                                                    borderRadius: "4px",
+                                                                    whiteSpace: "nowrap"
+                                                                };
 
-                                                            {u.role === "TeamMember" && u.memberType === "QA" && (
-                                                                <span className="qa-tag">(QA)</span>
-                                                            )}
+                                                                if (cleanMt === "qa") {
+                                                                    tagStyle.background = "#ffedd5";
+                                                                    tagStyle.color = "#ea580c";
+                                                                } else if (cleanMt === "qc") {
+                                                                    tagStyle.background = "#dcfce7";
+                                                                    tagStyle.color = "#16a34a";
+                                                                } else {
+                                                                    tagStyle.background = "#e0f2fe";
+                                                                    tagStyle.color = "#0ea5e9";
+                                                                }
 
-                                                            {u.role === "TeamMember" && u.memberType === "QC" && (
-                                                                <span className="qc-tag">(QC)</span>
-                                                            )}
-                                                        </>
+                                                                return (
+                                                                    <span key={idx} style={tagStyle}>
+                                                                        ({mt})
+                                                                    </span>
+                                                                );
+                                                            })}
+                                                        </div>
                                                     )}
                                                 </td>
 
@@ -564,28 +632,88 @@ useEffect(() => {
 
                                                 <td>
                                                     {isEditing ? (
-                                                        <select
-                                                            value={editRowData.role || ""}
-                                                            onChange={(e) =>
-                                                                setEditRowData({
-                                                                    ...editRowData,
-                                                                    role: e.target.value
-                                                                })
-                                                            }
-                                                        >
-                                                            <option value="Admin">Admin</option>
-                                                            <option value="MIS">MIS</option>
-                                                            <option value="TeamLead">Team Lead</option>
-                                                            <option value="TeamMember">Team Member</option>
-                                                        </select>
+                                                        <div className="edit-role-container">
+                                                            <select
+                                                                value={editRowData.role || ""}
+                                                                onChange={(e) => {
+                                                                    const val = e.target.value;
+                                                                    setEditRowData({
+                                                                        ...editRowData,
+                                                                        role: val,
+                                                                        memberType: val === "TeamMember" ? editRowData.memberType : []
+                                                                    });
+                                                                }}
+                                                            >
+                                                                <option value="Admin">Admin</option>
+                                                                <option value="MIS">MIS</option>
+                                                                <option value="TeamLead">Team Lead</option>
+                                                                <option value="TeamMember">Team Member</option>
+                                                            </select>
+
+                                                            {editRowData.role === "TeamMember" && (
+                                                                <div className="multi-select" style={{ marginTop: "6px" }}>
+                                                                    <div
+                                                                        className="multi-select-box"
+                                                                        onClick={() => setOpenEditMemberType(!openEditMemberType)}
+                                                                    >
+                                                                        {(!editRowData.memberType || getMemberTypesArray(editRowData.memberType).length === 0) && (
+                                                                            <span className="placeholder">Select Member Type</span>
+                                                                        )}
+
+                                                                        {getMemberTypesArray(editRowData.memberType).map((item, i) => (
+                                                                            <span className="tag" key={i}>
+                                                                                {item}
+                                                                                <span
+                                                                                    className="remove"
+                                                                                    onClick={(e) => {
+                                                                                        e.stopPropagation();
+                                                                                        const currentArr = getMemberTypesArray(editRowData.memberType);
+                                                                                        setEditRowData({
+                                                                                            ...editRowData,
+                                                                                            memberType: currentArr.filter(m => m !== item)
+                                                                                        });
+                                                                                    }}
+                                                                                >
+                                                                                    ✖
+                                                                                </span>
+                                                                            </span>
+                                                                        ))}
+                                                                        <span className="arrow">▼</span>
+                                                                    </div>
+
+                                                                    {openEditMemberType && (
+                                                                        <div className="dropeddown">
+                                                                            {memberTypeOptions.map((m, i) => (
+                                                                                <div
+                                                                                    key={i}
+                                                                                    className="option"
+                                                                                    onClick={() => {
+                                                                                        const currentTypes = getMemberTypesArray(editRowData.memberType);
+                                                                                        if (!currentTypes.includes(m)) {
+                                                                                            setEditRowData({
+                                                                                                ...editRowData,
+                                                                                                memberType: [...currentTypes, m]
+                                                                                            });
+                                                                                        }
+                                                                                        setOpenEditMemberType(false);
+                                                                                    }}
+                                                                                >
+                                                                                    {m}
+                                                                                </div>
+                                                                            ))}
+                                                                        </div>
+                                                                    )}
+                                                                </div>
+                                                            )}
+                                                        </div>
                                                     ) : (
                                                         u.role
                                                     )}
                                                 </td>
+
                                                 <td>
                                                     {isEditing ? (
                                                         <div className="multi-select">
-
                                                             <div
                                                                 className="multi-select-box"
                                                                 onClick={() => setOpenEditDomain(!openEditDomain)}
@@ -619,23 +747,23 @@ useEffect(() => {
 
                                                             {openEditDomain && (
                                                                 <div className="dropeddown">
-                                                                 {domains.map((d, i) => (
-    <div
-        key={i}
-        className="option"
-        onClick={() => {
-            if (!(editRowData.domain || []).includes(d)) {
-                setEditRowData({
-                    ...editRowData,
-                    domain: [...(editRowData.domain || []), d]
-                });
-            }
-            setOpenEditDomain(false);
-        }}
-    >
-        {d}
-    </div>
-))}
+                                                                    {domains.map((d, i) => (
+                                                                        <div
+                                                                            key={i}
+                                                                            className="option"
+                                                                            onClick={() => {
+                                                                                if (!(editRowData.domain || []).includes(d)) {
+                                                                                    setEditRowData({
+                                                                                        ...editRowData,
+                                                                                        domain: [...(editRowData.domain || []), d]
+                                                                                    });
+                                                                                }
+                                                                                setOpenEditDomain(false);
+                                                                            }}
+                                                                        >
+                                                                            {d}
+                                                                        </div>
+                                                                    ))}
                                                                 </div>
                                                             )}
                                                         </div>
@@ -648,17 +776,17 @@ useEffect(() => {
                                                     )}
                                                 </td>
 
-                                                <td>
+                                                <td className="action-td">
                                                     {isEditing ? (
-                                                        <>
+                                                        <div className="action-btn-group">
                                                             <button onClick={() => saveEdit(id)}>Save</button>
                                                             <button onClick={cancelEdit}>Cancel</button>
-                                                        </>
+                                                        </div>
                                                     ) : (
-                                                        <>
+                                                        <div className="action-btn-group">
                                                             <button onClick={() => startEdit(u)}>✎</button>
                                                             <button onClick={() => deleteUser(id)}>✕</button>
-                                                        </>
+                                                        </div>
                                                     )}
                                                 </td>
                                             </tr>
