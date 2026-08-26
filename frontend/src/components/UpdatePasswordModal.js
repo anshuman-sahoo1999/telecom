@@ -22,6 +22,17 @@ const UpdatePasswordModal = ({
     const [showNewPass, setShowNewPass] = useState(false);
     const [showConfirmPass, setShowConfirmPass] = useState(false);
 
+    // Helper function to extract member types array safely
+    const getMemberTypesArray = (mtData) => {
+        if (Array.isArray(mtData)) {
+            return mtData.map(m => String(m).trim()).filter(Boolean);
+        }
+        if (typeof mtData === "string" && mtData.trim() !== "") {
+            return mtData.split(",").map(m => m.trim()).filter(Boolean);
+        }
+        return [];
+    };
+
     if (!showPassModal) return null;
 
     return (
@@ -71,10 +82,45 @@ const UpdatePasswordModal = ({
                                 .map((u) => {
 
                                     const id = u.id || u._id;
+                                    const memberTypesList = getMemberTypesArray(u.memberType);
 
                                     return (
                                         <tr key={id}>
-                                            <td>{u.name}</td>
+                                            <td>
+                                                <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: "4px" }}>
+                                                    <span>{u.name}</span>
+                                                    {memberTypesList.map((mt, idx) => {
+                                                        const cleanMt = mt.toLowerCase();
+                                                        
+                                                        // Inline tag style fix for multiple selection color issue
+                                                        let tagStyle = {
+                                                            display: "inline-block",
+                                                            fontSize: "11px",
+                                                            fontWeight: "600",
+                                                            padding: "2px 6px",
+                                                            borderRadius: "4px",
+                                                            whiteSpace: "nowrap"
+                                                        };
+
+                                                        if (cleanMt === "qa") {
+                                                            tagStyle.background = "#ffedd5";
+                                                            tagStyle.color = "#ea580c";
+                                                        } else if (cleanMt === "qc") {
+                                                            tagStyle.background = "#dcfce7";
+                                                            tagStyle.color = "#16a34a";
+                                                        } else {
+                                                            tagStyle.background = "#e0f2fe";
+                                                            tagStyle.color = "#0ea5e9";
+                                                        }
+
+                                                        return (
+                                                            <span key={idx} style={tagStyle}>
+                                                                ({mt})
+                                                            </span>
+                                                        );
+                                                    })}
+                                                </div>
+                                            </td>
                                             <td>{u.email}</td>
 
                                             <td>
