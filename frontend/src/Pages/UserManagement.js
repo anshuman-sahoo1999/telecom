@@ -14,22 +14,26 @@ const UserManagement = () => {
   const [editId, setEditId] = useState(null);
   const [domainTab, setDomainTab] = useState("ALL");
   const [domains, setDomains] = useState([]);
-  const [memberType, setMemberType] = useState("");
+  
+  // Member Types list available for selection
+  const memberTypeOptions = ["QA", "QC", "Production"];
+
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [totalExperience, setTotalExperience] = useState("");
   const [telecomExperience, setTelecomExperience] = useState("");
   const [skillSets, setSkillSets] = useState("");
   const [region, setRegion] = useState("");
   const [mobileNo, setMobileNo] = useState("");
+
   const openCreateModal = () => {
     setShowCreateModal(true);
     setName("");
     setEmpId("");
     setEmail("");
-    setPassword("");   // ✅ IMPORTANT
+    setPassword("");
     setRole("");
     setDomain([]);
-    setMemberType("");
+    setMemberType([]); 
     setTotalExperience("");
     setTelecomExperience("");
     setSkillSets("");
@@ -45,8 +49,13 @@ const UserManagement = () => {
   const [password, setPassword] = useState("");
   const [role, setRole] = useState("");
   const [domain, setDomain] = useState([]);
+  const [memberType, setMemberType] = useState([]); 
+  
   const [open, setOpen] = useState(false);
+  const [openMemberDropdown, setOpenMemberDropdown] = useState(false); 
   const [openEdit, setOpenEdit] = useState(false);
+  const [openEditMember, setOpenEditMember] = useState(false); 
+
   const [toast, setToast] = useState({
     message: "",
     type: ""
@@ -57,6 +66,7 @@ const UserManagement = () => {
     emp_id: "",
     email: "",
     role: "",
+    memberType: [], 
     domain: [],
     totalExperience: "",
     telecomExperience: "",
@@ -76,19 +86,18 @@ const UserManagement = () => {
     fetchUsers();
     fetchDomains();
   }, []);
+
   const fetchDomains = async () => {
     try {
       const masterRes = await axios.get("http://localhost:5000/api/master");
       const workRes = await axios.get("http://localhost:5000/api/work/bydomain");
 
-      const masterDomains = Object.keys(masterRes.data || {}); // string array
-
+      const masterDomains = Object.keys(masterRes.data || {});
       const workDomains = (workRes.data || []).map(d =>
         typeof d === "string" ? d : d.domain
       );
 
       const merged = [...masterDomains, ...workDomains];
-
       setDomains([...new Set(merged)]);
     } catch (err) {
       console.log(err);
@@ -124,14 +133,36 @@ const UserManagement = () => {
           );
         })
       : roleFiltered;
+
+  const getMemberTypesArray = (mt) => {
+    if (Array.isArray(mt)) {
+      return [...new Set(mt.map(m => String(m).trim()).filter(Boolean))];
+    }
+    if (typeof mt === "string" && mt.trim() !== "") {
+      return [...new Set(mt.split(",").map(m => m.trim()).filter(Boolean))];
+    }
+    return [];
+  };
+
+  const getMemberTagClass = (type) => {
+    if (!type) return "default";
+    const cleanType = String(type).trim().toLowerCase();
+    if (cleanType === "qa") return "qa";
+    if (cleanType === "qc") return "qc";
+    if (cleanType === "production" || cleanType === "product") return "production";
+    return "default";
+  };
+
   const handleEdit = (item) => {
     setEditId(item.id);
+    
     setEditData({
       name: item.name,
       emp_id: item.emp_id,
       email: item.email,
       role: item.role,
-      domain: item.domain ? item.domain.split(",") : [],
+      memberType: getMemberTypesArray(item.memberType),
+      domain: item.domain ? item.domain.split(",").map(d => d.trim()) : [],
       totalExperience: item.totalExperience || "",
       telecomExperience: item.telecomExperience || "",
       skillSets: item.skillSets || "",
@@ -143,20 +174,22 @@ const UserManagement = () => {
   const cancelEdit = () => {
     setEditId(null);
   };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
 
     try {
       let cleanEmail = email.trim().replace(/@/g, "");
       const finalEmail = `${cleanEmail}${emailDomain}`;
+      
       const res = await axios.post(
         "http://localhost:5000/api/auth/create-user",
         {
-          name, emp_id, email: finalEmail, password, role, domain, memberType, totalExperience, telecomExperience, skillSets, region, mobileNo
+          name, emp_id, email: finalEmail, password, role, domain, 
+          memberType: memberType.join(","), 
+          totalExperience, telecomExperience, skillSets, region, mobileNo
         }
       );
-
-      console.log("CREATE RESPONSE:", res.data); // 🔥 DEBUG
 
       if (res.data?.success || res.status === 200) {
         fetchUsers();
@@ -168,6 +201,7 @@ const UserManagement = () => {
         setPassword("");
         setRole("");
         setDomain([]);
+        setMemberType([]);
 
         setToast({
           message: "User Created Successfully ✔",
@@ -178,8 +212,6 @@ const UserManagement = () => {
       }
 
     } catch (err) {
-      console.log("CREATE ERROR:", err.response?.data || err.message);
-
       setToast({
         message: "User Creation Failed ❌",
         type: "error"
@@ -190,12 +222,27 @@ const UserManagement = () => {
       setToast({ message: "", type: "" });
     }, 3000);
   };
-  // ✅ UPDATE
+
   const saveEdit = async (id) => {
     try {
+      // 🟢 FIX: Properly formatting memberType as a comma-separated string (or empty string if deselected completely)
+      const formattedMemberTypes = Array.isArray(editData.memberType) 
+        ? editData.memberType.join(",") 
+        : editData.memberType;
+
+      const formattedDomains = Array.isArray(editData.domain) 
+        ? editData.domain.join(",") 
+        : editData.domain;
+
+      const payload = {
+        ...editData,
+        memberType: formattedMemberTypes,
+        domain: formattedDomains
+      };
+
       await axios.put(
         `http://localhost:5000/api/auth/update-user/${id}`,
-        editData
+        payload
       );
 
       setEditId(null);
@@ -218,7 +265,6 @@ const UserManagement = () => {
     }, 3000);
   };
 
-  // ✅ DELETE
   const deleteUser = (id) => {
     Swal.fire({
       title: "Are you sure?",
@@ -228,7 +274,6 @@ const UserManagement = () => {
       confirmButtonText: "Yes, Delete it!",
       cancelButtonText: "Cancel",
     }).then(async (result) => {
-
       if (result.isConfirmed) {
         try {
           await axios.delete(
@@ -259,12 +304,10 @@ const UserManagement = () => {
 
       <div className="management-box">
 
-        {/* HEADER */}
         <div className="top-section">
           <h2>User Management</h2>
         </div>
 
-        {/* TABS */}
         <div className="tab-wrapper">
           {tabs.map((tab) => (
             <div
@@ -280,12 +323,10 @@ const UserManagement = () => {
             </div>
           ))}
         </div>
+
         {(activeTab === "team" || activeTab === "member") && (
           <div className="domain-bar">
-
-            {/* LEFT - DOMAINS */}
             <div className="domain-list">
-
               <button
                 className={domainTab === "ALL" ? "active" : ""}
                 onClick={() => setDomainTab("ALL")}
@@ -302,10 +343,8 @@ const UserManagement = () => {
                   {d}
                 </button>
               ))}
-
             </div>
 
-            {/* RIGHT - CREATE USER */}
             <div className="create-user-btn">
               <button
                 className="updatePasswordBtn"
@@ -316,23 +355,19 @@ const UserManagement = () => {
               {showCreateModal && (
                 <div className="modalOverlay">
                   <div className="modalBoxes">
-
                     <h2>Create User</h2>
-
                     <form onSubmit={handleSubmit} className="userForm">
-
                       <input
                         placeholder="Name"
                         value={name}
                         onChange={(e) => setName(e.target.value)}
+                        required
                       />
-
                       <input
                         placeholder="Employee ID"
                         value={emp_id}
                         onChange={(e) => setEmpId(e.target.value)}
                       />
-
                       <div className="emailBox">
                         <input
                           type="text"
@@ -341,9 +376,7 @@ const UserManagement = () => {
                           onChange={(e) => setEmail(e.target.value)}
                           required
                         />
-
                         <div className="emailSuffix">
-
                           <select
                             value={emailDomain}
                             onChange={(e) => setEmailDomain(e.target.value)}
@@ -360,25 +393,67 @@ const UserManagement = () => {
 
                       <select
                         value={role}
-                        onChange={(e) => setRole(e.target.value)}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          setRole(val);
+                          if (val !== "TeamMember") {
+                            setMemberType([]);
+                          }
+                        }}
+                        required
                       >
                         <option value="">Select Role</option>
                         <option value="TeamLead">Team Lead</option>
                         <option value="TeamMember">Team Member</option>
                       </select>
 
-                      {/* 👇 ADD THIS */}
                       {role === "TeamMember" && (
-                        <select
-                          value={memberType}
-                          onChange={(e) => setMemberType(e.target.value)}
-                        >
-                          <option value="">Member Type</option>
-                          <option value="QA">QA</option>
-                          <option value="QC">QC</option>
-                          <option value="Production">Production</option>
-                        </select>
+                        <div className="multi-select">
+                          <div
+                            className="multi-select-box"
+                            onClick={() => setOpenMemberDropdown(!openMemberDropdown)}
+                          >
+                            {memberType.length === 0 && (
+                              <span className="placeholder">Select Member Type</span>
+                            )}
+                            {memberType.map((item, i) => (
+                              <span className="tag" key={i}>
+                                {item}
+                                <span
+                                  className="remove"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setMemberType(memberType.filter((m) => m !== item));
+                                  }}
+                                >
+                                  ✖
+                                </span>
+                              </span>
+                            ))}
+                            <span className="arrow">▼</span>
+                          </div>
+
+                          {openMemberDropdown && (
+                            <div className="dropdowned">
+                              {memberTypeOptions.map((m, i) => (
+                                <div
+                                  key={i}
+                                  className="option"
+                                  onClick={() => {
+                                    if (!memberType.includes(m)) {
+                                      setMemberType([...memberType, m]);
+                                    }
+                                    setOpenMemberDropdown(false);
+                                  }}
+                                >
+                                  {m}
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
                       )}
+
                       {(role === "TeamLead" || role === "TeamMember") && (
                         <>
                           <input
@@ -387,25 +462,21 @@ const UserManagement = () => {
                             value={totalExperience}
                             onChange={(e) => setTotalExperience(e.target.value)}
                           />
-
                           <input
                             placeholder="Telecom Experience"
                             value={telecomExperience}
                             onChange={(e) => setTelecomExperience(e.target.value)}
                           />
-
                           <input
                             placeholder="Skill Sets"
                             value={skillSets}
                             onChange={(e) => setSkillSets(e.target.value)}
                           />
-
                           <input
                             placeholder="Region"
                             value={region}
                             onChange={(e) => setRegion(e.target.value)}
                           />
-
                           <input
                             placeholder="Mobile Number"
                             value={mobileNo}
@@ -415,7 +486,6 @@ const UserManagement = () => {
                       )}
 
                       <div className="multi-select">
-
                         <div
                           className="multi-select-box"
                           onClick={() => setOpen(!open)}
@@ -423,7 +493,6 @@ const UserManagement = () => {
                           {domain.length === 0 && (
                             <span className="placeholder">Select Domain</span>
                           )}
-
                           {domain.map((item, i) => (
                             <span className="tag" key={i}>
                               {item}
@@ -438,7 +507,6 @@ const UserManagement = () => {
                               </span>
                             </span>
                           ))}
-
                           <span className="arrow">▼</span>
                         </div>
 
@@ -468,25 +536,23 @@ const UserManagement = () => {
                         value={password}
                         autoComplete="new-password"
                         onChange={(e) => setPassword(e.target.value)}
+                        required
                       />
 
                       <div className="modalActions">
                         <button type="submit">Create</button>
-                        <button type="button" onClick={() => closeCreateModal(false)}>
+                        <button type="button" onClick={closeCreateModal}>
                           Cancel
                         </button>
                       </div>
-
                     </form>
-
                   </div>
                 </div>
               )}
             </div>
-
           </div>
         )}
-        {/* TABLE */}
+
         <div className="table-section">
           <div className="table-scroll-container">
             <table>
@@ -512,7 +578,6 @@ const UserManagement = () => {
                 </tr>
               </thead>
 
-
               <tbody>
                 {finalUsers.map((item, index) => (
                   <tr key={item.id}>
@@ -525,37 +590,106 @@ const UserManagement = () => {
                           onChange={(e) =>
                             setEditData({ ...editData, name: e.target.value })
                           }
+                          placeholder="Name"
                         />
                       ) : (
-                        <>
-                          {item.name}
-
+                        <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: "4px" }}>
+                          <span>{item.name}</span>
                           {item.role === "TeamMember" && item.memberType && (
-                            <span className={`roleTag ${item.memberType.toLowerCase()}`}>
-                              ({item.memberType})
-                            </span>
+                            getMemberTypesArray(item.memberType).map((mt, idx) => (
+                              <span 
+                                key={idx} 
+                                className={`roleTag ${getMemberTagClass(mt)}`}
+                              >
+                                ({mt})
+                              </span>
+                            ))
                           )}
-                        </>
+                        </div>
                       )}
                     </td>
 
                     <td>
                       {editId === item.id ? (
-                        <select
-                          value={editData.role}
-                          onChange={(e) =>
-                            setEditData({ ...editData, role: e.target.value })
-                          }
-                        >
-                          <option value="Admin">Admin</option>
-                          <option value="MIS">MIS</option>
-                          <option value="TeamLead">Team Lead</option>
-                          <option value="TeamMember">Team Member</option>
-                        </select>
+                        <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                          <select
+                            value={editData.role}
+                            onChange={(e) =>
+                              setEditData({
+                                ...editData,
+                                role: e.target.value,
+                                memberType: e.target.value === "TeamMember" ? editData.memberType : []
+                              })
+                            }
+                          >
+                            <option value="Admin">Admin</option>
+                            <option value="MIS">MIS</option>
+                            <option value="TeamLead">Team Lead</option>
+                            <option value="TeamMember">Team Member</option>
+                          </select>
+
+                          {editData.role === "TeamMember" && (
+                            <div className="multi-select">
+                              <div
+                                className="multi-select-box"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setOpenEditMember(!openEditMember);
+                                }}
+                              >
+                                {editData.memberType.length === 0 && (
+                                  <span className="placeholder">Select Member Type</span>
+                                )}
+
+                                {editData.memberType.map((m, i) => (
+                                  <span className="tag" key={i}>
+                                    {m}
+                                    <span
+                                      className="remove"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        setEditData({
+                                          ...editData,
+                                          memberType: editData.memberType.filter((type) => type !== m)
+                                        });
+                                      }}
+                                    >
+                                      ✖
+                                    </span>
+                                  </span>
+                                ))}
+                                <span className="arrow">▼</span>
+                              </div>
+
+                              {openEditMember && (
+                                <div className="dropdowned">
+                                  {memberTypeOptions.map((m, i) => (
+                                    <div
+                                      key={i}
+                                      className="option"
+                                      onClick={() => {
+                                        if (!editData.memberType.includes(m)) {
+                                          setEditData({
+                                            ...editData,
+                                            memberType: [...editData.memberType, m]
+                                          });
+                                        }
+                                        setOpenEditMember(false);
+                                      }}
+                                    >
+                                      {m}
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                          )}
+                        </div>
                       ) : (
                         item.role
                       )}
                     </td>
+
                     <td>
                       {editId === item.id ? (
                         <input
@@ -571,75 +705,101 @@ const UserManagement = () => {
 
                     {(activeTab === "team" || activeTab === "member") && (
                       <>
-                        {(activeTab === "team" || activeTab === "member") && (
-                          <td>
-                            {editId === item.id ? (
-                              <div className="multi-select">
-                                <div
-                                  className="multi-select-box"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    setOpenEdit(!openEdit);
-                                  }}
-                                >
-                                  {editData.domain.length === 0 && (
-                                    <span className="placeholder">Select Domain</span>
-                                  )}
+                        <td>
+                          {editId === item.id ? (
+                            <div className="multi-select">
+                              <div
+                                className="multi-select-box"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setOpenEdit(!openEdit);
+                                }}
+                              >
+                                {editData.domain.length === 0 && (
+                                  <span className="placeholder">Select Domain</span>
+                                )}
 
-                                  {editData.domain.map((item, i) => (
-                                    <span className="tag" key={i}>
-                                      {item}
-                                      <span
-                                        className="remove"
-                                        onClick={(e) => {
-                                          e.stopPropagation();
+                                {editData.domain.map((item, i) => (
+                                  <span className="tag" key={i}>
+                                    {item}
+                                    <span
+                                      className="remove"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        setEditData({
+                                          ...editData,
+                                          domain: editData.domain.filter((d) => d !== item)
+                                        });
+                                      }}
+                                    >
+                                      ✖
+                                    </span>
+                                  </span>
+                                ))}
+
+                                <span className="arrow">▼</span>
+                              </div>
+
+                              {openEdit && (
+                                <div className="dropdowned">
+                                  {domains.map((d, i) => (
+                                    <div
+                                      key={i}
+                                      className="option"
+                                      onClick={() => {
+                                        if (!editData.domain.includes(d)) {
                                           setEditData({
                                             ...editData,
-                                            domain: editData.domain.filter((d) => d !== item)
+                                            domain: [...editData.domain, d]
                                           });
-                                        }}
-                                      >
-                                        ✖
-                                      </span>
-                                    </span>
+                                        }
+                                        setOpenEdit(false);
+                                      }}
+                                    >
+                                      {d}
+                                    </div>
                                   ))}
-
-                                  <span className="arrow">▼</span>
                                 </div>
+                              )}
+                            </div>
+                          ) : (
+                            domainTab === "ALL"
+                              ? item.domain
+                              : domainTab
+                          )}
+                        </td>
 
-                                {openEdit && (
-                                  <div className="dropdowned">
-                                    {domains.map((d, i) => (
-                                      <div
-                                        key={i}
-                                        className="option"
-                                        onClick={() => {
-                                          if (!editData.domain.includes(d)) {
-                                            setEditData({
-                                              ...editData,
-                                              domain: [...editData.domain, d]
-                                            });
-                                          }
+                        <td>
+                          {editId === item.id ? (
+                            <input
+                              value={editData.totalExperience}
+                              onChange={(e) =>
+                                setEditData({
+                                  ...editData,
+                                  totalExperience: e.target.value
+                                })
+                              }
+                            />
+                          ) : (
+                            item.totalExperience
+                          )}
+                        </td>
 
-                                          setOpenEdit(false);
-                                        }}
-                                      >
-                                        {d}
-                                      </div>
-                                    ))}
-                                  </div>
-                                )}
-                              </div>
-                            ) : (
-                              domainTab === "ALL"
-                                ? item.domain
-                                : domainTab
-                            )}
-
-                          </td>
-                        )}
-                        <td>{item.totalExperience}</td>
-                        <td>{item.telecomExperience}</td>
+                        <td>
+                          {editId === item.id ? (
+                            <input
+                              value={editData.telecomExperience}
+                              onChange={(e) =>
+                                setEditData({
+                                  ...editData,
+                                  telecomExperience: e.target.value
+                                })
+                              }
+                            />
+                          ) : (
+                            item.telecomExperience
+                          )}
+                        </td>
 
                         <td>
                           {editId === item.id ? (
@@ -690,6 +850,7 @@ const UserManagement = () => {
                         </td>
                       </>
                     )}
+
                     <td>
                       {editId === item.id ? (
                         <input
@@ -707,13 +868,13 @@ const UserManagement = () => {
                       <td>
                         {editId === item.id ? (
                           <>
-                            <button onClick={() => saveEdit(item.id)}>Save</button>
-                            <button onClick={cancelEdit}>Cancel</button>
+                            <button className="edit-btn" onClick={() => saveEdit(item.id)}>Save</button>
+                            <button className="delete-btn" onClick={cancelEdit}>Cancel</button>
                           </>
                         ) : (
                           <>
-                            <button onClick={() => handleEdit(item)}>Edit</button>
-                            <button onClick={() => deleteUser(item.id)}>Delete</button>
+                            <button className="edit-btn" onClick={() => handleEdit(item)}>Edit</button>
+                            <button className="delete-btn" onClick={() => deleteUser(item.id)}>Delete</button>
                           </>
                         )}
                       </td>
@@ -721,7 +882,6 @@ const UserManagement = () => {
                   </tr>
                 ))}
               </tbody>
-
             </table>
           </div>
         </div>
