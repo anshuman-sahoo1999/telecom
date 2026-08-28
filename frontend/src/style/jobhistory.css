@@ -109,16 +109,19 @@
 }
 
 /* ===================================
-   TABLE WRAPPER & VISIBLE X-AXIS SCROLLBAR
+   TABLE WRAPPER & STICKY HEADERS
 =================================== */
 
 .table-wrapper {
   width: 100%;
-  overflow-x: auto;
+  max-height: 650px; /* 👈 Vertical scroll ke liye height limit */
+  overflow-y: auto;  /* 👈 Vertical scrolling enable */
+  overflow-x: auto;  /* 👈 Horizontal scrolling enable */
   background: #ffffff;
   border-radius: 12px;
   box-shadow: 0 4px 15px rgba(0, 0, 0, 0.08);
   margin-bottom: 20px;
+  position: relative;
   
   /* Firefox Scrollbar Support */
   scrollbar-width: auto;
@@ -128,6 +131,7 @@
 /* Chrome, Edge, Safari Custom Visible Scrollbar */
 .table-wrapper::-webkit-scrollbar {
   height: 14px; 
+  width: 10px;
   display: block;
 }
 
@@ -150,13 +154,21 @@
   width: 100%;
   min-width: 1400px;
   border-collapse: collapse;
+  position: relative;
 }
 
-.job-history-table thead tr:first-child {
+/* 👈 Sticky Headers Configuration */
+.job-history-table thead tr:first-child th {
+  position: sticky;
+  top: 0;
+  z-index: 10;
   background: #0f4c81;
 }
 
-.job-history-table thead tr:nth-child(2) {
+.job-history-table thead tr:nth-child(2) th {
+  position: sticky;
+  top: 49px; /* Pehli row ke height ke according (approx 49px) */
+  z-index: 10;
   background: #1d70b8;
 }
 
