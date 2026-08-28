@@ -180,7 +180,6 @@
     position: sticky;
     top: 0;
     z-index: 20;
-    background: #0f4c81;
 }
 
 
@@ -189,7 +188,6 @@
     position: sticky;
     top: 35px;
     z-index: 20;
-    background: #4d7292;
 }
 
 /* ===================================
