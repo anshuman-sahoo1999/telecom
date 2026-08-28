@@ -14,7 +14,7 @@ CREATE TABLE job_creation (
   jobid varchar(100) UNIQUE NOT NULL,
   receivedate date NOT NULL,
   ecddate date NOT NULL,
-  submissiondate date NOT NULL,
+  submissiondate date DEFAULT NULL,
   internalqc varchar(50) DEFAULT NULL,
   amdocsqc varchar(50) DEFAULT NULL,
   markuprequired varchar(50) DEFAULT NULL,
@@ -23,7 +23,6 @@ CREATE TABLE job_creation (
   isedited smallint DEFAULT 0,
   employeename varchar(150) DEFAULT NULL
 );
-
 -- 2. Table structure for table `master_data`
 CREATE TABLE master_data (
   id SERIAL PRIMARY KEY,
