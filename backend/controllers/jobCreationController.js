@@ -2,10 +2,10 @@ const db = require("../config/db");
 
 
 // ============================
-// CREATE JOB (NO updated_at)
+// CREATE JOB (Submission Date Optional)
 // ============================
 exports.createJob = (req, res) => {
-  const {
+  let {
     domain,
     market,
     jobId,
@@ -13,6 +13,11 @@ exports.createJob = (req, res) => {
     ecdDate,
     submissionDate,
   } = req.body;
+
+  // Agar submissionDate khali string ya undefined hai, toh use NULL kar do
+  const finalSubmissionDate = submissionDate && submissionDate.trim() !== "" 
+    ? submissionDate 
+    : null;
 
   const sql = `
     INSERT INTO job_creation
@@ -22,7 +27,7 @@ exports.createJob = (req, res) => {
 
   db.query(
     sql,
-    [domain, market, jobId, receiveDate, ecdDate, submissionDate],
+    [domain, market, jobId, receiveDate, ecdDate, finalSubmissionDate],
     (err, result) => {
       if (err) {
         console.log("MYSQL ERROR:", err);
