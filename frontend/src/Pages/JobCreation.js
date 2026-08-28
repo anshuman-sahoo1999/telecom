@@ -163,7 +163,6 @@ const JobCreation = () => {
                 name="submissionDate"
                 value={formData.submissionDate}
                 onChange={handleChange}
-                required
               />
             </div>
           </div>
