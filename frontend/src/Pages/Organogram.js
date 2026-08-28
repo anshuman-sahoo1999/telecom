@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from "react";
 import axios from "axios";
-import { FaSitemap, FaProjectDiagram, FaFileExport } from "react-icons/fa";
+import { FaSitemap, FaProjectDiagram, FaFileExport, FaExpand, FaCompress } from "react-icons/fa";
 import { DndContext, useDroppable } from "@dnd-kit/core";
 import DraggableUser from "../components/DraggableUser";
 import UserReportModal from "../components/UserReportModal";
@@ -44,16 +44,21 @@ const Organogram = () => {
     const hoverTimerRef = useRef(null);
     const [selectedUser, setSelectedUser] = useState(null);
     const [openReport, setOpenReport] = useState(false);
+    const [isFullScreen, setIsFullScreen] = useState(false);
 
     const handleHoverUser = (user, event) => {
         clearTimeout(hoverTimerRef.current);
 
         if (user && user !== "LEAVE") {
             const rect = event?.currentTarget?.getBoundingClientRect();
+            
+            const posX = rect ? rect.right + 10 : (event?.clientX || 100);
+            const posY = rect ? rect.top : (event?.clientY || 100);
+
             setSelectedUser({
                 ...user,
-                x: rect.right + 10,
-                y: rect.top,
+                x: posX,
+                y: posY,
             });
             setOpenReport(true);
             return;
@@ -111,6 +116,8 @@ const Organogram = () => {
     const misUsers = users.filter((u) => u.role === "MIS");
     const teamLeads = users.filter((u) => u.role === "TeamLead");
     const teamMembers = users.filter((u) => u.role === "TeamMember");
+
+    const totalEmployeesCount = teamLeads.length + teamMembers.length;
 
     const handleDelete = (id) => {
         Swal.fire({
@@ -349,11 +356,353 @@ const Organogram = () => {
         }
     };
 
+    const renderTreeContent = () => (
+        activeTab === "overall" ? (
+            <DndContext onDragEnd={handleDragEnd}>
+                <div ref={treeRef} className="export-area">
+                    {isExporting && <ExportHeader />}
+                    <div className="org-tree-wrapper">
+                        <div className="org-tree">
+                            {!hiddenRoles.includes("Admin") &&
+                                admins.map((admin, index) => (
+                                    <React.Fragment key={admin.id}>
+                                        <div className="admin-row">
+                                            <div className="org-node admin">{admin.name}</div>
+
+                                            {index === 1 && !hiddenRoles.includes("MIS") && (
+                                                <div className="mis-wrapper">
+                                                    <div className="mis-top"></div>
+                                                    <div className="mis-center"></div>
+                                                    <div className="mis-bottom"></div>
+                                                    <div className="org-node mis">
+                                                        {misUsers[0]?.name || "MIS"}
+                                                    </div>
+                                                </div>
+                                            )}
+                                        </div>
+                                        {index !== admins.length - 1 && <div className="v-line"></div>}
+                                    </React.Fragment>
+                                ))}
+
+                            <div className="v-line big"></div>
+                            <div className="domain-wrapper">
+                                <div className="top-horizontal"></div>
+
+                                {(domains || []).map((d, index) => {
+                                    const domainName = d.domain;
+
+                                    const tls = teamLeads.filter((tl) =>
+                                        (tl.domain || "").split(",").map((x) => x.trim()).includes(domainName)
+                                    );
+
+                                    const qaMembers = teamMembers.filter(
+                                        (m) =>
+                                            m.memberType === "QA" &&
+                                            (m.domain || "").split(",").map((x) => x.trim()).includes(domainName)
+                                    );
+
+                                    const qcMembers = teamMembers.filter(
+                                        (m) =>
+                                            m.memberType === "QC" &&
+                                            (m.domain || "").split(",").map((x) => x.trim()).includes(domainName)
+                                    );
+
+                                    const productionMembers = teamMembers.filter(
+                                        (m) =>
+                                            m.memberType === "Production" &&
+                                            (m.domain || "").split(",").map((x) => x.trim()).includes(domainName)
+                                    );
+
+                                    return (
+                                        <div className="domain-column" key={index}>
+                                            {!hiddenRoles.includes("Domain") && (
+                                                <div className="org-node domain">{domainName}</div>
+                                            )}
+
+                                            <div className="small-line"></div>
+
+                                            <DomainDropZone dropId={`${domainName}|TeamLead`}>
+                                                <div className="tl-wrapper">
+                                                    {!hiddenRoles.includes("TeamLead") &&
+                                                        (tls.length > 0 ? (
+                                                            tls.map((tl) => (
+                                                                <DraggableUser
+                                                                    key={tl.id}
+                                                                    user={tl}
+                                                                    onDelete={handleDelete}
+                                                                    onHover={handleHoverUser}
+                                                                />
+                                                            ))
+                                                        ) : (
+                                                            <div className="org-node tl">TL</div>
+                                                        ))}
+                                                </div>
+                                            </DomainDropZone>
+
+                                            <div className="small-line"></div>
+                                            <div className="qaqc-row">
+                                                <DomainDropZone dropId={`${domainName}|QA`}>
+                                                    <div className="qa-column">
+                                                        {!hiddenRoles.includes("QA") &&
+                                                            (qaMembers.length > 0 ? (
+                                                                qaMembers.map((qa) => (
+                                                                    <DraggableUser
+                                                                        key={qa.id}
+                                                                        user={qa}
+                                                                        onDelete={handleDelete}
+                                                                        onHover={handleHoverUser}
+                                                                    />
+                                                                ))
+                                                            ) : (
+                                                                <div className="org-node qa1">QA</div>
+                                                            ))}
+                                                    </div>
+                                                </DomainDropZone>
+
+                                                <DomainDropZone dropId={`${domainName}|QC`}>
+                                                    <div className="qc-column">
+                                                        {!hiddenRoles.includes("QC") &&
+                                                            (qcMembers.length > 0 ? (
+                                                                qcMembers.map((qc) => (
+                                                                    <DraggableUser
+                                                                        key={qc.id}
+                                                                        user={qc}
+                                                                        onDelete={handleDelete}
+                                                                        onHover={handleHoverUser}
+                                                                    />
+                                                                ))
+                                                            ) : (
+                                                                <div className="org-node qc1">QC</div>
+                                                            ))}
+                                                    </div>
+                                                </DomainDropZone>
+
+                                                <DomainDropZone dropId={`${domainName}|Production`}>
+                                                    <div className="production-column">
+                                                        {!hiddenRoles.includes("Production") &&
+                                                            (productionMembers.length > 0 ? (
+                                                                productionMembers.map((p) => (
+                                                                    <DraggableUser
+                                                                        key={p.id}
+                                                                        user={p}
+                                                                        onDelete={handleDelete}
+                                                                        onHover={handleHoverUser}
+                                                                    />
+                                                                ))
+                                                            ) : (
+                                                                <div className="org-node prod1">PRODUCTION</div>
+                                                            ))}
+                                                    </div>
+                                                </DomainDropZone>
+                                            </div>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+
+                            <div className="org-legend">
+                                <div className="legend-item all-item" onClick={() => setHiddenRoles([])}>
+                                    <span className="legend-color all-color"></span>ALL
+                                </div>
+                                {!hiddenRoles.includes("Admin") && (
+                                    <div className="legend-item" onClick={() => handleLegendClick("Admin")}>
+                                        <span className="legend-color admin-color"></span>Admin
+                                    </div>
+                                )}
+                                {!hiddenRoles.includes("MIS") && (
+                                    <div className="legend-item" onClick={() => handleLegendClick("MIS")}>
+                                        <span className="legend-color mis-color"></span>MIS
+                                    </div>
+                                )}
+                                {!hiddenRoles.includes("Domain") && (
+                                    <div className="legend-item" onClick={() => handleLegendClick("Domain")}>
+                                        <span className="legend-color domain-color"></span>Domain
+                                    </div>
+                                )}
+                                {!hiddenRoles.includes("TeamLead") && (
+                                    <div className="legend-item" onClick={() => handleLegendClick("TeamLead")}>
+                                        <span className="legend-color tl-color"></span>Team Lead
+                                    </div>
+                                )}
+                                {!hiddenRoles.includes("QA") && (
+                                    <div className="legend-item" onClick={() => handleLegendClick("QA")}>
+                                        <span className="legend-color qa-color"></span>QA
+                                    </div>
+                                )}
+                                {!hiddenRoles.includes("QC") && (
+                                    <div className="legend-item" onClick={() => handleLegendClick("QC")}>
+                                        <span className="legend-color qc-color"></span>QC
+                                    </div>
+                                )}
+                                {!hiddenRoles.includes("Production") && (
+                                    <div className="legend-item" onClick={() => handleLegendClick("Production")}>
+                                        <span className="legend-color prod-color"></span>Production
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </DndContext>
+        ) : (
+            <div className="org-body-box-inner">
+                <div ref={treeRef} className="export-area">
+                    {isExporting && <ExportHeader />}
+                    <div className="org-tree">
+                        <div className="domain-wrapp">
+                            {domains.map((d) => {
+                                const domainName = d.domain;
+                                const isOpen = selectedDomain === domainName;
+                                const shouldShow = isOpen || isExporting;
+
+                                const tls = teamLeads.filter((tl) =>
+                                    (tl.domain || "").split(",").map((x) => x.trim()).includes(domainName)
+                                );
+                                const qaMembers = teamMembers.filter(
+                                    (m) =>
+                                        m.memberType === "QA" &&
+                                        (m.domain || "").split(",").map((x) => x.trim()).includes(domainName)
+                                );
+                                const qcMembers = teamMembers.filter(
+                                    (m) =>
+                                        m.memberType === "QC" &&
+                                        (m.domain || "").split(",").map((x) => x.trim()).includes(domainName)
+                                );
+                                const productionMembers = teamMembers.filter(
+                                    (m) =>
+                                        m.memberType === "Production" &&
+                                        (m.domain || "").split(",").map((x) => x.trim()).includes(domainName)
+                                );
+
+                                return (
+                                    <div key={domainName} className="domain-item">
+                                        {!hiddenRoles.includes("Domain") && (
+                                            <div
+                                                className={`org-node domain ${isOpen ? "active-domain" : ""}`}
+                                                onClick={() => setSelectedDomain(isOpen ? null : domainName)}
+                                            >
+                                                {domainName}
+                                            </div>
+                                        )}
+
+                                        {shouldShow && (
+                                            <>
+                                                <div className="small-line"></div>
+                                                <div className="tl-wrapper">
+                                                    {!hiddenRoles.includes("TeamLead") &&
+                                                        (tls.length > 0 ? (
+                                                        tls.map((tl) => (
+                                                            <DraggableUser
+                                                                key={tl.id}
+                                                                user={tl}
+                                                                onDelete={() => {}}
+                                                                onHover={handleHoverUser}
+                                                                disableDrag={true}
+                                                            />
+                                                        ))
+                                                    ) : (
+                                                        <div className="org-node tl">TL</div>
+                                                    ))}
+                                                </div>
+
+                                                <div className="small-line"></div>
+                                                <div className="qaqc-row">
+                                                    <div className="qa-column">
+                                                        {!hiddenRoles.includes("QA") &&
+                                                            (qaMembers.length > 0 ? (
+                                                            qaMembers.map((qa) => (
+                                                                <DraggableUser
+                                                                    key={qa.id}
+                                                                    user={qa}
+                                                                    onDelete={() => {}}
+                                                                    onHover={handleHoverUser}
+                                                                    disableDrag={true}
+                                                                />
+                                                            ))
+                                                        ) : (
+                                                            <div className="org-node qa1">QA</div>
+                                                        ))}
+                                                    </div>
+
+                                                    <div className="qc-column">
+                                                        {!hiddenRoles.includes("QC") &&
+                                                            (qcMembers.length > 0 ? (
+                                                            qcMembers.map((qc) => (
+                                                                <DraggableUser
+                                                                    key={qc.id}
+                                                                    user={qc}
+                                                                    onDelete={() => {}}
+                                                                    onHover={handleHoverUser}
+                                                                    disableDrag={true}
+                                                                />
+                                                            ))
+                                                        ) : (
+                                                            <div className="org-node qc1">QC</div>
+                                                        ))}
+                                                    </div>
+
+                                                    <div className="production-column">
+                                                        {!hiddenRoles.includes("Production") &&
+                                                            (productionMembers.length > 0 ? (
+                                                            productionMembers.map((p) => (
+                                                                <DraggableUser
+                                                                    key={p.id}
+                                                                    user={p}
+                                                                    onDelete={() => {}}
+                                                                    onHover={handleHoverUser}
+                                                                    disableDrag={true}
+                                                                />
+                                                            ))
+                                                        ) : (
+                                                            <div className="org-node prod1">PRODUCTION</div>
+                                                        ))}
+                                                    </div>
+                                                </div>
+                                            </>
+                                        )}
+                                    </div>
+                                );
+                            })}
+                        </div>
+
+                        <div className="org-legend">
+                            <div className="legend-item all-item" onClick={() => setHiddenRoles([])}>
+                                <span className="legend-color all-color"></span>ALL
+                            </div>
+                            {!hiddenRoles.includes("Domain") && (
+                                <div className="legend-item" onClick={() => handleLegendClick("Domain")}>
+                                    <span className="legend-color domain-color"></span>Domain
+                                </div>
+                            )}
+                            {!hiddenRoles.includes("TeamLead") && (
+                                <div className="legend-item" onClick={() => handleLegendClick("TeamLead")}>
+                                    <span className="legend-color tl-color"></span>Team Lead
+                                </div>
+                            )}
+                            {!hiddenRoles.includes("QA", "QC", "Production") && (
+                                <>
+                                    <div className="legend-item" onClick={() => handleLegendClick("QA")}>
+                                        <span className="legend-color qa-color"></span>QA
+                                    </div>
+                                    <div className="legend-item" onClick={() => handleLegendClick("QC")}>
+                                        <span className="legend-color qc-color"></span>QC
+                                    </div>
+                                    <div className="legend-item" onClick={() => handleLegendClick("Production")}>
+                                        <span className="legend-color prod-color"></span>Production
+                                    </div>
+                                </>
+                            )}
+                        </div>
+                    </div>
+                </div>
+            </div>
+        )
+    );
+
     return (
         <div className="org-page">
             <UserReportModal open={openReport} user={selectedUser} />
             <div className="org-container">
-                {/* HEADER */}
                 <div className="org-topbar">
                     <div className="org-title-center">
                         <h2>Organogram</h2>
@@ -375,7 +724,6 @@ const Organogram = () => {
                     </div>
                 </div>
 
-                {/* TABS */}
                 <div className="org-tab-wrapper">
                     {tabs.map((tab) => (
                         <div
@@ -392,355 +740,40 @@ const Organogram = () => {
                     ))}
                 </div>
 
+                <div className="capacity-summary-card">
+                    <div className="capacity-metrics single-metric">
+                        <div className="metric-item">
+                            <span>Capacity Number</span>
+                            <strong className="total-highlight">{totalEmployeesCount}</strong>
+                        </div>
+                    </div>
+                </div>
+
                 <div className="org-body-box">
-                    {activeTab === "overall" ? (
-                        <DndContext onDragEnd={handleDragEnd}>
-                            <div ref={treeRef} className="export-area">
-                                {isExporting && <ExportHeader />}
-                                <div className="org-tree-wrapper">
-                                    <div className="org-tree">
-                                        {/* ADMIN */}
-                                        {!hiddenRoles.includes("Admin") &&
-                                            admins.map((admin, index) => (
-                                                <React.Fragment key={admin.id}>
-                                                    <div className="admin-row">
-                                                        <div className="org-node admin">{admin.name}</div>
+                    <button 
+                        className="org-view-fullscreen-btn" 
+                        onClick={() => setIsFullScreen(true)}
+                        title="View"
+                    >
+                        <FaExpand />
+                        <span>View</span>
+                    </button>
 
-                                                        {index === 1 && !hiddenRoles.includes("MIS") && (
-                                                            <div className="mis-wrapper">
-                                                                <div className="mis-top"></div>
-                                                                <div className="mis-center"></div>
-                                                                <div className="mis-bottom"></div>
-                                                                <div className="org-node mis">
-                                                                    {misUsers[0]?.name || "MIS"}
-                                                                </div>
-                                                            </div>
-                                                        )}
-                                                    </div>
-                                                    {index !== admins.length - 1 && <div className="v-line"></div>}
-                                                </React.Fragment>
-                                            ))}
+                    {renderTreeContent()}
+                </div>
 
-                                        <div className="v-line big"></div>
-                                        <div className="domain-wrapper">
-                                            <div className="top-horizontal"></div>
-
-                                            {(domains || []).map((d, index) => {
-                                                const domainName = d.domain;
-
-                                                const tls = teamLeads.filter((tl) =>
-                                                    (tl.domain || "").split(",").map((x) => x.trim()).includes(domainName)
-                                                );
-
-                                                const qaMembers = teamMembers.filter(
-                                                    (m) =>
-                                                        m.memberType === "QA" &&
-                                                        (m.domain || "").split(",").map((x) => x.trim()).includes(domainName)
-                                                );
-
-                                                const qcMembers = teamMembers.filter(
-                                                    (m) =>
-                                                        m.memberType === "QC" &&
-                                                        (m.domain || "").split(",").map((x) => x.trim()).includes(domainName)
-                                                );
-
-                                                const productionMembers = teamMembers.filter(
-                                                    (m) =>
-                                                        m.memberType === "Production" &&
-                                                        (m.domain || "").split(",").map((x) => x.trim()).includes(domainName)
-                                                );
-
-                                                return (
-                                                    <div className="domain-column" key={index}>
-                                                        {/* DOMAIN */}
-                                                        {!hiddenRoles.includes("Domain") && (
-                                                            <div className="org-node domain">{domainName}</div>
-                                                        )}
-
-                                                        <div className="small-line"></div>
-
-                                                        {/* TEAM LEAD */}
-                                                        <DomainDropZone dropId={`${domainName}|TeamLead`}>
-                                                            <div className="tl-wrapper">
-                                                                {!hiddenRoles.includes("TeamLead") &&
-                                                                    (tls.length > 0 ? (
-                                                                        tls.map((tl) => (
-                                                                            <DraggableUser
-                                                                                key={tl.id}
-                                                                                user={tl}
-                                                                                onDelete={handleDelete}
-                                                                                onHover={handleHoverUser}
-                                                                            />
-                                                                        ))
-                                                                    ) : (
-                                                                        <div className="org-node tl">TL</div>
-                                                                    ))}
-                                                            </div>
-                                                        </DomainDropZone>
-
-                                                        <div className="small-line"></div>
-                                                        <div className="qaqc-row">
-                                                            <DomainDropZone dropId={`${domainName}|QA`}>
-                                                                <div className="qa-column">
-                                                                    {!hiddenRoles.includes("QA") &&
-                                                                        (qaMembers.length > 0 ? (
-                                                                            qaMembers.map((qa) => (
-                                                                                <DraggableUser
-                                                                                    key={qa.id}
-                                                                                    user={qa}
-                                                                                    onDelete={handleDelete}
-                                                                                    onHover={handleHoverUser}
-                                                                                />
-                                                                            ))
-                                                                        ) : (
-                                                                            <div className="org-node qa1">QA</div>
-                                                                        ))}
-                                                                </div>
-                                                            </DomainDropZone>
-
-                                                            <DomainDropZone dropId={`${domainName}|QC`}>
-                                                                <div className="qc-column">
-                                                                    {!hiddenRoles.includes("QC") &&
-                                                                        (qcMembers.length > 0 ? (
-                                                                            qcMembers.map((qc) => (
-                                                                                <DraggableUser
-                                                                                    key={qc.id}
-                                                                                    user={qc}
-                                                                                    onDelete={handleDelete}
-                                                                                    onHover={handleHoverUser}
-                                                                                />
-                                                                            ))
-                                                                        ) : (
-                                                                            <div className="org-node qc1">QC</div>
-                                                                        ))}
-                                                                </div>
-                                                            </DomainDropZone>
-
-                                                            <DomainDropZone dropId={`${domainName}|Production`}>
-                                                                <div className="production-column">
-                                                                    {!hiddenRoles.includes("Production") &&
-                                                                        (productionMembers.length > 0 ? (
-                                                                            productionMembers.map((p) => (
-                                                                                <DraggableUser
-                                                                                    key={p.id}
-                                                                                    user={p}
-                                                                                    onDelete={handleDelete}
-                                                                                    onHover={handleHoverUser}
-                                                                                />
-                                                                            ))
-                                                                        ) : (
-                                                                            <div className="org-node prod1">PRODUCTION</div>
-                                                                        ))}
-                                                                </div>
-                                                            </DomainDropZone>
-                                                        </div>
-                                                    </div>
-                                                );
-                                            })}
-                                        </div>
-
-                                        <div className="org-legend">
-                                            <div className="legend-item all-item" onClick={() => setHiddenRoles([])}>
-                                                <span className="legend-color all-color"></span>ALL
-                                            </div>
-                                            {!hiddenRoles.includes("Admin") && (
-                                                <div className="legend-item" onClick={() => handleLegendClick("Admin")}>
-                                                    <span className="legend-color admin-color"></span>Admin
-                                                </div>
-                                            )}
-                                            {!hiddenRoles.includes("MIS") && (
-                                                <div className="legend-item" onClick={() => handleLegendClick("MIS")}>
-                                                    <span className="legend-color mis-color"></span>MIS
-                                                </div>
-                                            )}
-                                            {!hiddenRoles.includes("Domain") && (
-                                                <div className="legend-item" onClick={() => handleLegendClick("Domain")}>
-                                                    <span className="legend-color domain-color"></span>Domain
-                                                </div>
-                                            )}
-                                            {!hiddenRoles.includes("TeamLead") && (
-                                                <div className="legend-item" onClick={() => handleLegendClick("TeamLead")}>
-                                                    <span className="legend-color tl-color"></span>Team Lead
-                                                </div>
-                                            )}
-                                            {!hiddenRoles.includes("QA") && (
-                                                <div className="legend-item" onClick={() => handleLegendClick("QA")}>
-                                                    <span className="legend-color qa-color"></span>QA
-                                                </div>
-                                            )}
-                                            {!hiddenRoles.includes("QC") && (
-                                                <div className="legend-item" onClick={() => handleLegendClick("QC")}>
-                                                    <span className="legend-color qc-color"></span>QC
-                                                </div>
-                                            )}
-                                            {!hiddenRoles.includes("Production") && (
-                                                <div className="legend-item" onClick={() => handleLegendClick("Production")}>
-                                                    <span className="legend-color prod-color"></span>Production
-                                                </div>
-                                            )}
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                        </DndContext>
-                    ) : (
-                        <div className="org-body-box">
-                            <div ref={treeRef} className="export-area">
-                                {isExporting && <ExportHeader />}
-                                <div className="org-tree">
-                                    <div className="domain-wrapp">
-                                        {domains.map((d) => {
-                                            const domainName = d.domain;
-                                            const isOpen = selectedDomain === domainName;
-                                            const shouldShow = isOpen || isExporting;
-
-                                            const tls = teamLeads.filter((tl) =>
-                                                (tl.domain || "").split(",").map((x) => x.trim()).includes(domainName)
-                                            );
-                                            const qaMembers = teamMembers.filter(
-                                                (m) =>
-                                                    m.memberType === "QA" &&
-                                                    (m.domain || "").split(",").map((x) => x.trim()).includes(domainName)
-                                            );
-                                            const qcMembers = teamMembers.filter(
-                                                (m) =>
-                                                    m.memberType === "QC" &&
-                                                    (m.domain || "").split(",").map((x) => x.trim()).includes(domainName)
-                                            );
-                                            const productionMembers = teamMembers.filter(
-                                                (m) =>
-                                                    m.memberType === "Production" &&
-                                                    (m.domain || "").split(",").map((x) => x.trim()).includes(domainName)
-                                            );
-
-                                            return (
-                                                <div key={domainName} className="domain-item">
-                                                    {!hiddenRoles.includes("Domain") && (
-                                                        <div
-                                                            className={`org-node domain ${isOpen ? "active-domain" : ""}`}
-                                                            onClick={() => setSelectedDomain(isOpen ? null : domainName)}
-                                                        >
-                                                            {domainName}
-                                                        </div>
-                                                    )}
-
-                                                    {shouldShow && (
-                                                        <>
-                                                            <div className="small-line"></div>
-                                                            <div className="tl-wrapper">
-                                                                {!hiddenRoles.includes("TeamLead") &&
-                                                                    (tls.length > 0 ? (
-                                                                    tls.map((tl) => (
-                                                                        <div
-                                                                            key={tl.id}
-                                                                            className="org-node tl"
-                                                                            onMouseEnter={(e) => handleHoverUser(tl, e)}
-                                                                            onMouseLeave={() => handleHoverUser(null, null)}
-                                                                        >
-                                                                            {tl.name}
-                                                                        </div>
-                                                                    ))
-                                                                ) : (
-                                                                    <div className="org-node tl">TL</div>
-                                                                ))}
-                                                            </div>
-
-                                                            <div className="small-line"></div>
-                                                            <div className="qaqc-row">
-                                                                <div className="qa-column">
-                                                                    {!hiddenRoles.includes("QA") &&
-                                                                        (qaMembers.length > 0 ? (
-                                                                        qaMembers.map((qa) => (
-                                                                            <div
-                                                                                key={qa.id}
-                                                                                className="org-node qa1"
-                                                                                onMouseEnter={(e) => handleHoverUser(qa, e)}
-                                                                                onMouseLeave={() => handleHoverUser(null, null)}
-                                                                            >
-                                                                                {qa.name}
-                                                                            </div>
-                                                                        ))
-                                                                    ) : (
-                                                                        <div className="org-node qa1">QA</div>
-                                                                    ))}
-                                                                </div>
-
-                                                                <div className="qc-column">
-                                                                    {!hiddenRoles.includes("QC") &&
-                                                                        (qcMembers.length > 0 ? (
-                                                                        qcMembers.map((qc) => (
-                                                                            <div
-                                                                                key={qc.id}
-                                                                                className="org-node qc1"
-                                                                                onMouseEnter={(e) => handleHoverUser(qc, e)}
-                                                                                onMouseLeave={() => handleHoverUser(null, null)}
-                                                                            >
-                                                                                {qc.name}
-                                                                            </div>
-                                                                        ))
-                                                                    ) : (
-                                                                        <div className="org-node qc1">QC</div>
-                                                                    ))}
-                                                                </div>
-
-                                                                <div className="production-column">
-                                                                    {!hiddenRoles.includes("Production") &&
-                                                                        (productionMembers.length > 0 ? (
-                                                                        productionMembers.map((p) => (
-                                                                            <div
-                                                                                key={p.id}
-                                                                                className="org-node prod1"
-                                                                                onMouseEnter={(e) => handleHoverUser(p, e)}
-                                                                                onMouseLeave={() => handleHoverUser(null, null)}
-                                                                            >
-                                                                                {p.name}
-                                                                            </div>
-                                                                        ))
-                                                                    ) : (
-                                                                        <div className="org-node prod1">PRODUCTION</div>
-                                                                    ))}
-                                                                </div>
-                                                            </div>
-                                                        </>
-                                                    )}
-                                                </div>
-                                            );
-                                        })}
-                                    </div>
-
-                                    <div className="org-legend">
-                                        <div className="legend-item all-item" onClick={() => setHiddenRoles([])}>
-                                            <span className="legend-color all-color"></span>ALL
-                                        </div>
-                                        {!hiddenRoles.includes("Domain") && (
-                                            <div className="legend-item" onClick={() => handleLegendClick("Domain")}>
-                                                <span className="legend-color domain-color"></span>Domain
-                                            </div>
-                                        )}
-                                        {!hiddenRoles.includes("TeamLead") && (
-                                            <div className="legend-item" onClick={() => handleLegendClick("TeamLead")}>
-                                                <span className="legend-color tl-color"></span>Team Lead
-                                            </div>
-                                        )}
-                                        {!hiddenRoles.includes("QA", "QC", "Production") && (
-                                            <>
-                                                <div className="legend-item" onClick={() => handleLegendClick("QA")}>
-                                                    <span className="legend-color qa-color"></span>QA
-                                                </div>
-                                                <div className="legend-item" onClick={() => handleLegendClick("QC")}>
-                                                    <span className="legend-color qc-color"></span>QC
-                                                </div>
-                                                <div className="legend-item" onClick={() => handleLegendClick("Production")}>
-                                                    <span className="legend-color prod-color"></span>Production
-                                                </div>
-                                            </>
-                                        )}
-                                    </div>
-                                </div>
+                {isFullScreen && (
+                    <div className="org-popup-overlay" onClick={() => setIsFullScreen(false)}>
+                        <div className="org-popup-content" onClick={(e) => e.stopPropagation()}>
+                            <button className="org-popup-close-btn" onClick={() => setIsFullScreen(false)}>
+                                <FaCompress /> Close
+                            </button>
+                            <div className="org-tree-popup-container">
+                                {renderTreeContent()}
                             </div>
                         </div>
-                    )}
-                </div>
+                    </div>
+                )}
             </div>
         </div>
     );
