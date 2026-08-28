@@ -45,7 +45,47 @@ exports.createJob = (req, res) => {
     }
   );
 };
+exports.createJob = (req, res) => {
+  let {
+    domain,
+    market,
+    jobId,
+    receiveDate,
+    ecdDate,
+    submissionDate,
+  } = req.body;
 
+  // Agar submissionDate nahi di gayi hai, toh filhal 'receiveDate' ya koi default date daal dein taaki NOT NULL constraint violate na ho
+  const finalSubmissionDate = (submissionDate && submissionDate.trim() !== "") 
+    ? submissionDate 
+    : receiveDate; // Ya aap yahan koi default date bhi rakh sakte hain
+
+  const sql = `
+    INSERT INTO job_creation
+    (domain, market, jobId, receiveDate, ecdDate, submissionDate, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?, NULL)
+  `;
+
+  db.query(
+    sql,
+    [domain, market, jobId, receiveDate, ecdDate, finalSubmissionDate],
+    (err, result) => {
+      if (err) {
+        console.log("MYSQL/PG ERROR:", err);
+        return res.status(500).json({
+          success: false,
+          message: err.message,
+        });
+      }
+
+      res.json({
+        success: true,
+        message: "Job created successfully",
+        id: result.insertId || result.rows?.[0]?.id,
+      });
+    }
+  );
+};
 
 exports.getAllJobs = (req, res) => {
   const { domain } = req.query;
