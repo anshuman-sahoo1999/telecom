@@ -23,16 +23,20 @@ const JobCreation = () => {
       const masterRes = await axios.get("http://localhost:5000/api/master");
       const workRes = await axios.get("http://localhost:5000/api/work/bydomain");
 
+      // MASTER domains (F2, F3, Telecom)
       const masterDomains = Object.keys(masterRes.data || {}).map((d) => ({
         domain: d
       }));
 
+      // WORK domains
       const workDomains = (workRes.data || []).map((d) => ({
         domain: d.domain
       }));
 
+      // MERGE
       const merged = [...masterDomains, ...workDomains];
 
+      // REMOVE DUPLICATES
       const unique = merged.filter(
         (item, index, arr) =>
           arr.findIndex(x => x.domain === item.domain) === index
@@ -44,7 +48,6 @@ const JobCreation = () => {
       console.log(error);
     }
   };
-
   const handleChange = (e) => {
     setFormData((prev) => ({
       ...prev,
@@ -56,24 +59,9 @@ const JobCreation = () => {
     e.preventDefault();
 
     try {
-      // ✅ Agar submissionDate khali hai, toh usko payload se hata do ya null bhejo
-      const payload = {
-        domain: formData.domain,
-        market: formData.market,
-        jobId: formData.jobId,
-        receiveDate: formData.receiveDate,
-        ecdDate: formData.ecdDate,
-      };
-
-      if (formData.submissionDate && formData.submissionDate.trim() !== "") {
-        payload.submissionDate = formData.submissionDate;
-      } else {
-        payload.submissionDate = null; // ya phir agar table NOT NULL hai toh default current date bhej sakte hain ya skip kar sakte hain
-      }
-
       const res = await axios.post(
-        "https://telecom-lovat.vercel.app/api/job/create",
-        payload
+        "http://localhost:5000/api/job/create",
+        formData
       );
 
       if (res.data.success) {
@@ -90,7 +78,7 @@ const JobCreation = () => {
       }
     } catch (error) {
       console.log(error);
-      alert("Failed to Create Job: " + (error.response?.data?.message || error.message));
+      alert("Failed to Create Job");
     }
   };
 
@@ -169,7 +157,7 @@ const JobCreation = () => {
             </div>
 
             <div className="form-group">
-              <label>Submission Date (Optional)</label>
+              <label>Submission Date</label>
               <input
                 type="date"
                 name="submissionDate"
