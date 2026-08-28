@@ -194,7 +194,7 @@
   flex-direction: column;
   align-items: center;
   margin: 0 auto;
-  zoom: 0.35; 
+  zoom: 0.34; 
   transform-origin: top center;
   min-width: max-content;
 }
@@ -536,7 +536,6 @@
   flex-direction: column;
   align-items: center;
   justify-content: flex-start;
-  overflow: auto !important; /* Work profile aur niche ke parts ke liye proper scrolling */
   padding: 40px 20px;
   box-sizing: border-box;
 }
@@ -566,7 +565,7 @@
   align-items: center;
   gap: 10px;
   font-weight: 600;
-  font-size: 14px;
+  font-size: 24px;
   cursor: pointer;
 }
 
