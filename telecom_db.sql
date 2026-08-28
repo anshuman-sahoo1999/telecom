@@ -28,20 +28,22 @@ SET time_zone = "+00:00";
 --
 
 CREATE TABLE `job_creation` (
-  `id` int(11) NOT NULL,
+  `id` int(11) NOT NULL AUTO_INCREMENT,
   `domain` varchar(100) NOT NULL,
   `market` varchar(100) NOT NULL,
   `jobId` varchar(100) NOT NULL,
   `receiveDate` date NOT NULL,
   `ecdDate` date NOT NULL,
-  `submissionDate` date NOT NULL,
+  `submissionDate` date DEFAULT NULL,
   `internalQc` varchar(50) DEFAULT NULL,
   `amdocsQc` varchar(50) DEFAULT NULL,
   `markupRequired` varchar(50) DEFAULT NULL,
   `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
   `updated_at` timestamp NULL DEFAULT NULL,
   `isEdited` tinyint(1) DEFAULT 0,
-  `employeeName` varchar(150) DEFAULT NULL
+  `employeeName` varchar(150) DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `jobId` (`jobId`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 -- --------------------------------------------------------
