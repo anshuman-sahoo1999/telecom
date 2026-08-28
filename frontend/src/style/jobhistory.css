@@ -1,4 +1,3 @@
-/* jobhistory.css */
 
 * {
   margin: 0;
@@ -20,21 +19,22 @@
   margin-bottom: 20px;
 }
 
+
 /* ===================================
    FILTER SECTION (Optimized Widths)
 =================================== */
 
 .job-filter-container {
-    display: flex;
-    flex-direction: row;
-    flex-wrap: wrap;
-    gap: 12px;
-    align-items: flex-end;
-    padding: 16px;
-    margin-bottom: 20px;
-    background: #f8f9fa;
-    border: 1px solid #e5e7eb;
-    border-radius: 10px;
+  display: flex;
+  flex-direction: row;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: flex-end;
+  padding: 16px;
+  margin-bottom: 20px;
+  background: #f8f9fa;
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
 }
 
 .job-filter-group {
@@ -108,26 +108,39 @@
   background: #dc2626;
 }
 
+
 /* ===================================
-   TABLE WRAPPER & VISIBLE X-AXIS SCROLLBAR
+   TABLE WRAPPER
+   Vertical + Horizontal Scroll
 =================================== */
 
 .table-wrapper {
   width: 100%;
+
+  /* Table ke andar vertical scroll */
+  max-height: calc(100vh - 300px);
+
   overflow-x: auto;
+  overflow-y: auto;
+
   background: #ffffff;
   border-radius: 12px;
   box-shadow: 0 4px 15px rgba(0, 0, 0, 0.08);
   margin-bottom: 20px;
-  
+
   /* Firefox Scrollbar Support */
   scrollbar-width: auto;
   scrollbar-color: #64748b #e2e8f0;
 }
 
-/* Chrome, Edge, Safari Custom Visible Scrollbar */
+
+/* ===================================
+   Chrome, Edge, Safari Scrollbar
+=================================== */
+
 .table-wrapper::-webkit-scrollbar {
-  height: 14px; 
+  width: 10px;
+  height: 14px;
   display: block;
 }
 
@@ -146,19 +159,41 @@
   background: #475569;
 }
 
+
+/* ===================================
+   TABLE
+=================================== */
+
 .job-history-table {
   width: 100%;
   min-width: 1400px;
   border-collapse: collapse;
 }
 
-.job-history-table thead tr:first-child {
-  background: #0f4c81;
+
+/* ===================================
+   STICKY HEADER
+=================================== */
+
+/* First header row */
+.job-history-table thead tr:first-child th {
+  position: sticky;
+  top: 0;
+  z-index: 10;
 }
 
-.job-history-table thead tr:nth-child(2) {
-  background: #1d70b8;
+
+/* Second header row */
+.job-history-table thead tr:nth-child(2) th {
+  position: sticky;
+  top: 35px;
+  z-index: 10;
 }
+
+
+/* ===================================
+   TABLE HEADER
+=================================== */
 
 .job-history-table th {
   color: #ffffff;
@@ -169,6 +204,11 @@
   white-space: nowrap;
 }
 
+
+/* ===================================
+   TABLE DATA
+=================================== */
+
 .job-history-table td {
   padding: 12px 10px;
   text-align: center;
@@ -178,6 +218,11 @@
   white-space: nowrap;
 }
 
+
+/* ===================================
+   ORIGINAL ROW COLORS
+=================================== */
+
 .job-history-table tbody tr:nth-child(even) {
   background: #f9fbfd;
 }
@@ -186,6 +231,11 @@
   background: #eef6ff;
   transition: 0.3s;
 }
+
+
+/* ===================================
+   SPECIAL COLUMNS
+=================================== */
 
 .job-history-table td:nth-child(10),
 .job-history-table td:nth-child(11) {
@@ -197,6 +247,11 @@
   color: #b45309;
 }
 
+
+/* ===================================
+   TABLE ICONS
+=================================== */
+
 .job-history-table svg {
   font-size: 18px;
   cursor: pointer;
@@ -207,21 +262,27 @@
   transform: scale(1.15);
 }
 
+
+/* ===================================
+   VIEW WORK BUTTON
+=================================== */
+
 .view-work-btn {
-    background: #2563eb;
-    color: white;
-    border: none;
-    padding: 6px 12px;
-    border-radius: 5px;
-    cursor: pointer;
+  background: #2563eb;
+  color: white;
+  border: none;
+  padding: 6px 12px;
+  border-radius: 5px;
+  cursor: pointer;
 }
 
 .view-work-btn:hover {
-    background: #1d4ed8;
+  background: #1d4ed8;
 }
 
+
 /* ===================================
-   MODAL & WORK OVERLAY STYLES
+   MODAL & WORK OVERLAY
 =================================== */
 
 .jobwork-overlay {
@@ -280,6 +341,11 @@
   background: #f3f4f6;
 }
 
+
+/* ===================================
+   GENERAL INFORMATION
+=================================== */
+
 .jobwork-general-section {
   display: flex;
   border-bottom: 1px solid #e5e7eb;
@@ -318,6 +384,11 @@
   color: #111827;
 }
 
+
+/* ===================================
+   QC
+=================================== */
+
 .jobwork-general-right {
   width: 220px;
   border-left: 1px solid #e5e7eb;
@@ -339,6 +410,11 @@
   font-weight: 700;
   color: #b91c1c;
 }
+
+
+/* ===================================
+   WORK INFORMATION
+=================================== */
 
 .jobwork-section-title {
   margin: 0;
@@ -383,6 +459,11 @@
   background: #f5f7fa;
 }
 
+
+/* ===================================
+   WORK TABLE COLUMN WIDTH
+=================================== */
+
 .jobwork-table th:nth-child(1),
 .jobwork-table td:nth-child(1) {
   width: 15%;
@@ -407,17 +488,29 @@
   text-align: center;
 }
 
+
 /* ===================================
-   RESPONSIVE MEDIA QUERIES
+   RESPONSIVE - TABLET
 =================================== */
 
 @media (max-width: 992px) {
+
   .job-filter-group {
     min-width: 200px;
   }
+
+  .table-wrapper {
+    max-height: calc(100vh - 280px);
+  }
 }
 
+
+/* ===================================
+   RESPONSIVE - MOBILE
+=================================== */
+
 @media (max-width: 768px) {
+
   .job-history-container {
     padding: 15px;
   }
@@ -443,6 +536,15 @@
   .job-apply-btn,
   .job-clear-btn {
     flex: 1;
+  }
+
+  /* Mobile table scroll */
+  .table-wrapper {
+    max-height: calc(100vh - 330px);
+  }
+
+  .job-history-table {
+    min-width: 1400px;
   }
 
   .jobwork-modal {
