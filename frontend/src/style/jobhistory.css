@@ -177,19 +177,20 @@
 
 /* First header row */
 .job-history-table thead tr:first-child th {
-  position: sticky;
-  top: 0;
-  z-index: 10;
+    position: sticky;
+    top: 0;
+    z-index: 20;
+    background: #0f4c81;
 }
 
 
 /* Second header row */
 .job-history-table thead tr:nth-child(2) th {
-  position: sticky;
-  top: 35px;
-  z-index: 10;
+    position: sticky;
+    top: 35px;
+    z-index: 20;
+    background: #4d7292;
 }
-
 
 /* ===================================
    TABLE HEADER
