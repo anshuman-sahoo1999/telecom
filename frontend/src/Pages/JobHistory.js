@@ -36,8 +36,6 @@ const JobHistory = () => {
                 `http://localhost:5000/api/timesheet/job/${jobId}`
             );
 
-            console.log("RAW WORK API RESPONSE:", res.data);
-
             const rawData = res.data?.data || [];
 
             // ✅ Normalize backend fields to frontend standard fields
@@ -67,8 +65,6 @@ const JobHistory = () => {
         try {
             const res = await axios.get("http://localhost:5000/api/job/all");
 
-            console.log("JOB API DATA =", res.data);
-
             const job34568 = res.data.find(
                 (j) => j.jobId === "34568"
             );
@@ -77,7 +73,6 @@ const JobHistory = () => {
 
             setJobs(res.data);
         } catch (error) {
-            console.log(error);
         }
     };
 
@@ -377,7 +372,7 @@ const JobHistory = () => {
 
                     <tbody>
                         {filteredJobs.length > 0 ? (
-                            filteredJobs.map((job, index) => {
+                            [...filteredJobs].reverse().map((job, index) => {
                                 const receive = job.receiveDate
                                     ? new Date(job.receiveDate)
                                     : null;
