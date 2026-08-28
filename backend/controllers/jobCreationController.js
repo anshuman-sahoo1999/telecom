@@ -1,5 +1,6 @@
 const db = require("../config/db");
 
+
 // ============================
 // CREATE JOB (Submission Date Optional)
 // ============================
@@ -13,7 +14,7 @@ exports.createJob = (req, res) => {
     submissionDate,
   } = req.body;
 
-  // Agar submissionDate khali string, null ya undefined hai, toh use explicitly NULL kar do
+  // Agar submissionDate khali string ya undefined hai, toh use NULL kar do
   const finalSubmissionDate = submissionDate && submissionDate.trim() !== "" 
     ? submissionDate 
     : null;
@@ -45,15 +46,14 @@ exports.createJob = (req, res) => {
   );
 };
 
-// ============================
-// GET ALL JOBS
-// ============================
+
 exports.getAllJobs = (req, res) => {
   const { domain } = req.query;
 
   let sql = "SELECT * FROM job_creation";
   let params = [];
 
+  // ✅ IF domain exists → filter
   if (domain) {
     sql += " WHERE domain = ?";
     params.push(domain);
@@ -75,7 +75,7 @@ exports.getAllJobs = (req, res) => {
 };
 
 // ============================
-// UPDATE JOB (QC)
+// UPDATE ONLY QC (SETS updated_at)
 // ============================
 exports.updateJob = (req, res) => {
   const { internalQc, amdocsQc, markupRequired } = req.body;
@@ -101,6 +101,7 @@ exports.updateJob = (req, res) => {
     }
   );
 };
+
 
 // ============================
 // DELETE JOB
