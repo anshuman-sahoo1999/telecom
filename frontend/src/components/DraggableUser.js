@@ -3,13 +3,12 @@ import { useDraggable } from "@dnd-kit/core";
 import { RxCross2 } from "react-icons/rx";
 import "../style/organogram.css";
 
-const DraggableUser = ({ user, onDelete, onHover }) => {
+const DraggableUser = ({ user, onDelete, onHover, disableDrag = false }) => {
     const loginUser = JSON.parse(localStorage.getItem("user"));
-
     const isAdmin = loginUser?.role === "Admin";
 
-    // ✅ ONLY ADMIN CAN DRAG
-    const canDrag = isAdmin;
+    // Agar disableDrag true hai (jaise project view mein), toh dragging band rahegi
+    const canDrag = isAdmin && !disableDrag;
 
     const {
         attributes,
@@ -54,8 +53,7 @@ const DraggableUser = ({ user, onDelete, onHover }) => {
                     {user.name}
                 </div>
 
-                {/* ✅ ONLY ADMIN CAN DELETE */}
-                {isAdmin && (
+                {isAdmin && !disableDrag && (
                     <RxCross2
                         className="delete-icon"
                         onPointerDown={(e) => e.stopPropagation()}
