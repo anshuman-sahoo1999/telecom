@@ -538,14 +538,15 @@
   justify-content: flex-start;
   padding: 40px 20px;
   box-sizing: border-box;
+  overflow-y: hidden;   /* Y-axis scrollbar hide */
 }
 
-/* 2. Popup/Fullscreen Tree (Bada dikhega aur work profile cut nahi hoga) */
+/* Popup/Fullscreen Tree */
 .org-popup-content .org-tree {
-  zoom: 0.44; /* Bada aur clear size (agar aur bada chahiye toh 0.60 kar sakte hain) */
+  zoom: 0.44;
   transform-origin: top center;
   margin: 0 auto;
-  padding-bottom: 120px; /* Niche extra space taaki work profile poori dikhe */
+  padding-bottom: 120px;
 }
 
 .org-body-box::-webkit-scrollbar {
