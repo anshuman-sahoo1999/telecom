@@ -1,4 +1,5 @@
 import React, { useEffect, useState, useRef } from "react";
+import ReactDOM from "react-dom";
 import "../style/userReportModal.css";
 
 const UserReportModal = ({ open, user }) => {
@@ -8,31 +9,27 @@ const UserReportModal = ({ open, user }) => {
     useEffect(() => {
         if (!open || !user) return;
 
-        const boxWidth = 340;  // Updated box width
-        const boxHeight = 320; // Approximate height
+        const boxWidth = 340;  
+        const boxHeight = 320; 
         const screenWidth = window.innerWidth;
         const screenHeight = window.innerHeight;
 
-        // Default: Sabhi normal nodes ke liye right side par hi open hoga
-        let posX = (user.x || 0) + 15; 
-        let posY = (user.y || 0) - 10; 
+        let posX = (user.x || 100) + 15; 
+        let posY = (user.y || 100) - 10; 
 
-        // Sirf un nodes ke liye jo right edge par cut rahe hain, unko aur zyada left side mein shift karne ke liye -90 kiya gaya hai
+        // Agar modal screen ke right edge par touch kare, toh use thoda aur zyada left shift karne ke liye -60 kar diya hai
         if (posX + boxWidth > screenWidth - 20) {
-            posX = (user.x || 0) - boxWidth - 90; 
+            posX = (user.x || 100) - boxWidth - 60; 
         }
 
-        // Left boundary check (agar screen ke bahar jane lage toh minimum 10px margin rahe)
         if (posX < 10) {
             posX = 10;
         }
 
-        // Bottom boundary check
         if (posY + boxHeight > screenHeight - 20) {
             posY = screenHeight - boxHeight - 20;
         }
         
-        // Top boundary safety (name ke upar na jaye)
         if (posY < 10) {
             posY = 10;
         }
@@ -42,15 +39,15 @@ const UserReportModal = ({ open, user }) => {
 
     if (!open || !user) return null;
 
-    return (
+    return ReactDOM.createPortal(
         <div className="profile-overlay">
             <div
                 ref={modalRef}
                 className="profile-box"
                 style={{
-                    position: "absolute",
-                    top: adjustedPos.top,
-                    left: adjustedPos.left
+                    position: "fixed",
+                    top: `${adjustedPos.top}px`,
+                    left: `${adjustedPos.left}px`
                 }}
             >
                 <div className="profile-header">
@@ -71,7 +68,8 @@ const UserReportModal = ({ open, user }) => {
                     <div><b>Mobile:</b> <span>{user.mobileNo || "-"}</span></div>
                 </div>
             </div>
-        </div>
+        </div>,
+        document.body
     );
 };
 
