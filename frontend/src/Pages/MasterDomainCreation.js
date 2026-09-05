@@ -13,16 +13,34 @@ const MasterDomainCreation = () => {
   const [selectedDomain, setSelectedDomain] = useState("");
   const [domainName, setDomainName] = useState("");
 
-  // ================= FETCH DOMAINS =================
+  // ================= FETCH DOMAINS & WORK DATA =================
   const fetchDomains = async () => {
     try {
-      const res = await axios.get(API_BASE);
-
-      if (Array.isArray(res.data)) {
-        setDomains(res.data);
+      // 1. Master API se domains fetch karein
+      const masterRes = await axios.get(API_BASE);
+      let masterList = [];
+      if (Array.isArray(masterRes.data)) {
+        masterList = masterRes.data;
       } else {
-        setDomains(Object.keys(res.data || {}));
+        masterList = Object.keys(masterRes.data || {});
       }
+
+      // 2. Work Data se bhi existing domains fetch karein taaki koi chhoote nahi
+      let workList = [];
+      try {
+        const workRes = await axios.get("http://localhost:5000/api/work/all");
+        if (Array.isArray(workRes.data)) {
+          workList = workRes.data.map(item => item.domain).filter(Boolean);
+        }
+      } catch (workErr) {
+        console.error("Work Data Fetch Error:", workErr);
+      }
+
+      // 3. Dono lists ko combine karke unique uppercase domains banayein
+      const normalize = (d) => (d || "").toString().trim().toUpperCase();
+      const combinedDomains = [...new Set([...masterList.map(normalize), ...workList.map(normalize)])];
+      
+      setDomains(combinedDomains);
     } catch (err) {
       console.error("Fetch Error:", err);
     }
@@ -220,7 +238,7 @@ const MasterDomainCreation = () => {
                 </h3>
 
                 <button
-                  className="close-btn"
+                  className="close-id close-btn"
                   onClick={closeModal}
                 >
                   ✕
@@ -272,5 +290,4 @@ const MasterDomainCreation = () => {
     </div>
   );
 };
-
-export default MasterDomainCreation;
+export default MasterDomainCreation;    
