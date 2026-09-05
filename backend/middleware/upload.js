@@ -1,10 +1,23 @@
+const express = require("express");
+const router = express.Router();
+
 const multer = require("multer");
 
-const storage = multer.memoryStorage();
-
 const upload = multer({
-  storage,
-  limits: { fileSize: 10 * 1024 * 1024 }
+  storage: multer.memoryStorage(),
+
+  limits: {
+    fileSize: 50 * 1024 * 1024
+  }
 });
 
-module.exports = upload;
+const workController =
+  require("../controllers/workController");
+
+router.post(
+  "/import-excel",
+  upload.single("file"),
+  workController.importExcel
+);
+
+module.exports = router;
