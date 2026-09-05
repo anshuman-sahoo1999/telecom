@@ -63,6 +63,7 @@ async function main() {
         // Clean up MySQL specific syntax for PostgreSQL
         query = query.replace(/`/g, '');
         query = query.replace(/\\"/g, '"');
+        query = query.replace(/\\'/g, "''"); // Handle escaped single quotes correctly in PostgreSQL
         
         insertQueries.push(query);
       }
@@ -86,7 +87,7 @@ async function main() {
 
     // 3. Fix sequence IDs so Serial columns start from the correct auto-increment values
     console.log('Updating PostgreSQL sequence IDs...');
-    const tables = ['job_creation', 'master_data', 'timesheet_entries', 'users', 'work_updates'];
+    const tables = ['capacity_forecast', 'job_creation', 'master_data', 'timesheet_entries', 'users', 'work_updates'];
     for (let table of tables) {
       const res = await client.query(`SELECT MAX(id) as max_id FROM "${table}"`);
       const maxId = res.rows[0].max_id;
