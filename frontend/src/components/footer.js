@@ -3,7 +3,7 @@ import axios from "axios";
 import { FaAward, FaQuoteLeft } from "react-icons/fa";
 import "../style/footer.css";
 // Yahan apni file ka sahi path dein
-import data from "../quotes.json"; 
+import data from "../quotes.json";
 
 const Footer = () => {
   const [topPerformers, setTopPerformers] = useState([]);
@@ -45,7 +45,7 @@ const Footer = () => {
       // Date ke hisaab se index (Har din change hoga)
       const dayOfYear = Math.floor((today - new Date(today.getFullYear(), 0, 0)) / (1000 * 60 * 60 * 24));
       const quoteIndex = dayOfYear % quotesList.length;
-      
+
       const selected = quotesList[quoteIndex];
       setDailyQuote({
         text: selected.quote,
