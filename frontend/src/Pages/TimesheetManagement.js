@@ -27,9 +27,6 @@ const TimesheetManagement = () => {
     axios
       .get("http://localhost:5000/api/timesheet/all")
       .then((res) => {
-
-        console.log("API RESPONSE:", res.data.data);
-
         const formatted = (res.data?.data || []).map((item) => {
           const dateObj = item.created_at
             ? new Date(item.created_at)
@@ -45,16 +42,13 @@ const TimesheetManagement = () => {
             date: dateObj
               ? dateObj.toISOString().split("T")[0]
               : "-",
-
             monthYear: dateObj
               ? dateObj.toLocaleString("en-US", {
                 month: "short",
                 year: "numeric",
               })
               : "-",
-
             workDone: item.task || "-",
-
             status:
               item.adminStatus !== "Pending" && item.adminStatus
                 ? item.adminStatus
@@ -115,7 +109,6 @@ const TimesheetManagement = () => {
       `http://localhost:5000/api/auth/tl/bydomain?domain=${filters.domain}`
     )
       .then((res) => {
-        console.log("TL RESPONSE:", res.data);
         setTls(res.data?.data || []);
       })
       .catch((err) => {
@@ -124,7 +117,6 @@ const TimesheetManagement = () => {
 
   }, [filters.domain]);
   const changeStatus = async (id, status, revisedText = "") => {
-    console.log("USER ROLE =", user.role);
     try {
       await axios.put("http://localhost:5000/api/timesheet/update-status", {
         id,
@@ -153,8 +145,6 @@ const TimesheetManagement = () => {
             : item
         )
       );
-
-      // selectedWork update too
       setSelectedWork((prev) =>
         prev && prev.id === id
           ? {
@@ -174,7 +164,6 @@ const TimesheetManagement = () => {
 
   const filteredData = data.filter((item) => {
     const itemDate = new Date(item.date);
-
     const from = filters.fromDate ? new Date(filters.fromDate) : null;
     const to = filters.toDate ? new Date(filters.toDate) : null;
 
@@ -199,7 +188,6 @@ const TimesheetManagement = () => {
 
   const toggleSelectAll = () => {
     const allIds = filteredData.map((item) => item.id);
-
     if (
       allIds.length > 0 &&
       allIds.every((id) => selected.includes(id))
@@ -209,8 +197,6 @@ const TimesheetManagement = () => {
       setSelected(allIds);
     }
   };
-
-
   const bulkUpdateStatus = async (status) => {
     try {
       await Promise.all(
@@ -225,7 +211,6 @@ const TimesheetManagement = () => {
           )
         )
       );
-
       setData((prev) =>
         prev.map((item) =>
           selected.includes(item.id)
@@ -233,18 +218,14 @@ const TimesheetManagement = () => {
             : item
         )
       );
-
       setSelected([]);
     } catch (err) {
       console.log(err);
     }
   };
-
   const clockInterval = useRef(null);
-
   const openRevisedPopup = () => {
     setShowRevisedPopup(true);
-
     clockInterval.current = setInterval(() => {
       setCurrentDateTime(
         new Date().toLocaleString("en-IN", {
@@ -264,10 +245,7 @@ const TimesheetManagement = () => {
   return (
     <div className="tm-container">
       <h2>Timesheet Management</h2>
-
-      {/* FILTERS */}
       <div className="tm-filters">
-
         <div className="filter-item">
           <label>Domain</label>
           <select name="domain" onChange={handleFilterChange}>
@@ -295,7 +273,6 @@ const TimesheetManagement = () => {
             ))}
           </select>
         </div>
-
         <div className="filter-item">
           <label>Reportee</label>
           <select
@@ -304,7 +281,6 @@ const TimesheetManagement = () => {
             onChange={handleFilterChange}
           >
             <option value="">All </option>
-
             {[...new Set(data.map(d => d.employeeName).filter(Boolean))]
               .map((name) => (
                 <option key={name} value={name}>
@@ -313,7 +289,6 @@ const TimesheetManagement = () => {
               ))}
           </select>
         </div>
-
         <div className="filter-item">
           <label>Job ID</label>
           <select
@@ -329,7 +304,6 @@ const TimesheetManagement = () => {
             ))}
           </select>
         </div>
-
         <div className="filter-item">
           <label>From Date</label>
           <input
@@ -339,7 +313,6 @@ const TimesheetManagement = () => {
             onChange={handleFilterChange}
           />
         </div>
-
         <div className="filter-item">
           <label>To Date</label>
           <input
@@ -364,9 +337,7 @@ const TimesheetManagement = () => {
             ))}
           </select>
         </div>
-
       </div>
-
       {/* BULK ACTIONS */}
       <div className="tm-actions">
         <button
@@ -385,7 +356,6 @@ const TimesheetManagement = () => {
           Revise Selected ({selected.length})
         </button>
       </div>
-
       {/* TABLE WRAPPER (IMPORTANT FOR X AXIS) */}
       <div className="table-wrapper">
         <table className="tm-table">
@@ -403,7 +373,6 @@ const TimesheetManagement = () => {
                   onChange={toggleSelectAll}
                 />
               </th>
-
               <th>Job ID</th>
               <th>Employee</th>
               <th>Date</th>
@@ -503,8 +472,6 @@ const TimesheetManagement = () => {
                 ×
               </button>
             </div>
-
-            {/* BODY */}
             <div className="work-modal-body">
               <table className="work-detail-table">
                 <tbody>
@@ -512,22 +479,18 @@ const TimesheetManagement = () => {
                     <th>Job ID</th>
                     <td>{selectedWork.jobId}</td>
                   </tr>
-
                   <tr>
                     <th>Employee</th>
                     <td>{selectedWork.employeeName}</td>
                   </tr>
-
                   <tr>
                     <th>Date</th>
                     <td>{selectedWork.date}</td>
                   </tr>
-
                   <tr>
                     <th>Month/Year</th>
                     <td>{selectedWork.monthYear}</td>
                   </tr>
-
                   {viewType === "verified" && (
                     <tr>
                       <th>Verified Work</th>
@@ -545,7 +508,6 @@ const TimesheetManagement = () => {
                       </td>
                     </tr>
                   )}
-
                   <tr>
                     <td colSpan="2">
                       {selectedWork.status !== "Verified" &&
@@ -560,23 +522,19 @@ const TimesheetManagement = () => {
                             >
                               Verified
                             </button>
-
                             <button
                               className="btn-small-revise"
                               onClick={openRevisedPopup}
                             >
                               Revised
                             </button>
-
                           </div>
                         )}
                     </td>
                   </tr>
-
                 </tbody>
               </table>
             </div>
-
           </div>
         </div>
       )}
@@ -591,35 +549,28 @@ const TimesheetManagement = () => {
           >
             <div className="revised-header">
               <h3>Revised Reason</h3>
-
               <span className="revised-datetime">
                 {currentDateTime}
               </span>
             </div>
-
             <textarea
               value={revisedText}
               onChange={(e) => setRevisedText(e.target.value)}
               onKeyDown={(e) => {
                 if (e.key === "Enter") {
                   e.preventDefault();
-
                   setRevisedText((prev) => {
                     if (prev === "") return "• ";
-
                     return prev + "\n• ";
                   });
                 }
               }}
               placeholder="Enter revision reason..."
             />
-
             <div style={{ marginTop: "10px", display: "flex", gap: "10px" }}>
-
               <button
                 onClick={async () => {
                   await changeStatus(selectedWork.id, "Revised", revisedText);
-
                   setRevisedText("");
                   setShowRevisedPopup(false);
                   setSelectedWork(null);
@@ -627,17 +578,14 @@ const TimesheetManagement = () => {
               >
                 Submit
               </button>
-
               <button onClick={() => setShowRevisedPopup(false)}>
                 Cancel
               </button>
-
             </div>
           </div>
         </div>
       )}
     </div>
   );
-};
-
-export default TimesheetManagement;
+};   
+export default TimesheetManagement;                
