@@ -67,14 +67,13 @@ const fetchData = () => {
               <th>Admin Status</th>
               <th>Internal QC</th>
               <th>Amdocs QC</th>
-              <th>Markup Required</th>
             </tr>
           </thead>
 
           <tbody>
             {data.length === 0 ? (
               <tr>
-                <td colSpan="10">No records found</td>
+                <td colSpan="9">No records found</td>
               </tr>
             ) : (
               data.map((item) => {
@@ -148,7 +147,6 @@ const fetchData = () => {
 
                     <td>{formatQC(item.internalQc)}</td>
                     <td>{formatQC(item.amdocsQc)}</td>
-                    <td>{item.markupRequired || "-"}</td>
                   </tr>
                 );
               })
