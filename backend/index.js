@@ -1,4 +1,3 @@
-require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 
@@ -13,6 +12,7 @@ const masterRoutes = require("./routes/masterRoutes");
 const countyRoutes = require("./routes/countyRoutes");
 const jobCreationRoutes = require("./routes/jobCreationRoutes");
 const timesheetRoutes = require("./routes/timesheetRoutes");
+const capacityRoutes = require("./routes/capacityRoutes");
 
 
 app.use("/api/auth", authRoutes); 
@@ -21,10 +21,9 @@ app.use("/api/master", masterRoutes);
 app.use("/api", countyRoutes);
 app.use("/api/job", jobCreationRoutes);
 app.use("/api/timesheet", require("./routes/timesheetRoutes"));
+app.use("/api/capacity-forecast", capacityRoutes);
 
 
 app.listen(5000, () => {
   console.log('Server running on port 5000');
 });
-
-module.exports = app;
