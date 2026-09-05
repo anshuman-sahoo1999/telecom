@@ -1,29 +1,42 @@
--- PostgreSQL Database Schema for Telecom DB (Lowercase columns for case-insensitivity)
+-- PostgreSQL Database Schema for Telecom DB (Combined & Updated based on uploaded schema, lowercase columns for case-insensitivity)
 
 DROP TABLE IF EXISTS work_updates CASCADE;
 DROP TABLE IF EXISTS users CASCADE;
 DROP TABLE IF EXISTS timesheet_entries CASCADE;
 DROP TABLE IF EXISTS master_data CASCADE;
 DROP TABLE IF EXISTS job_creation CASCADE;
+DROP TABLE IF EXISTS capacity_forecast CASCADE;
 
--- 1. Table structure for table `job_creation`
+-- 1. Table structure for table `capacity_forecast`
+CREATE TABLE capacity_forecast (
+  id SERIAL PRIMARY KEY,
+  month varchar(50) NOT NULL,
+  domain varchar(100) NOT NULL,
+  capacity int DEFAULT 0,
+  forecast int DEFAULT 0,
+  inflow int DEFAULT 0,
+  uom text DEFAULT NULL,
+  created_at timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+-- 2. Table structure for table `job_creation`
 CREATE TABLE job_creation (
   id SERIAL PRIMARY KEY,
-  domain varchar(100) NOT NULL,
-  market varchar(100) NOT NULL,
-  jobid varchar(100) UNIQUE NOT NULL,
-  receivedate date NOT NULL,
-  ecddate date NOT NULL,
+  domain varchar(100) DEFAULT NULL,
+  market varchar(100) DEFAULT NULL,
+  jobid varchar(100) UNIQUE DEFAULT NULL,
+  receivedate date DEFAULT NULL,
+  ecddate date DEFAULT NULL,
   submissiondate date DEFAULT NULL,
+  month varchar(50) DEFAULT NULL,
   internalqc varchar(50) DEFAULT NULL,
   amdocsqc varchar(50) DEFAULT NULL,
-  markuprequired varchar(50) DEFAULT NULL,
+  otp varchar(50) DEFAULT NULL,
   created_at timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  updated_at timestamp DEFAULT NULL,
-  isedited smallint DEFAULT 0,
-  employeename varchar(150) DEFAULT NULL
+  updated_at timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
--- 2. Table structure for table `master_data`
+
+-- 3. Table structure for table `master_data`
 CREATE TABLE master_data (
   id SERIAL PRIMARY KEY,
   domain varchar(100) NOT NULL,
@@ -34,7 +47,7 @@ CREATE TABLE master_data (
   updatedat timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
--- 3. Table structure for table `timesheet_entries`
+-- 4. Table structure for table `timesheet_entries`
 CREATE TABLE timesheet_entries (
   id SERIAL PRIMARY KEY,
   task varchar(255) NOT NULL,
@@ -51,7 +64,7 @@ CREATE TABLE timesheet_entries (
   teammember varchar(50) DEFAULT NULL
 );
 
--- 4. Table structure for table `users`
+-- 5. Table structure for table `users`
 CREATE TABLE users (
   id SERIAL PRIMARY KEY,
   name varchar(100) DEFAULT NULL,
@@ -69,19 +82,29 @@ CREATE TABLE users (
   lastexpupdate timestamp DEFAULT NULL
 );
 
--- 5. Table structure for table `work_updates`
+-- 6. Table structure for table `work_updates`
 CREATE TABLE work_updates (
   id SERIAL PRIMARY KEY,
-  months text DEFAULT NULL,
-  domain varchar(255) DEFAULT NULL,
-  sow varchar(255) DEFAULT NULL,
-  subdomain varchar(255) DEFAULT NULL,
-  region varchar(255) DEFAULT NULL,
-  state varchar(255) DEFAULT NULL,
-  county varchar(255) DEFAULT NULL,
-  jobsdelivered int DEFAULT 1,
-  uom text DEFAULT NULL,
   file_name varchar(255) DEFAULT NULL,
+  months text DEFAULT NULL,
+  domain varchar(100) DEFAULT NULL,
+  sow varchar(255) DEFAULT NULL,
+  job_type varchar(255) DEFAULT NULL,
+  region varchar(100) DEFAULT NULL,
+  state varchar(100) DEFAULT NULL,
+  county varchar(100) DEFAULT NULL,
+  uom text DEFAULT NULL,
+  jobs_delivered int DEFAULT 0,
+  job_id varchar(100) UNIQUE DEFAULT NULL,
+  current_status varchar(100) DEFAULT NULL,
+  production_engineers varchar(255) DEFAULT NULL,
+  qc_engineers varchar(255) DEFAULT NULL,
+  otp varchar(255) DEFAULT NULL,
+  internal_qc varchar(255) DEFAULT NULL,
+  amdocs_qc varchar(255) DEFAULT NULL,
+  receive_date date DEFAULT NULL,
+  ecd_date date DEFAULT NULL,
+  submission_date date DEFAULT NULL,
   created_at timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
