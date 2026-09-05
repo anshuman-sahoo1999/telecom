@@ -1,0 +1,132 @@
+.js-page-wrapper {
+  padding: 30px;
+  min-height: 85vh;
+  box-sizing: border-box;
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+}
+
+.js-main-title-wrap {
+  margin-bottom: 25px;
+  border-bottom: 2px solid #e2e8f0;
+  padding-bottom: 12px;
+}
+
+.js-main-title-wrap h2 {
+  color: #0f4a63;
+  font-size: 26px;
+  font-weight: 700;
+  margin: 0;
+}
+
+.js-grid-layout-box {
+  display: grid;
+  grid-template-columns: 2.2fr 1fr;
+  gap: 25px;
+  align-items: start;
+}
+
+.js-form-panel-box {
+  background: #ffffff;
+  padding: 30px;
+  border-radius: 12px;
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.05);
+}
+
+.js-stacked-form {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.js-input-field-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.js-input-field-group label {
+  font-size: 14px;
+  font-weight: 600;
+  color: #334155;
+}
+
+.js-input-field-group select,
+.js-input-field-group input {
+  width: 100%;
+  padding: 11px 14px;
+  border-radius: 8px;
+  border: 1px solid #cbd5e1;
+  outline: none;
+  font-size: 14px;
+  background-color: #fff;
+  color: #0f172a;
+  transition: border-color 0.2s, box-shadow 0.2s;
+  box-sizing: border-box;
+}
+
+.js-input-field-group select:focus,
+.js-input-field-group input:focus {
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15);
+}
+
+.js-date-row-container {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 15px;
+}
+
+.js-submit-btn-wrap {
+  margin-top: 10px;
+}
+
+.js-submit-action-btn {
+  width: 100%;
+  background: linear-gradient(135deg, #0f4a63 0%, #1e3a8a 100%);
+  color: #ffffff;
+  padding: 13px;
+  border-radius: 8px;
+  border: none;
+  font-weight: 700;
+  font-size: 15px;
+  cursor: pointer;
+  transition: opacity 0.2s, transform 0.1s;
+  box-shadow: 0 4px 10px rgba(15, 74, 99, 0.2);
+}
+
+.js-submit-action-btn:hover {
+  opacity: 0.95;
+  transform: translateY(-1px);
+}
+
+.js-summary-card-box {
+  background: linear-gradient(135deg, #0f4a63 0%, #1e3a8a 100%);
+  color: #ffffff;
+  padding: 20px 8px;
+  border-radius: 12px;
+  text-align: center;
+  box-shadow: 0 10px 20px rgba(15, 74, 99, 0.15);
+  position: sticky;
+  top: 20px;
+}
+
+.js-summary-title-text {
+  font-size: 18px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  color: #93c5fd;
+  margin-bottom: 15px;
+  font-weight: 600;
+}
+
+.js-summary-metric-value {
+  font-size: 62px;
+  font-weight: 800;
+  color: #60a528;
+}
+
+@media (max-width: 900px) {
+  .js-grid-layout-box {
+    grid-template-columns: 1fr;
+  }
+}
