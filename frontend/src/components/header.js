@@ -9,14 +9,30 @@ import {
   FaCalendarAlt,
   FaClock,
   FaUser,
+  FaCloudUploadAlt,
 } from "react-icons/fa";
 import "../style/header.css";
 
 export default function Header() {
   const [showLogout, setShowLogout] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
-  const [theme, setTheme] = useState("light");
-  const [accent, setAccent] = useState("#2563eb");
+  
+  // Persist theme and accent using localStorage to prevent reset on refresh
+  const [theme, setTheme] = useState(() => {
+    return localStorage.getItem("app_theme") || "light";
+  });
+  const [accent, setAccent] = useState(() => {
+    return localStorage.getItem("app_accent") || "#2563eb";
+  });
+
+  useEffect(() => {
+    localStorage.setItem("app_theme", theme);
+  }, [theme]);
+
+  useEffect(() => {
+    localStorage.setItem("app_accent", accent);
+  }, [accent]);
+
   const [currentTime, setCurrentTime] = useState(new Date());
   const [menuOpen, setMenuOpen] = useState(window.innerWidth > 1100);
   
@@ -100,14 +116,23 @@ export default function Header() {
     return () => clearInterval(timer);
   }, []);
 
+  // Custom Data Upload Handler from Header via Event Dispatch
+  const handleDataUploadClick = () => {
+    setShowLogout(false);
+    window.dispatchEvent(new CustomEvent("navigate-to-page", { detail: "workupdate" }));
+    if (window.innerWidth <= 1100) {
+      setMenuOpen(false);
+    }
+  };
+
   // Custom Logout Handler with Loading Spinner
   const handleLogout = () => {
-    setIsLoggingOut(true); // Spinner/Blank screen चालू करें
+    setIsLoggingOut(true);
 
     setTimeout(() => {
       localStorage.clear();
       sessionStorage.clear();
-      window.location.replace("/"); // 2 सेकंड बाद लॉगआउट करें
+      window.location.replace("/");
     }, 2000); 
   };
 
@@ -252,7 +277,11 @@ export default function Header() {
 
             {showLogout && (
               <div className="logoutPopup">
-                <div className="popupItem" onClick={handleLogout}>
+                <div className="popupItem uploadItem" onClick={handleDataUploadClick}>
+                  <FaCloudUploadAlt />
+                  Data Upload
+                </div>
+                <div className="popupItem logoutItem" onClick={handleLogout}>
                   <FaSignOutAlt />
                   Logout
                 </div>
@@ -286,8 +315,8 @@ const spinnerOverlayStyle = {
   left: 0,
   width: "100vw",
   height: "100vh",
-  backgroundColor: "#111111", // पूरी स्क्रीन को डार्क/ब्लैंक करने के लिए
-  zIndex: 99999, // सबसे ऊपर दिखेगा
+  backgroundColor: "#111111", 
+  zIndex: 99999, 
   display: "flex",
   flexDirection: "column",
   justifyContent: "center",
@@ -298,7 +327,7 @@ const spinnerStyle = {
   width: "50px",
   height: "50px",
   border: "5px solid #f3f3f3",
-  borderTop: "5px solid var(--accent-color, #2563eb)", // आपके थीम कलर के हिसाब से घूमेगा
+  borderTop: "5px solid var(--accent-color, #2563eb)", 
   borderRadius: "50%",
   animation: "spin 1s linear infinite",
 };
