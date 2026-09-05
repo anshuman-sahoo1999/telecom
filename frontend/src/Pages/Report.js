@@ -8,7 +8,7 @@ import "../style/report.css";
 import { ComposableMap, Geographies, Geography } from "react-simple-maps";
 import geoData from "../us-states.json";
 import { geoCentroid } from "d3-geo";
-
+       
 export default function Report() {
   const [jumpPage, setJumpPage] = useState("");
   const [data, setData] = useState([]);
@@ -27,8 +27,7 @@ export default function Report() {
   const user = JSON.parse(localStorage.getItem("user")) || {};
 
 
-  const handleSave = async () => {
-
+const handleSave = async () => {
     const confirmSave = window.confirm(
       "Are you sure you want to save changes?"
     );
@@ -38,32 +37,35 @@ export default function Report() {
     }
 
     try {
-
       const parsedUOM = editForm.uom || {};
 
+      const currentMonthVal = editForm.month ? `${editForm.month}-${String(editForm.year).slice(-2)}` : null;
+
       const payload = {
-
+        months: currentMonthVal ? [currentMonthVal] : undefined,
+        month: editForm.month,
         domain: editForm.domain,
-
-        subDomain: editForm.jobType,
-
-        jobsDelivered: Number(
-          editForm.jobsDelivered || 0
-        ),
-
-        state: editForm.state,
-
-        county: editForm.county,
-
-        region: editForm.region,
-
         sow: editForm.sow,
-
+        job_type: editForm.jobType,
+        region: editForm.region,
+        state: editForm.state,
+        county: editForm.county,
         uom: parsedUOM,
-
-        months: [
-          `${editForm.month}-${String(editForm.year).slice(-2)}`
-        ],
+        job_id: editForm.job_id,
+        jobId: editForm.job_id, 
+        current_status: editForm.current_status,
+        production_engineers: editForm.production_engineers,
+        qc_engineers: editForm.qc_engineers,
+        otp: editForm.otp,
+        internal_qc: editForm.internal_qc,
+        amdocs_qc: editForm.amdocs_qc,
+        internalQc: editForm.internal_qc,
+        amdocsQc: editForm.amdocs_qc,
+        internalOtp: editForm.otp,
+        jobs_delivered: Number(editForm.jobsDelivered || 0),
+        receive_date: editForm.receive_date || null,
+        ecd_date: editForm.ecd_date || null,
+        submission_date: editForm.submission_date || null,
       };
 
       const res = await axios.put(
@@ -72,24 +74,17 @@ export default function Report() {
       );
 
       if (res.status === 200) {
-
         alert("✅ Record updated successfully");
-
         setEditingRowId(null);
-
-        fetchData();
-
+        await fetchData();
       }
-
     } catch (err) {
-
       console.log(err);
-
       alert("❌ Update failed");
     }
-  };
-  const handleDelete = async (id) => {
+};
 
+  const handleDelete = async (id) => {
     const confirmDelete = window.confirm(
       "Are you sure you want to delete this record?"
     );
@@ -99,23 +94,16 @@ export default function Report() {
     }
 
     try {
-
       const res = await axios.delete(
         `http://localhost:5000/api/work/delete/${id}`
       );
 
       if (res.status === 200) {
-
         alert("✅ Record deleted successfully");
-
         await fetchData();
-
       }
-
     } catch (err) {
-
       console.error(err);
-
       alert("❌ Delete failed");
     }
   };
@@ -123,6 +111,8 @@ export default function Report() {
   const fetchData = async () => {
     try {
       const res = await axios.get("http://localhost:5000/api/work/all");
+      console.log("res",res);
+      
       setData(res.data);
     } catch (err) {
       console.error("Error fetching work data:", err);
@@ -148,7 +138,6 @@ export default function Report() {
 
   const parseDate = (d) => {
     if (!d) return null;
-
     if (d instanceof Date && !isNaN(d.getTime())) return d;
 
     try {
@@ -175,123 +164,138 @@ export default function Report() {
     }
   };
 
+  // Fixed formatLocalDateString to show exact database date without timezone shift
+  const formatLocalDateString = (dateStr) => {
+    if (!dateStr) return "";
+
+    const d = new Date(dateStr);
+    if (isNaN(d.getTime())) return "";
+
+    const year = d.getFullYear();
+    const month = String(d.getMonth() + 1).padStart(2, "0");
+    const day = String(d.getDate()).padStart(2, "0");
+    
+    return `${year}-${day}-${month}`;
+  };
+
   const formatArrayOrString = (val) => {
     if (!val) return "-";
-
     if (Array.isArray(val)) {
       return val.join(" | ");
     }
-
     return val;
   };
 
-
   const formatUOM = (uom) => {
-
     if (!uom) return "-";
-
-    // string case
     if (typeof uom === "string") {
       return uom;
     }
-
-    // object case
     if (typeof uom === "object") {
-
       const entries = Object.entries(uom);
-
       if (entries.length === 0) return "-";
 
       return entries
         .map(([key, value]) => `${key}: ${value || 0}`)
         .join(" | ");
     }
-
     return "-";
   };
 
   let rows = [];
 
   data.forEach((item) => {
-
     const dateObj = item.updated_at || item.created_at;
-
-    const monthRaw = item.months?.[0]; // ["Jan-26"]
+    const monthRaw = item.months?.[0] || item.month;
 
     let month = "-";
     let year = "-";
 
-    if (typeof monthRaw === "string") {
-      const parts = monthRaw.split("-"); // ["Jan", "26"]
-      month = parts[0] || "-";
-      year = parts[1] ? `20${parts[1]}` : "-";
+    if (typeof monthRaw === "string" && monthRaw.trim() !== "") {
+      if (monthRaw.includes("-")) {
+        const parts = monthRaw.split("-");
+        month = parts[0] || "-";
+        let rawYear = parts[1] || "-";
+        year = rawYear.length === 2 ? `20${rawYear}` : rawYear;
+      } else if (monthRaw.includes(" ")) {
+        const parts = monthRaw.split(" ");
+        month = parts[0] || "-";
+        year = parts[1] || "-";
+      } else {
+        month = monthRaw;
+      }
     }
-    // ✅ FIX: monthYear define karo
-    const monthYear = `${month} ${year}`;
+
+    if ((year === "-" || !year) / dateObj) {
+      const fallbackDate = parseDate(dateObj);
+      if (fallbackDate) {
+        year = fallbackDate.getFullYear().toString();
+      }
+    }
+
+    const monthYear = `${month !== "-" ? month : ""} ${year !== "-" ? year : ""}`.trim() || "-";
 
     rows.push({
-      id: item._id || item.id,
+      id: item.id || item._id,
       monthYear,
       month,
       year,
       domain: item.domain || "-",
       sow: formatArrayOrString(item.sow),
-      jobType: formatArrayOrString(item.subDomain || item.jobType),
+      jobType: formatArrayOrString(item.job_type || item.jobType),
 
-      // ✅ REGION
       region:
         item.region &&
-          item.region !== "Unknown" &&
-          item.region !== "Unknown Region"
+        item.region !== "Unknown" &&
+        item.region !== "Unknown Region"
           ? item.region
           : "N/A",
 
-      // ✅ STATE / MARKET
       state:
         item.state &&
-          item.state !== "Unknown" &&
-          item.state !== "Unknown State"
+        item.state !== "Unknown" &&
+        item.state !== "Unknown State"
           ? item.state
           : "N/A",
 
       county:
         item.county &&
-          item.county !== "Unknown" &&
-          item.county !== "Unknown County"
+        item.county !== "Unknown" &&
+        item.county !== "Unknown County"
           ? item.county
           : "",
 
-      jobsDelivered: Number(item.jobsDelivered) || 0,
-
+      job_id: item.job_id || item.jobId || "-",
+      current_status: item.current_status || "-",
+      production_engineers: formatArrayOrString(item.production_engineers),
+      qc_engineers: formatArrayOrString(item.qc_engineers),
+      jobsDelivered: Number(item.jobs_delivered ?? item.jobsDelivered) || 0,
       uom: item.uom || {},
+      otp: item.otp || item.internalOtp || "-",
+      internal_qc: item.internal_qc || item.internalQc || "-",
+      amdocs_qc: item.amdocs_qc || item.amdocsQc || "-",
+      receive_date: item.receive_date ? formatLocalDateString(item.receive_date) : "",
+      ecd_date: item.ecd_date ? formatLocalDateString(item.ecd_date) : "",
+      submission_date: item.submission_date ? formatLocalDateString(item.submission_date) : "",
 
+      createdAt: parseDate(item.created_at), 
       lastUpdate: parseDate(dateObj),
-
       formattedDate: formatDateOnly(dateObj),
     });
   });
 
-  const monthOrder = [
-    "Jan", "Feb", "Mar", "Apr", "May", "Jun",
-    "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"
-  ];
-
   rows.sort((a, b) => {
-    const aMonth = monthOrder.indexOf(a.month);
-    const bMonth = monthOrder.indexOf(b.month);
-
-    if (b.year !== a.year) return b.year - a.year;
-
-    return bMonth - aMonth;
+    const timeA = a.createdAt ? a.createdAt.getTime() : 0;
+    const timeB = b.createdAt ? b.createdAt.getTime() : 0;
+    return timeA - timeB;
   });
+
   const uniqueMonthYear = [...new Set(rows.map((r) => `${r.month} ${r.year}`))];
-  const uniqueDomains = [...new Set(data.map((d) => d.domain))];
+  const uniqueDomains = [...new Set(rows.map((r) => r.domain).filter(Boolean))];
+
   const uniqueStates = [
     ...new Set(
       rows.map((r) => {
-
-        // ✅ agar region N/A hai
-        // to state dropdown me Other show hoga
         if (
           r.region === "N/A" ||
           !r.state ||
@@ -301,16 +305,12 @@ export default function Report() {
         ) {
           return "Other";
         }
-
         return r.state;
       })
     ),
   ].sort((a, b) => {
-
-    // ✅ Other always last
     if (a === "Other") return 1;
     if (b === "Other") return -1;
-
     return a.localeCompare(b);
   });
 
@@ -319,29 +319,21 @@ export default function Report() {
       return false;
     if (selectedDomain && r.domain !== selectedDomain) return false;
     if (selectedState) {
-
-      // ✅ Other select karne pe
-      // region N/A wale records bhi aayenge
       if (selectedState === "Other") {
-
         const isOther =
           r.region === "N/A" ||
           !r.state ||
           r.state === "Unknown" ||
           r.state === "Unknown State" ||
           r.state === "N/A";
-
         if (!isOther) return false;
-
       } else if (r.state !== selectedState) {
-
         return false;
       }
     }
 
     if (fromDate || toDate) {
       if (!r.lastUpdate) return false;
-
       const rowTime = r.lastUpdate.getTime();
 
       if (fromDate) {
@@ -357,49 +349,44 @@ export default function Report() {
 
     return true;
   });
+
   const latestUpdated = filteredRows.length
     ? filteredRows.reduce((latest, row) => {
-      if (!row.lastUpdate) return latest;
-
-      return !latest || row.lastUpdate > latest
-        ? row.lastUpdate
-        : latest;
-    }, null)
+        if (!row.lastUpdate) return latest;
+        return !latest || row.lastUpdate > latest
+          ? row.lastUpdate
+          : latest;
+      }, null)
     : null;
 
   const formattedLastUpdated = latestUpdated
     ? `${latestUpdated.toLocaleTimeString("en-IN", {
-      timeZone: "Asia/Kolkata",
-      hour: "2-digit",
-      minute: "2-digit",
-      hour12: true,
-    })}, ${latestUpdated.toLocaleDateString("en-IN", {
-      timeZone: "Asia/Kolkata",
-      day: "2-digit",
-      month: "2-digit",
-      year: "numeric",
-    })}`
+        timeZone: "Asia/Kolkata",
+        hour: "2-digit",
+        minute: "2-digit",
+        hour12: true,
+      })}, ${latestUpdated.toLocaleDateString("en-IN", {
+        timeZone: "Asia/Kolkata",
+        day: "2-digit",
+        month: "2-digit",
+        year: "numeric",
+      })}`
     : "-";
-  const getRowTotalJob = (r) => {
-    return Number(r.jobsDelivered || 0);
-  };
 
   const totalJobs = filteredRows.reduce((sum, r) => {
-    return sum + getRowTotalJob(r);
+    return sum + Number(r.jobsDelivered || 0);
   }, 0);
 
   const totalPages = Math.max(1, Math.ceil(filteredRows.length / rowsPerPage));
-
   const indexOfLast = currentPage * rowsPerPage;
   const currentRows = filteredRows.slice(
     indexOfLast - rowsPerPage,
     indexOfLast
   );
+
   const getFileTimestamp = () => {
     const now = new Date();
-
-    const date = now.toLocaleDateString("en-CA"); // 2026-06-09
-
+    const date = now.toLocaleDateString("en-CA");
     const time = now.toLocaleTimeString("en-US", {
       hour: "2-digit",
       minute: "2-digit",
@@ -408,23 +395,15 @@ export default function Report() {
     })
       .replace(/:/g, ".")
       .replace(/\s/g, "_");
-
     return `${date}_at_${time}`;
   };
+
   const downloadPDF = async () => {
-
     setIsGeneratingPDF(true);
-
     try {
-
       const pdf = new jsPDF("l", "mm", "a4");
-
       const pageWidth = pdf.internal.pageSize.getWidth();
       const pageHeight = pdf.internal.pageSize.getHeight();
-
-      // ===============================
-      // LOGO LOAD
-      // ===============================
 
       const img = new Image();
       img.src = "/Image/img1.png";
@@ -434,118 +413,32 @@ export default function Report() {
         img.onerror = reject;
       });
 
-      // ===============================
-      // HEADER
-      // ===============================
-
-      // LOGO LEFT
-      pdf.addImage(
-        img,
-        "PNG",
-        10,
-        8,
-        28,
-        28
-      );
-
-      // TITLE CENTER
-      // TITLE CENTER (NAVY BLUE + BOLD)
+      pdf.addImage(img, "PNG", 10, 8, 28, 28);
       pdf.setFontSize(24);
-
       pdf.setFont("helvetica", "bold");
-
-      // Navy Blue color
       pdf.setTextColor(0, 38, 77);
+      pdf.text("TELECOM WORK STATUS REPORT", pageWidth / 2, 20, { align: "center" });
 
-      pdf.text(
-        "TELECOM WORK STATUS REPORT",
-        pageWidth / 2,
-        20,
-        { align: "center" }
-      );
-
-      // reset font (optional)
       pdf.setFont("helvetica", "normal");
-
-      // GENERATED DATE RIGHT
       pdf.setFontSize(12);
-
       pdf.setTextColor(80);
-      // REPORT DATE RIGHT
-      pdf.text(
-        `${new Date().toLocaleString("en-IN")}`,
-        pageWidth - 12,
-        25,
-        { align: "right" }
-      );
+      pdf.text(`${new Date().toLocaleString("en-IN")}`, pageWidth - 12, 25, { align: "right" });
 
-      // HEADER BORDER LINE
       pdf.setDrawColor(180);
-
       pdf.setLineWidth(0.8);
-
-      pdf.line(
-        10,
-        38,
-        pageWidth - 10,
-        38
-      );
-
-      // ===============================
-      // SUMMARY BOX
-      // ===============================
-
-      pdf.setDrawColor(180);
+      pdf.line(10, 38, pageWidth - 10, 38);
 
       pdf.setFillColor(248, 250, 252);
-
-      pdf.roundedRect(
-        10,
-        48,
-        pageWidth - 20,
-        42,
-        3,
-        3,
-        "FD"
-      );
+      pdf.roundedRect(10, 48, pageWidth - 20, 42, 3, 3, "FD");
 
       pdf.setFontSize(15);
-
       pdf.setTextColor(17, 24, 39);
-
-      pdf.text(
-        "REPORT SUMMARY",
-        15,
-        60
-      );
-
-      // LEFT SIDE
+      pdf.text("REPORT SUMMARY", 15, 60);
 
       pdf.setFontSize(11);
-
-      pdf.text(
-        `Month / Year : ${selectedMonthYear || "All"}`,
-        15,
-        72
-      );
-
-      pdf.text(
-        `Date of Report : ${new Date().toLocaleDateString("en-IN")}`,
-        15,
-        82
-      );
-
-      // RIGHT SIDE
-
-      pdf.text(
-        `Total Jobs Delivered : ${totalJobs}`,
-        170,
-        82
-      );
-
-      // ===============================
-      // SUMMARY GROUP (DOMAIN → SUBDOMAIN)
-      // ===============================
+      pdf.text(`Month / Year : ${selectedMonthYear || "All"}`, 15, 72);
+      pdf.text(`Date of Report : ${new Date().toLocaleDateString("en-IN")}`, 15, 82);
+      pdf.text(`Total Jobs Delivered : ${totalJobs}`, 170, 82);
 
       const summaryMap = filteredRows.reduce((acc, r) => {
         const domain = r.domain || "Unknown";
@@ -555,452 +448,264 @@ export default function Report() {
         if (!acc[domain]) {
           acc[domain] = { total: 0, subMap: {} };
         }
-
         acc[domain].total += totalJob;
 
         if (sub !== "-") {
-          acc[domain].subMap[sub] =
-            (acc[domain].subMap[sub] || 0) + totalJob;
+          acc[domain].subMap[sub] = (acc[domain].subMap[sub] || 0) + totalJob;
         }
-
         return acc;
       }, {});
 
-      const summaryData = Object.entries(summaryMap).map(
-        ([domain, value]) => {
-          const subText = Object.entries(value.subMap)
-            .map(([k, v]) => `${k}: ${v}`)
-            .join(", ") || "-";
-
-          return [
-            domain,
-            subText,
-            `${value.total}`
-          ];
-        }
-      );
-
-      // ===============================
-      // PDF TABLE
-      // ===============================
+      const summaryData = Object.entries(summaryMap).map(([domain, value]) => {
+        const subText = Object.entries(value.subMap)
+          .map(([k, v]) => `${k}: ${v}`)
+          .join(", ") || "-";
+        return [domain, subText, `${value.total}`];
+      });
 
       autoTable(pdf, {
         startY: 92,
         head: [["Domain", "Sub Domain", "Total job"]],
         body: summaryData,
-
         theme: "grid",
-
-        styles: {
-          fontSize: 9,
-          cellPadding: 3,
-          halign: "center",
-        },
-
-        headStyles: {
-          fillColor: [22, 78, 99],
-          textColor: 255,
-          fontStyle: "bold",
-        },
-
-        alternateRowStyles: {
-          fillColor: [248, 250, 252],
-        },
-
-        margin: {
-          left: 5,
-          right: 5,
-        },
+        styles: { fontSize: 9, cellPadding: 3, halign: "center" },
+        headStyles: { fillColor: [22, 78, 99], textColor: 255, fontStyle: "bold" },
+        alternateRowStyles: { fillColor: [248, 250, 252] },
+        margin: { left: 5, right: 5 },
       });
 
-      // ===============================
-      // DETAIL TABLE TITLE
-      // ===============================
-
       const finalY = pdf.lastAutoTable.finalY + 12;
-
       pdf.setFontSize(16);
-
       pdf.setTextColor(20);
-
-      pdf.text(
-        "DETAIL OVERVIEW",
-        pageWidth / 2,
-        finalY,
-        { align: "center" }
-      );
-
-      // ===============================
-      // MAIN TABLE
-      // ===============================
+      pdf.text("DETAIL OVERVIEW", pageWidth / 2, finalY, { align: "center" });
 
       const tableData = filteredRows.map((r, i) => ([
-
         i + 1,
-
         r.month,
-
         r.year,
-
-        r.jobType
-          ? `${r.domain} (${r.jobType})`
-          : r.domain,
-
+        r.domain,
         r.sow,
-
+        r.jobType,
         r.region,
-
-        r.county && r.county !== "-"
-          ? `${r.state} (${r.county})`
-          : r.state,
-
+        r.state === "N/A" ? "N/A" : r.county && r.county !== "-" ? `${r.state} (${r.county})` : r.state,
+        r.job_id,
+        r.current_status,
+        r.production_engineers,
+        r.qc_engineers,
         r.jobsDelivered || 0,
         formatUOM(r.uom),
+        r.otp,
+        r.internal_qc,
+        r.amdocs_qc,
+        r.receive_date || "-",
+        r.ecd_date || "-",
+        r.submission_date || "-",
       ]));
 
       autoTable(pdf, {
-
         startY: finalY + 8,
-
         theme: "grid",
-
-        head: [[
-          "Sl",
-          "Month",
-          "Year",
-          "Domain",
-          "SOW",
-          "Region",
-          "Market",
-          "Jobs",
-          "UOM"
-        ]],
-
+        head: [["Sl", "Month", "Year", "Domain", "SOW", "Job Type", "Region", "Market", "Job ID", "Status", "Prod Eng", "QC Eng", "Jobs", "UOM", "OTP", "Int QC", "QC", "Receive Date", "ECD Date", "Submission Date"]],
         body: tableData,
-
-        styles: {
-          fontSize: 7,
-          cellPadding: 2,
-          overflow: "linebreak",
-          valign: "middle",
-          halign: "center",
-        },
-
-        headStyles: {
-          fillColor: [22, 78, 99],
-          textColor: 255,
-          fontStyle: "bold",
-        },
-
-        alternateRowStyles: {
-          fillColor: [248, 250, 252],
-        },
-
-        margin: {
-          left: 5,
-          right: 5,
-        },
-
+        styles: { fontSize: 4.5, cellPadding: 1.5, overflow: "linebreak", valign: "middle", halign: "center" },
+        headStyles: { fillColor: [22, 78, 99], textColor: 255, fontStyle: "bold" },
+        alternateRowStyles: { fillColor: [248, 250, 252] },
+        margin: { left: 5, right: 5 },
         didDrawPage: () => {
-
           pdf.setFontSize(10);
-
           pdf.setTextColor(120);
-
-          pdf.text(
-            `Page ${pdf.internal.getNumberOfPages()}`,
-            pageWidth / 2,
-            pageHeight - 8,
-            { align: "center" }
-          );
+          pdf.text(`Page ${pdf.internal.getNumberOfPages()}`, pageWidth / 2, pageHeight - 8, { align: "center" });
         }
       });
 
-      // ===============================
-      // MAP PAGE
-      // ===============================
-
-      const mapElement =
-        document.querySelector(".pdf-map");
-
+      const mapElement = document.querySelector(".pdf-map");
       if (mapElement) {
-
-        const mapCanvas = await html2canvas(
-          mapElement,
-          {
-            scale: 2,
-            backgroundColor: "#ffffff",
-          }
-        );
-
-        const mapImg =
-          mapCanvas.toDataURL("image/png");
+        const mapCanvas = await html2canvas(mapElement, { scale: 2, backgroundColor: "#ffffff" });
+        const mapImg = mapCanvas.toDataURL("image/png");
 
         pdf.addPage();
-
-        // MAP PAGE HEADER
-
-        pdf.addImage(
-          img,
-          "PNG",
-          10,
-          8,
-          28,
-          28
-        );
-
+        pdf.addImage(img, "PNG", 10, 8, 28, 28);
         pdf.setFontSize(20);
-
         pdf.setTextColor(20);
-
-        pdf.text(
-          "STATES COVERAGE MAP",
-          pageWidth / 2,
-          18,
-          { align: "center" }
-        );
-
+        pdf.text("STATES COVERAGE MAP", pageWidth / 2, 18, { align: "center" });
         pdf.setFontSize(10);
-
         pdf.setTextColor(80);
+        pdf.text(`Report Date : ${new Date().toLocaleString("en-IN")}`, pageWidth - 12, 25, { align: "right" });
 
-        pdf.text(
-          `Report Date : ${new Date().toLocaleString("en-IN")}`,
-          pageWidth - 12,
-          25,
-          { align: "right" }
-        );
-
-        // BORDER LINE
         pdf.setDrawColor(180);
-
         pdf.setLineWidth(0.8);
-
-        pdf.line(
-          10,
-          38,
-          pageWidth - 10,
-          38
-        );
-
-        // MAP IMAGE
-        pdf.addImage(
-          mapImg,
-          "PNG",
-          15,
-          45,
-          pageWidth - 30,
-          145
-        );
+        pdf.line(10, 38, pageWidth - 10, 38);
+        pdf.addImage(mapImg, "PNG", 15, 45, pageWidth - 30, 145);
       }
-      const fileName = `Work_Report_${getFileTimestamp()}.pdf`;
-      pdf.save(fileName);
 
+      pdf.save(`Work_Report_${getFileTimestamp()}.pdf`);
     } catch (err) {
-
       console.error(err);
-
     } finally {
-
       setIsGeneratingPDF(false);
     }
   };
 
-const downloadExcel = async () => {
-  if (!filteredRows.length) {
-    alert("No data to export.");
-    return;
-  }
+  const downloadExcel = async () => {
+    if (!filteredRows.length) {
+      alert("No data to export.");
+      return;
+    }
 
-  const workbook = new ExcelJS.Workbook();
-  const sheet = workbook.addWorksheet("Work Report");
+    const workbook = new ExcelJS.Workbook();
+    const sheet = workbook.addWorksheet("Work Report");
 
-  // HEADER
-  sheet.columns = [
-    { header: "Sl.No", key: "sl", width: 8 },
-    { header: "Month", key: "month", width: 10 },
-    { header: "Year", key: "year", width: 10 },
-    { header: "Domain", key: "domain", width: 25 },
-    { header: "SOW", key: "sow", width: 20 },
-    { header: "Region", key: "region", width: 15 },
-    { header: "Market", key: "market", width: 25 },
-    { header: "Jobs (Total)", key: "jobs", width: 15 },
-    { header: "UOM", key: "uom", width: 30 },
-  ];
+    sheet.columns = [
+      { header: "Sl.No", key: "sl", width: 8 },
+      { header: "Month", key: "month", width: 10 },
+      { header: "Year", key: "year", width: 10 },
+      { header: "Domain", key: "domain", width: 20 },
+      { header: "SOW", key: "sow", width: 15 },
+      { header: "Job Type", key: "job_type", width: 15 },
+      { header: "Region", key: "region", width: 15 },
+      { header: "Market", key: "market", width: 25 },
+      { header: "Job ID", key: "job_id", width: 15 },
+      { header: "Status", key: "current_status", width: 15 },
+      { header: "Prod Engineers", key: "production_engineers", width: 20 },
+      { header: "QC Engineers", key: "qc_engineers", width: 20 },
+      { header: "Jobs (Total)", key: "jobs", width: 15 },
+      { header: "UOM", key: "uom", width: 25 },
+      { header: "OTP", key: "otp", width: 15 },
+      { header: "Internal QC", key: "internal_qc", width: 15 },
+      { header: "Amdocs QC", key: "amdocs_qc", width: 15 },
+      { header: "Receive Date", key: "receive_date", width: 15 },
+      { header: "ECD Date", key: "ecd_date", width: 15 },
+      { header: "Submission Date", key: "submission_date", width: 15 },
+    ];
 
-  // ROWS
-  filteredRows.forEach((r, i) => {
-    sheet.addRow({
-      sl: i + 1,
-      month: r.month,
-      year: r.year,
-      domain: r.jobType ? `${r.domain} (${r.jobType})` : r.domain,
-      sow: r.sow,
-      region: r.region,
-      market:
-        r.state === "N/A"
-          ? "N/A"
-          : r.county && r.county !== "-"
-          ? `${r.state} (${r.county})`
-          : r.state,
-      jobs: r.jobsDelivered || 0,
-      uom: formatUOM(r.uom),
+    filteredRows.forEach((r, i) => {
+      sheet.addRow({
+        sl: i + 1,
+        month: r.month,
+        year: r.year,
+        domain: r.domain,
+        sow: r.sow,
+        job_type: r.jobType,
+        region: r.region,
+        market: r.state === "N/A" ? "N/A" : r.county && r.county !== "-" ? `${r.state} (${r.county})` : r.state,
+        job_id: r.job_id,
+        current_status: r.current_status,
+        production_engineers: r.production_engineers,
+        qc_engineers: r.qc_engineers,
+        jobs: r.jobsDelivered || 0,
+        uom: formatUOM(r.uom),
+        otp: r.otp,
+        internal_qc: r.internal_qc,
+        amdocs_qc: r.amdocs_qc,
+        receive_date: r.receive_date || "",
+        ecd_date: r.ecd_date || "",
+        submission_date: r.submission_date || "",
+      });
     });
-  });
 
-  // TOTAL ROW
-  const totalJobs = filteredRows.reduce(
-    (sum, r) => sum + Number(r.jobsDelivered || 0),
-    0
-  );
+    sheet.addRow({ domain: "TOTAL", jobs: totalJobs });
 
-  sheet.addRow({
-    domain: "TOTAL",
-    jobs: totalJobs,
-  });
+    sheet.getRow(1).eachCell((cell) => {
+      cell.font = { bold: true };
+      cell.alignment = { vertical: "middle", horizontal: "center" };
+    });
 
-  // STYLE HEADER
-  sheet.getRow(1).eachCell((cell) => {
-    cell.font = { bold: true };
-    cell.alignment = { vertical: "middle", horizontal: "center" };
-  });
-
-  const buffer = await workbook.xlsx.writeBuffer();
-
-  const blob = new Blob([buffer], {
-    type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-  });
-
-  const url = window.URL.createObjectURL(blob);
-
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = `Work_Report_Detail.xlsx`;
-  a.click();
-
-  window.URL.revokeObjectURL(url);
-};
+    const buffer = await workbook.xlsx.writeBuffer();
+    const blob = new Blob([buffer], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `Work_Report_Detail.xlsx`;
+    a.click();
+    window.URL.revokeObjectURL(url);
+  };
 
   const hasDataForState = (stateName) => {
     return data.some(item => item.state === stateName);
   };
-  // CURRENT FILTER DATA
   const currentFilterData = filteredRows;
 
-  // ALL STATES
-  const allStates = [
-    ...new Set(
-      geoData.features.map(
-        (f) => f.properties.name
-      )
-    ),
-  ];
+  const allStates = [...new Set(geoData.features.map((f) => f.properties.name))];
 
   const getStateColor = (stateName) => {
     const totalJobs = currentFilterData
       .filter(item => item.state === stateName)
-      .reduce((sum, item) => {
-        return sum + Number(item.jobsDelivered || 0);
-      }, 0);
+      .reduce((sum, item) => sum + Number(item.jobsDelivered || 0), 0);
 
-    if (totalJobs === 0) {
-      return "#FFC491";
-    }
+    if (totalJobs === 0) return "#FFC491";
 
     const totals = allStates.map(state => {
       return currentFilterData
         .filter(item => item.state === state)
-        .reduce((sum, item) => {
-          return sum + Number(item.jobsDelivered || 0);
-        }, 0);
+        .reduce((sum, item) => sum + Number(item.jobsDelivered || 0), 0);
     });
 
     const maxJobs = Math.max(...totals, 1);
     const ratio = totalJobs / maxJobs;
 
     const colors = [
-      "#738F52",
-      "#9ACD32",
-      "#78BE21",
-      "#32CD32",
-      "#90EE90",
-      "#00FF00",
-      "#66FF00",
-      "#008000",
-      "#006400"
+      "#738F52", "#9ACD32", "#78BE21", "#32CD32",
+      "#90EE90", "#00FF00", "#66FF00", "#008000", "#006400"
     ];
 
-    const index = Math.min(
-      colors.length - 1,
-      Math.floor(ratio * colors.length)
-    );
-
+    const index = Math.min(colors.length - 1, Math.floor(ratio * colors.length));
     return colors[index];
   };
 
   const getLabelBgColor = (stateName) => {
-    if (hasDataForState(stateName)) {
-      return "#14532d";
-    }
+    if (hasDataForState(stateName)) return "#14532d";
     return "#991b1b";
   };
 
-
   const getLabelTextColor = () => "#ffffff";
+
   const handleEdit = (row) => {
     setEditingRowId(row.id);
-
     setEditForm({
       id: row.id,
-
       domain: row.domain || "",
-
       jobType: row.jobType || "",
-
       jobsDelivered: row.jobsDelivered || 0,
-
       state: row.state || "",
-
       county: row.county || "",
-
       region: row.region || "",
-
       sow: row.sow || "",
-
       uom: row.uom || {},
-
+      job_id: row.job_id || "",
+      current_status: row.current_status || "",
+      production_engineers: row.production_engineers || "",
+      qc_engineers: row.qc_engineers || "",
+      otp: row.otp || "",
+      internal_qc: row.internal_qc || "",
+      amdocs_qc: row.amdocs_qc || "",
+      receive_date: row.receive_date ? formatLocalDateString(row.receive_date) : "",
+      ecd_date: row.ecd_date ? formatLocalDateString(row.ecd_date) : "",
+      submission_date: row.submission_date ? formatLocalDateString(row.submission_date) : "",
       month: row.month || "",
-
       year: row.year || "",
     });
   };
+
   const handleChange = (field, value) => {
     setEditForm((prev) => ({
       ...prev,
-
-      // numeric fields fix
-      [field]:
-        field === "jobsDelivered"
-          ? Number(value)
-          : value,
+      [field]: field === "jobsDelivered" ? Number(value) : value,
     }));
   };
-  const handleUOMChange = (key, value) => {
 
+  const handleUOMChange = (key, value) => {
     setEditForm((prev) => ({
       ...prev,
-
       uom: {
         ...prev.uom,
-
         [key]: Number(value)
       }
     }));
   };
+
   return (
     <div className="report-wrapper">
       {!isGeneratingPDF && (
-        <>
         <div className="report-header">
           <h2 className="title">Work Report</h2>
           <div className="export-box" ref={exportRef}>
@@ -1018,24 +723,18 @@ const downloadExcel = async () => {
               </div>
             )}
           </div>
-          </div>
-        </>
+        </div>
       )}
 
       <div
         id="pdf-export-area"
         className={`pdf-export-area ${!isGeneratingPDF ? "pdf-hidden" : ""}`}
       >
-
         <div className="pdf-map">
           <h3 style={{ textAlign: 'center', marginBottom: '15px', color: '#1f2937' }}>
             States Coverage Map
           </h3>
-          <ComposableMap
-            projection="geoAlbersUsa"
-            width={1000}
-            height={550}
-          >
+          <ComposableMap projection="geoAlbersUsa" width={1000} height={550}>
             <Geographies geography={geoData}>
               {({ geographies, projection }) => (
                 <>
@@ -1051,7 +750,6 @@ const downloadExcel = async () => {
                   {geographies.map((geo) => {
                     const centroid = geoCentroid(geo);
                     const coords = projection(centroid);
-
                     if (!coords) return null;
 
                     const [x, y] = coords;
@@ -1083,9 +781,7 @@ const downloadExcel = async () => {
                           height={16}
                           rx={4}
                           fill={getLabelBgColor(name)}
-                          style={{
-                            filter: "drop-shadow(0 2px 5px rgba(0,0,0,0.25))"
-                          }}
+                          style={{ filter: "drop-shadow(0 2px 5px rgba(0,0,0,0.25))" }}
                         />
                         <text
                           x={x}
@@ -1108,20 +804,14 @@ const downloadExcel = async () => {
               )}
             </Geographies>
           </ComposableMap>
-          {/* LEGEND */}
           <div className="map-legend">
             <div className="legend-item">
               <span className="legend-selecteddot"></span>
-              <span>
-                Covered-{allStates.filter(s => hasDataForState(s)).length}
-              </span>
+              <span>Covered-{allStates.filter(s => hasDataForState(s)).length}</span>
             </div>
-
             <div className="legend-item">
               <span className="legend-not-selecteddot"></span>
-              <span>
-                NotCovered-{allStates.length - allStates.filter(s => hasDataForState(s)).length}
-              </span>
+              <span>NotCovered-{allStates.length - allStates.filter(s => hasDataForState(s)).length}</span>
             </div>
           </div>
         </div>
@@ -1170,11 +860,7 @@ const downloadExcel = async () => {
                       value={s}
                       style={
                         s === "Other"
-                          ? {
-                            fontWeight: "700",
-                            background: "#fff3cd",
-                            color: "#b45309",
-                          }
+                          ? { fontWeight: "700", background: "#fff3cd", color: "#b45309" }
                           : {}
                       }
                     >
@@ -1205,6 +891,7 @@ const downloadExcel = async () => {
               </div>
             </div>
           </div>
+
           <div className="table-update-info">
             <p>
               <span className="star-icon">* </span>{" "}
@@ -1218,291 +905,322 @@ const downloadExcel = async () => {
             </p>
           </div>
 
-          <table id="report-table" className="table">
-            <thead>
-              <tr>
-                <th>Sl.No</th>
-                <th>Month</th>
-                <th>Year</th>
-                <th>Domain</th>
-                <th>SOW</th>
-                <th>Region</th>
-                <th>Market Name</th>
-                <th>No.of Job Delivered</th>
-                <th>Unit of Materials(UOM)</th>
-                <th>Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {currentRows.length > 0 ? (
-                currentRows.map((r, i) => (
-                  <tr key={r.id}>
-                    <td>{(currentPage - 1) * rowsPerPage + i + 1}</td>
+          <div className="table-responsive-container">
+            <table id="report-table" className="table">
+              <thead>
+                <tr>
+                  <th>Sl.No</th>
+                  <th>Month & Year</th>
+                  <th>Domain</th>
+                  <th>SOW</th>
+                  <th>Job Type</th>
+                  <th>Region</th>
+                  <th>Market Name</th>
+                  <th>Job ID</th>
+                  <th>Current Status</th>
+                  <th>Production Engineers</th>
+                  <th>QC Engineers</th>
+                  <th>Jobs Delivered</th>
+                  <th>UOM</th>
+                  <th>OTP</th>
+                  <th>Internal QC</th>
+                  <th>Amdocs QC</th>
+                  <th>Receive Date</th>
+                  <th>ECD Date</th>
+                  <th>Submission Date</th>
+                  <th>Action</th>
+                </tr>
+              </thead>
+              <tbody>
+                {currentRows.length > 0 ? (
+                  currentRows.map((r, i) => {
+                    const isMissingOtpOrAmdocs = !r.otp || r.otp === "-" || !r.amdocs_qc || r.amdocs_qc === "-";
+                    return (
+                      <tr key={r.id} className={isMissingOtpOrAmdocs ? "light-orange-row" : ""}>
+                        <td>{(currentPage - 1) * rowsPerPage + i + 1}</td>
 
-                    {/* Month */}
-                    <td>
-                      {editingRowId === r.id ? (
-                        <input
-                          value={editForm.month || ""}
-                          onChange={(e) => handleChange("month", e.target.value)}
-                        />
-                      ) : (
-                        r.month
-                      )}
-                    </td>
+                        <td>
+                          {editingRowId === r.id ? (
+                            <input
+                              value={editForm.month || ""}
+                              onChange={(e) => handleChange("month", e.target.value)}
+                              style={{ width: "50px" }}
+                            />
+                          ) : (
+                            r.month
+                          )}
+                        </td>
 
-                    {/* Year */}
-                    <td>
-                      {editingRowId === r.id ? (
-                        <input
-                          value={editForm.year || ""}
-                          onChange={(e) =>
-                            handleChange("year", e.target.value)
-                          }
-                        />
-                      ) : (
-                        r.year
-                      )}
-                    </td>
+                        <td>
+                          {editingRowId === r.id ? (
+                            <input
+                              value={editForm.domain || ""}
+                              onChange={(e) => handleChange("domain", e.target.value)}
+                            />
+                          ) : (
+                            r.domain
+                          )}
+                        </td>
 
-                    {/* Domain */}
-                    <td>
-                      {editingRowId === r.id ? (
+                        <td>
+                          {editingRowId === r.id ? (
+                            <input
+                              value={editForm.sow || ""}
+                              onChange={(e) => handleChange("sow", e.target.value)}
+                            />
+                          ) : (
+                            r.sow
+                          )}
+                        </td>
 
-                        <div
-                          style={{
-                            display: "flex",
-                            flexDirection: "column",
-                            gap: "5px"
-                          }}
-                        >
+                        <td>
+                          {editingRowId === r.id ? (
+                            <input
+                              value={editForm.jobType || ""}
+                              onChange={(e) => handleChange("jobType", e.target.value)}
+                            />
+                          ) : (
+                            r.jobType
+                          )}
+                        </td>
 
-                          <input
-                            value={editForm.domain || ""}
-                            onChange={(e) =>
-                              handleChange("domain", e.target.value)
-                            }
-                            placeholder="Domain"
-                          />
+                        <td>
+                          {editingRowId === r.id ? (
+                            <input
+                              value={editForm.region || ""}
+                              onChange={(e) => handleChange("region", e.target.value)}
+                            />
+                          ) : (
+                            r.region || "N/A"
+                          )}
+                        </td>
 
-                          <input
-                            value={editForm.jobType || ""}
-                            onChange={(e) =>
-                              handleChange("jobType", e.target.value)
-                            }
-                            placeholder="Sub Domain"
-                          />
-
-                        </div>
-
-                      ) : (
-                        r.jobType
-                          ? `${r.domain} (${r.jobType})`
-                          : r.domain
-                      )}
-                    </td>
-
-                    {/* SOW */}
-                    <td>
-                      {editingRowId === r.id ? (
-                        <input
-                          value={editForm.sow || ""}
-                          onChange={(e) => handleChange("sow", e.target.value)}
-                        />
-                      ) : (
-                        r.sow
-                      )}
-                    </td>
-
-                    {/* Region */}
-                    <td>
-                      {editingRowId === r.id ? (
-                        <input
-                          value={editForm.region || ""}
-                          onChange={(e) =>
-                            handleChange("region", e.target.value)
-                          }
-                        />
-                      ) : (
-                        r.region || "N/A"
-                      )}
-                    </td>
-
-                    {/* Market */}
-                    {/* Market */}
-                    <td>
-                      {editingRowId === r.id ? (
-
-                        <div
-                          style={{
-                            display: "flex",
-                            flexDirection: "column",
-                            gap: "5px"
-                          }}
-                        >
-
-                          {/* STATE */}
-                          <input
-                            value={editForm.state || ""}
-                            onChange={(e) =>
-                              handleChange("state", e.target.value)
-                            }
-                            placeholder="State"
-                          />
-
-                          {/* COUNTY ONLY IF EXISTS */}
-                          {editForm.county &&
-                            editForm.county !== "-" &&
-                            editForm.county !== "Unknown" &&
-                            editForm.county !== "Unknown County" && (
-
+                        <td>
+                          {editingRowId === r.id ? (
+                            <div style={{ display: "flex", flexDirection: "column", gap: "5px" }}>
+                              <input
+                                value={editForm.state || ""}
+                                onChange={(e) => handleChange("state", e.target.value)}
+                                placeholder="State"
+                              />
                               <input
                                 value={editForm.county || ""}
-                                onChange={(e) =>
-                                  handleChange("county", e.target.value)
-                                }
+                                onChange={(e) => handleChange("county", e.target.value)}
                                 placeholder="County"
                               />
-                            )}
-
-                        </div>
-
-                      ) : (
-                        <>
-                          {r.state === "N/A"
-                            ? "N/A"
-                            : r.county &&
-                              r.county !== "-" &&
-                              r.county !== "Unknown" &&
-                              r.county !== "Unknown County"
-                              ? `${r.state} (${r.county})`
-                              : r.state}
-                        </>
-                      )}
-                    </td>
-                    {/* Jobs */}
-                    <td className="job-cell">
-                      {editingRowId === r.id ? (
-                        <input
-                          type="number"
-                          value={editForm.jobsDelivered || 0}
-                          onChange={(e) => handleChange("jobsDelivered", e.target.value)}
-                        />
-                      ) : (
-                        <div className="job-main">
-                          {r.jobsDelivered || 0} Jobs
-                        </div>
-                      )}
-                    </td>
-
-                    {/* UOM */}
-                    {/* UOM */}
-                    <td>
-                      {editingRowId === r.id ? (
-
-                        <div
-                          style={{
-                            display: "flex",
-                            flexDirection: "column",
-                            gap: "8px",
-                            minWidth: "180px"
-                          }}
-                        >
-
-                          {Object.entries(editForm.uom || {}).map(([key, value]) => (
-
-                            <div
-                              key={key}
-                              style={{
-                                display: "flex",
-                                alignItems: "center",
-                                justifyContent: "space-between",
-                                gap: "10px"
-                              }}
-                            >
-
-                              <label
-                                style={{
-                                  fontWeight: "600",
-                                  minWidth: "80px"
-                                }}
-                              >
-                                {key}
-                              </label>
-
-                              <input
-                                type="number"
-                                value={value || 0}
-                                onChange={(e) =>
-                                  handleUOMChange(key, e.target.value)
-                                }
-                                style={{
-                                  width: "80px",
-                                  padding: "5px"
-                                }}
-                              />
-
                             </div>
-                          ))}
+                          ) : (
+                            <>
+                              {r.state === "N/A"
+                                ? "N/A"
+                                : r.county &&
+                                  r.county !== "-" &&
+                                  r.county !== "Unknown" &&
+                                  r.county !== "Unknown County"
+                                  ? `${r.state} (${r.county})`
+                                  : r.state}
+                            </>
+                          )}
+                        </td>
 
-                        </div>
+                        <td>
+                          {editingRowId === r.id ? (
+                            <input
+                              value={editForm.job_id || ""}
+                              onChange={(e) => handleChange("job_id", e.target.value)}
+                            />
+                          ) : (
+                            r.job_id
+                          )}
+                        </td>
 
-                      ) : (
-                        formatUOM(r.uom)
-                      )}
-                    </td>
-                    {/* ACTIONS (ONLY BUTTONS) */}
-                    {/* ACTIONS */}
-                    <td>
-                      {editingRowId === r.id ? (
-                        <div className="action-buttons">
+                        <td>
+                          {editingRowId === r.id ? (
+                            <input
+                              value={editForm.current_status || ""}
+                              onChange={(e) => handleChange("current_status", e.target.value)}
+                            />
+                          ) : (
+                            r.current_status
+                          )}
+                        </td>
 
-                          <button
-                            className="cancel-btn"
-                            onClick={() => setEditingRowId(null)}
-                          >
-                            ❌
-                          </button>
-                          <button className="save-btn" onClick={handleSave}>
-                            ✔️
-                          </button>
+                        <td>
+                          {editingRowId === r.id ? (
+                            <input
+                              value={editForm.production_engineers || ""}
+                              onChange={(e) => handleChange("production_engineers", e.target.value)}
+                            />
+                          ) : (
+                            r.production_engineers
+                          )}
+                        </td>
 
-                        </div>
-                      ) : (
-                        <div className="action-buttons">
-                          <button
-                            className="edit-btn"
-                            onClick={() => handleEdit(r)}
-                          >
-                            ✏️
-                          </button>
+                        <td>
+                          {editingRowId === r.id ? (
+                            <input
+                              value={editForm.qc_engineers || ""}
+                              onChange={(e) => handleChange("qc_engineers", e.target.value)}
+                            />
+                          ) : (
+                            r.qc_engineers
+                          )}
+                        </td>
 
-                          <button
-                            className="delete-btn"
-                            onClick={() => handleDelete(r.id)}
-                          >
-                            🗑️
-                          </button>
-                        </div>
-                      )}
+                        <td className="job-cell">
+                          {editingRowId === r.id ? (
+                            <input
+                              type="number"
+                              value={editForm.jobsDelivered || 0}
+                              onChange={(e) => handleChange("jobsDelivered", e.target.value)}
+                              style={{ width: "60px" }}
+                            />
+                          ) : (
+                            <div className="job-main">
+                              {r.jobsDelivered || 0}
+                            </div>
+                          )}
+                        </td>
+
+                        <td>
+                          {editingRowId === r.id ? (
+                            <div style={{ display: "flex", flexDirection: "column", gap: "5px", minWidth: "140px" }}>
+                              {Object.entries(editForm.uom || {}).map(([key, value]) => (
+                                <div key={key} style={{ display: "flex", justifyContent: "space-between", gap: "5px" }}>
+                                  <span style={{ fontSize: "11px" }}>{key}:</span>
+                                  <input
+                                    type="number"
+                                    value={value || 0}
+                                    onChange={(e) => handleUOMChange(key, e.target.value)}
+                                    style={{ width: "50px" }}
+                                  />
+                                </div>
+                              ))}
+                            </div>
+                          ) : (
+                            formatUOM(r.uom)
+                          )}
+                        </td>
+
+                        <td>
+                          {editingRowId === r.id ? (
+                            <input
+                              value={editForm.otp || ""}
+                              onChange={(e) => handleChange("otp", e.target.value)}
+                              style={{ width: "60px" }}
+                            />
+                          ) : (
+                            r.otp
+                          )}
+                        </td>
+
+                        <td>
+                          {editingRowId === r.id ? (
+                            <input
+                              value={editForm.internal_qc || ""}
+                              onChange={(e) => handleChange("internal_qc", e.target.value)}
+                              style={{ width: "60px" }}
+                            />
+                          ) : (
+                            r.internal_qc
+                          )}
+                        </td>
+
+                        <td>
+                          {editingRowId === r.id ? (
+                            <input
+                              value={editForm.amdocs_qc || ""}
+                              onChange={(e) => handleChange("amdocs_qc", e.target.value)}
+                              style={{ width: "60px" }}
+                            />
+                          ) : (
+                            r.amdocs_qc
+                          )}
+                        </td>
+
+                        <td>
+                          {editingRowId === r.id ? (
+                            <input
+                              type="date"
+                              value={editForm.receive_date || ""}
+                              onChange={(e) => handleChange("receive_date", e.target.value)}
+                            />
+                          ) : (
+                            r.receive_date || "-"
+                          )}
+                        </td>
+
+                        <td>
+                          {editingRowId === r.id ? (
+                            <input
+                              type="date"
+                              value={editForm.ecd_date || ""}
+                              onChange={(e) => handleChange("ecd_date", e.target.value)}
+                            />
+                          ) : (
+                            r.ecd_date || "-"
+                          )}
+                        </td>
+
+                        <td>
+                          {editingRowId === r.id ? (
+                            <input
+                              type="date"
+                              value={editForm.submission_date || ""}
+                              onChange={(e) => handleChange("submission_date", e.target.value)}
+                            />
+                          ) : (
+                            r.submission_date || "-"
+                          )}
+                        </td>
+
+                        <td>
+                          {editingRowId === r.id ? (
+                            <div className="action-buttons">
+                              <button
+                                className="cancel-btn"
+                                onClick={() => setEditingRowId(null)}
+                              >
+                                ❌
+                              </button>
+                              <button className="save-btn" onClick={handleSave}>
+                                ✔️
+                              </button>
+                            </div>
+                          ) : (
+                            <div className="action-buttons">
+                              <button
+                                className="edit-btn"
+                                onClick={() => handleEdit(r)}
+                              >
+                                ✏️
+                              </button>
+                              <button
+                                className="delete-btn"
+                                onClick={() => handleDelete(r.id)}
+                              >
+                                🗑️
+                              </button>
+                            </div>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })
+                ) : (
+                  <tr>
+                    <td colSpan="21" className="no-data">
+                      ❌ No data found
                     </td>
                   </tr>
-                ))
-              ) : (
-                <tr>
-                  <td colSpan="8" className="no-data">
-                    ❌ No data found
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
+                )}
+              </tbody>
+            </table>
+          </div>
 
           <div className="report-footer">
             <div className="last-update">
-              <strong>Total Records:</strong>{filteredRows.length}
-              {/* {" | "}
-              <strong>Last Updated On:</strong> {formattedLastUpdated} */}
+              <strong>Total Records:</strong> {filteredRows.length}
             </div>
 
             <div className="pagination">
@@ -1524,14 +1242,10 @@ const downloadExcel = async () => {
                 onChange={(e) => {
                   let val = e.target.value;
                   setJumpPage(val);
-
                   let page = Number(val);
-
                   if (!page) return;
-
                   if (page < 1) page = 1;
                   if (page > totalPages) page = totalPages;
-
                   setCurrentPage(page);
                 }}
                 className="page-input"
@@ -1546,8 +1260,7 @@ const downloadExcel = async () => {
             </div>
           </div>
         </>
-      )
-      }
-    </div >
+      )}
+    </div>
   );
 }
