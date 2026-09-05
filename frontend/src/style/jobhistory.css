@@ -1,4 +1,3 @@
-
 * {
   margin: 0;
   padding: 0;
@@ -6,20 +5,17 @@
 }
 
 .job-history-container {
-  background: #f4f7fc;
   min-height: 100vh;
   font-family: Arial, Helvetica, sans-serif;
-  padding: 20px;
 }
 
 .page-title {
-  font-size: 28px;
+ font-size: 32px;
   font-weight: 700;
   color: #1e3a8a;
   margin-bottom: 20px;
+  text-align: center;
 }
-
-
 /* ===================================
    FILTER SECTION (Optimized Widths)
 =================================== */
@@ -116,19 +112,13 @@
 
 .table-wrapper {
   width: 100%;
-
-  /* Table ke andar vertical scroll */
-  max-height: calc(100vh - 300px);
-
+   /* max-height: calc(100vh - 300px); */
+  max-height: 100vh;
   overflow-x: auto;
-  overflow-y: auto;
-
   background: #ffffff;
   border-radius: 12px;
   box-shadow: 0 4px 15px rgba(0, 0, 0, 0.08);
   margin-bottom: 20px;
-
-  /* Firefox Scrollbar Support */
   scrollbar-width: auto;
   scrollbar-color: #64748b #e2e8f0;
 }
@@ -166,7 +156,7 @@
 
 .job-history-table {
   width: 100%;
-  min-width: 1400px;
+  min-width: 1300px;
   border-collapse: collapse;
 }
 
@@ -230,27 +220,6 @@
   background: #eef6ff;
   transition: 0.3s;
 }
-
-
-/* ===================================
-   SPECIAL COLUMNS
-=================================== */
-
-.job-history-table td:nth-child(10),
-.job-history-table td:nth-child(11) {
-  font-weight: 600;
-}
-
-.job-history-table td:nth-child(12) {
-  font-weight: 600;
-  color: #b45309;
-}
-
-
-/* ===================================
-   TABLE ICONS
-=================================== */
-
 .job-history-table svg {
   font-size: 18px;
   cursor: pointer;
@@ -260,11 +229,6 @@
 .job-history-table svg:hover {
   transform: scale(1.15);
 }
-
-
-/* ===================================
-   VIEW WORK BUTTON
-=================================== */
 
 .view-work-btn {
   background: #2563eb;
@@ -278,11 +242,6 @@
 .view-work-btn:hover {
   background: #1d4ed8;
 }
-
-
-/* ===================================
-   MODAL & WORK OVERLAY
-=================================== */
 
 .jobwork-overlay {
   position: fixed;
@@ -340,11 +299,6 @@
   background: #f3f4f6;
 }
 
-
-/* ===================================
-   GENERAL INFORMATION
-=================================== */
-
 .jobwork-general-section {
   display: flex;
   border-bottom: 1px solid #e5e7eb;
@@ -383,37 +337,54 @@
   color: #111827;
 }
 
-
-/* ===================================
-   QC
-=================================== */
-
 .jobwork-general-right {
-  width: 220px;
+  width: 280px;
   border-left: 1px solid #e5e7eb;
   display: flex;
   flex-direction: column;
-  justify-content: center;
-  align-items: center;
-  gap: 8px;
+}
+
+.jobwork-qc-wrapper {
+  display: flex;
+  width: 100%;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.jobwork-qc-box {
+  flex: 1;
+  text-align: center;
+  padding: 10px 4px;
+}
+
+.jobwork-qc-box:first-child {
+  border-right: 1px solid #e5e7eb;
 }
 
 .jobwork-qc-heading {
-  font-size: 15px;
+  font-size: 12px;
   font-weight: 600;
-  color: #374151;
+  color: #475569;
 }
 
 .jobwork-qc-value {
-  font-size: 32px;
+  font-size: 20px;
   font-weight: 700;
-  color: #b91c1c;
+  margin-top: 4px;
 }
 
+.jobwork-otp-container {
+  width: 100%;
+  text-align: center;
+  padding: 8px 4px;
+  background: #f8fafc;
+}
 
-/* ===================================
-   WORK INFORMATION
-=================================== */
+.jobwork-otp-value {
+  font-size: 15px;
+  font-weight: 700;
+  color: #111827;
+  margin-top: 2px;
+}
 
 .jobwork-section-title {
   margin: 0;
@@ -458,11 +429,6 @@
   background: #f5f7fa;
 }
 
-
-/* ===================================
-   WORK TABLE COLUMN WIDTH
-=================================== */
-
 .jobwork-table th:nth-child(1),
 .jobwork-table td:nth-child(1) {
   width: 15%;
@@ -486,11 +452,14 @@
   width: 20%;
   text-align: center;
 }
+/* Light orange row highlight jab OTP ya Amdocs QC missing ya '-' ho */
+.job-history-table tbody tr.light-orange-row {
+  background-color: #ffedd5 !important;
+}
 
-
-/* ===================================
-   RESPONSIVE - TABLET
-=================================== */
+.job-history-table tbody tr.light-orange-row:hover {
+  background-color: #fed7aa !important;
+}
 
 @media (max-width: 992px) {
 
@@ -503,10 +472,6 @@
   }
 }
 
-
-/* ===================================
-   RESPONSIVE - MOBILE
-=================================== */
 
 @media (max-width: 768px) {
 
@@ -543,7 +508,7 @@
   }
 
   .job-history-table {
-    min-width: 1400px;
+    min-width: 1300px;
   }
 
   .jobwork-modal {
