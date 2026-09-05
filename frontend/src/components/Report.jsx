@@ -2,13 +2,11 @@ import React, { useEffect, useState } from "react";
 import axios from "axios";
 import "../style/reports.css";
 
-
 export default function Reports({ domain, states }) {
   const [data, setData] = useState([]);
   const [open, setOpen] = useState(false);
   const [selectedPeriod, setSelectedPeriod] = useState("");
   const [lastUpdateMap, setLastUpdateMap] = useState({});
-
 
   useEffect(() => {
     setTimeout(() => setOpen(true), 50);
@@ -41,11 +39,19 @@ export default function Reports({ domain, states }) {
     }
     return "Unknown";
   };
+
+  // FETCH LAST UPDATE MAP[cite: 3]
   useEffect(() => {
     axios
       .get("http://localhost:5000/api/work/domain-last-update")
       .then((res) => {
-        setLastUpdateMap(res.data || {});
+        const mapObj = {};
+        if (Array.isArray(res.data)) {
+          res.data.forEach((item) => {
+            mapObj[item.domain] = item.lastUpdate;
+          });
+        }
+        setLastUpdateMap(mapObj);
       })
       .catch((err) => {
         console.log(err);
@@ -72,7 +78,7 @@ export default function Reports({ domain, states }) {
       .get("http://localhost:5000/api/work/all")
       .then((res) => {
         setData(res.data || []);
-      })
+      });
   }, [domain, states]);
 
   // ================= MONTH-YEAR OPTIONS =================
@@ -93,10 +99,13 @@ export default function Reports({ domain, states }) {
         .flatMap((item) =>
           (item.months || []).map((m) => {
             if (!m) return null;
+            const parts = m.includes(",") ? m.split(",") : m.split("-");
+            const month = parts[0]?.trim();
+            const year = parts[1]?.trim();
 
-            const [month, year] = m.split("-");
-
-            return `${month} 20${year}`;
+            if (!month || !year) return null;
+            const fullYear = year.length === 2 ? `20${year}` : year;
+            return `${month} ${fullYear}`;
           })
         )
         .filter(Boolean)
@@ -112,10 +121,8 @@ export default function Reports({ domain, states }) {
     return monthOrder.indexOf(am) - monthOrder.indexOf(bm);
   });
 
-
   // ================= JOB FORMAT =================
   const getJobData = (item) => {
-
     return {
       main: 1,
       sub: `Jobs Delivered`,
@@ -132,17 +139,21 @@ export default function Reports({ domain, states }) {
     if (selectedPeriod) {
       return months.some((m) => {
         if (!m) return false;
-
-        const [month, year] = m.split("-");
+        const parts = m.includes(",") ? m.split(",") : m.split("-");
+        const month = parts[0]?.trim();
+        const year = parts[1]?.trim();
+        if (!month || !year) return false;
+        const fullYear = year.length === 2 ? `20${year}` : year;
 
         return (
-          month.trim() === selectedPeriod.split(" ")[0] &&
-          `20${year}` === selectedPeriod.split(" ")[1]
+          month === selectedPeriod.split(" ")[0] &&
+          fullYear === selectedPeriod.split(" ")[1]
         );
       });
     }
     return true;
   });
+
   // ================= TOTAL JOBS =================
   const totalJobs = filteredData.length;
 
@@ -197,12 +208,9 @@ export default function Reports({ domain, states }) {
                           {item.domain || "-"}
                         </div>
 
-                        <div className="domain-sub">
-                          {Array.isArray(item.subDomain)
-                            ? item.subDomain.join(" | ")
-                            : typeof item.subDomain === "object"
-                              ? Object.values(item.subDomain || {}).join(" | ")
-                              : item.subDomain || "-"}
+                        {/* Domain ke neeche subDomain ki jagah ab job_type show hoga */}
+                        <div className="domain-sub" style={{ color: "#64748b", fontStyle: "italic" }}>
+                          {item.job_type || "-"}
                         </div>
                       </td>
 
