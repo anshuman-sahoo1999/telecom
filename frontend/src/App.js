@@ -1,15 +1,12 @@
 import React from "react";
 import { BrowserRouter as Router, Routes, Route } from "react-router-dom";
-
 import Login from "./Pages/login";
 import Telecom from "./Pages/telecom";
 import WorkUpdate from "./Pages/WorkUpdate";
 import Report from "./Pages/Report";
 import MasterDomainCreation from "./Pages/MasterDomainCreation";
-
 import Header from "./components/header";
 import ProtectedRoute from "./components/ProtectedRoute";
-
 import AdminDashboard from "./Pages/AdminDashboard";
 import MISDashboard from "./Pages/MISDashboard";
 import TeamLeadDashboard from "./Pages/TeamLeadDashboard";
@@ -18,9 +15,11 @@ import MasterDashboard from "./Pages/MasterDashboard";
 import UserManagement from "./Pages/UserManagement";
 import Organogram from "./Pages/Organogram";
 import JobCreation from "./Pages/JobCreation";
+import JobSubmission from "./Pages/JobSubmission";
 import TimesheetPage from "./Pages/TimesheetPage";
-import TimesheetManagement from "./Pages/TimesheetManagement"
-import JobHistory from "./Pages/JobHistory"
+import TimesheetManagement from "./Pages/TimesheetManagement";
+import JobHistory from "./Pages/JobHistory";
+import CapacityForecast from "./Pages/CapacityForecast";
 
 function App() {
   return (
@@ -29,7 +28,7 @@ function App() {
         {/* Login */}
         <Route path="/" element={<Login />} />
 
-        {/* ================= ADMIN ================= */}
+        {/* Admin Routes */}
         <Route
           element={
             <ProtectedRoute allowedRoles={["Admin"]}>
@@ -43,13 +42,10 @@ function App() {
           <Route path="/admin-dashboard/report" element={<Report />} />
           <Route path="/admin-dashboard/user-management" element={<UserManagement />} />
           <Route path="/admin-dashboard/organogram" element={<Organogram />} />
-          <Route
-            path="/teamlead-dashboard/workstatus"
-            element={<TimesheetManagement />}
-          />
+          <Route path="/admin-dashboard/workstatus" element={<TimesheetManagement />} />
         </Route>
 
-        {/* ================= MIS ================= */}
+        {/* MIS Routes */}
         <Route
           element={
             <ProtectedRoute allowedRoles={["MIS"]}>
@@ -63,13 +59,15 @@ function App() {
           <Route path="/mis-dashboard/domaincreation" element={<MasterDomainCreation />} />
           <Route path="/mis-dashboard/report" element={<Report />} />
           <Route path="/mis-dashboard/jobcreation" element={<JobCreation />} />
+          <Route path="/mis-dashboard/jobsubmission" element={<JobSubmission />} />
           <Route path="/mis-dashboard/jobhistory" element={<JobHistory />} />
+          <Route path="/mis-dashboard/capacityforecast" element={<CapacityForecast />} />
         </Route>
 
-        {/* ================= TEAM LEAD ================= */}
+        {/* Team Lead Routes */}
         <Route
           element={
-            <ProtectedRoute allowedRoles={["Team Lead"]}>
+            <ProtectedRoute allowedRoles={["Team Lead", "TeamLead"]}>
               <Header />
             </ProtectedRoute>
           }
@@ -82,7 +80,7 @@ function App() {
           <Route path="/teamlead-dashboard/timesheet" element={<TimesheetManagement />} />
         </Route>
 
-        {/* ================= TEAM MEMBER ================= */}
+        {/* Team Member Routes */}
         <Route
           element={
             <ProtectedRoute allowedRoles={["Team Member"]}>
@@ -93,7 +91,7 @@ function App() {
           <Route path="/teammember-dashboard" element={<TeamMemberDashboard />} />
         </Route>
 
-        {/* ================= MASTER ================= */}
+        {/* Master Routes */}
         <Route
           element={
             <ProtectedRoute allowedRoles={["MASTER"]}>
