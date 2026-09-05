@@ -61,7 +61,7 @@ top:0;
   border: none;
   border-radius: 10px;
   background: transparent;
-   color: #ffffff;
+  color: #ffffff;
   font-size: 16px;
   font-weight: 600;
   text-align: left;
@@ -90,7 +90,6 @@ top:0;
 .menuIcon {
   font-size: 22px;
   min-width: 20px;
-  color: #5db622;   /* Sky Blue */
   transition: all 0.3s ease;
 }
 
@@ -106,13 +105,11 @@ top:0;
     padding:22px;
     display:flex;
     flex-direction:column;
-    gap:28px;
-
+    gap:24px;
     max-height:calc(100vh - 120px);
-        flex: 1;
+    flex: 1;
     overflow-y: auto;
     overflow-x: hidden;
-
     scrollbar-width: none;   /* Firefox */
     -ms-overflow-style: none;
 }
