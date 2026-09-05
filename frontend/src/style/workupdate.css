@@ -2,14 +2,13 @@
    PAGE BACKGROUND
 ========================= */
 .excel-page {
-  min-height: 100vh;
   font-family: "Segoe UI", sans-serif;
   max-width: 1250px;
-  margin: 0 auto;   /* centers */
+  margin: 0 auto;
 }
 
-.page-title {
-   font-size: 32px;
+.page-titled {
+  font-size: 32px;
   font-weight: 700;
   color: #1e3a8a;
   margin-bottom: 20px;
@@ -113,7 +112,7 @@
 }
 
 /* =========================
-   🔥 EXCEL TABLE (IMPORTANT)
+   EXCEL TABLE
 ========================= */
 .modal-preview {
   max-height: 500px;
@@ -123,55 +122,37 @@
   background: white;
 }
 
-/* TABLE */
 .modal-preview table {
   width: 100%;
   border-collapse: collapse;
   font-size: 13px;
 }
 
-/* HEADER (STICKY + EXCEL STYLE) */
 .modal-preview th {
   position: sticky;
   top: 0;
   z-index: 10;
-
   background: linear-gradient(135deg, #0f172a, #1e3a8a);
   color: #ffffff;
   font-weight: 600;
-
   padding: 10px;
   border: 1px solid #334155;
   text-align: left;
 }
 
-/* CELLS */
 .modal-preview td {
   padding: 8px;
   border: 1px solid #e2e8f0;
   color: #0f172a;
 }
 
-/* ROW HOVER */
 .modal-preview tr:hover td {
   background: #eaf2ff;
   transition: 0.2s;
 }
 
-/* EVEN ROW STRIPE (Excel feel) */
 .modal-preview tr:nth-child(even) td {
   background: #f8fbff;
-}
-
-/* =========================
-   INLINE VIEW TABLE (SAME STYLE)
-========================= */
-.inline-view {
-  margin-top: 20px;
-  padding: 12px;
-  border-radius: 12px;
-  border: 1px solid #dbeafe;
-  background: #ffffff;
 }
 
 /* =========================
@@ -221,7 +202,6 @@
   overflow: hidden;
 }
 
-/* MODAL HEADER */
 .modal-header {
   display: flex;
   justify-content: space-between;
@@ -231,7 +211,6 @@
   padding: 12px;
 }
 
-/* 🔥 CLOSE BUTTON RIGHT SIDE */
 .modal-header button {
   margin-left: auto;
   background: #dc2626;
@@ -246,7 +225,6 @@
   background: #ef4444;
 }
 
-/* MODAL BODY */
 .modal-body {
   flex: 1;
   padding: 10px;
@@ -254,7 +232,6 @@
   background: #f8fbff;
 }
 
-/* ACTIONS */
 .modal-actions {
   padding: 12px;
   display: flex;
@@ -345,51 +322,37 @@
   90% { opacity: 1; }
   100% { opacity: 0; transform: translateY(-10px); }
 }
-/* INLINE HEADER (NEW LOOK) */
+
 .inline-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-
   padding: 12px 14px;
-
-  /* 🔥 Gradient background */
   background: #1e3a8a;
-
   color: white;
-
   border-radius: 10px 10px 0 0;
-
   box-shadow: 0 4px 10px rgba(0,0,0,0.1);
   margin-bottom: 10px;
 }
 
-/* TITLE */
 .inline-header h3 {
   margin: 0;
   font-size: 16px;
   font-weight: 600;
 }
 
-/* CLOSE BUTTON */
 .close-btn {
   margin-left: auto;
-
   background: #dc2626;
   color: white;
-
   border: none;
   padding: 6px 12px;
   border-radius: 8px;
-
   cursor: pointer;
-
   display: flex;
   align-items: center;
   gap: 6px;
-
   font-weight: 500;
-
   transition: 0.2s;
 }
 
@@ -397,47 +360,25 @@
   background: #ef4444;
   transform: scale(1.05);
 }
+
 @media (max-width: 900px) {
-
-  /* =========================
-     GLOBAL FIX (MAIN GAP FIX)
-  ========================= */
-
-  .page {
-    display: flex;
-    flex-direction: column;
-    height: 100vh ;
-    min-height: auto !important;
-  }
-
-  /* =========================
-     EXCEL PAGE WRAPPER
-  ========================= */
   .excel-page {
-    padding: 10px !important;
-    min-height: auto !important;
-    height: auto !important;
+    padding: 10px !important; 
     margin: 0 !important;
   }
-
-  .page-title {
+   
+  .page-titled {
     font-size: 20px;
-    margin-bottom: 10px;
+    margin-bottom: 10px; 
     text-align: center;
   }
 
-  /* =========================
-     MAIN CARD
-  ========================= */
   .excel-card {
     padding: 10px !important;
     margin: 0 !important;
     border-radius: 10px;
   }
 
-  /* =========================
-     HEADER
-  ========================= */
   .top-header {
     flex-direction: column;
     align-items: flex-start;
@@ -449,9 +390,6 @@
     justify-content: center;
   }
 
-  /* =========================
-     FILE LIST ITEM
-  ========================= */
   .import-card {
     flex-direction: column;
     align-items: flex-start;
@@ -480,9 +418,6 @@
     padding: 5px 8px;
   }
 
-  /* =========================
-     TABLE AREA (IMPORTANT)
-  ========================= */
   .modal-preview {
     max-height: 55vh !important;
     overflow: auto !important;
@@ -491,7 +426,7 @@
 
   .modal-preview table {
     font-size: 11px;
-    min-width: 650px; /* horizontal scroll */
+    min-width: 650px;
   }
 
   .modal-preview th,
@@ -500,17 +435,6 @@
     white-space: nowrap;
   }
 
-  /* =========================
-     INLINE VIEW
-  ========================= */
-  .inline-view {
-    padding: 8px !important;
-    margin: 0 !important;
-  }
-
-  /* =========================
-     SHEET TABS
-  ========================= */
   .sheet-tabs {
     flex-wrap: wrap;
     gap: 6px;
@@ -521,9 +445,6 @@
     padding: 5px 8px;
   }
 
-  /* =========================
-     MODAL FIX
-  ========================= */
   .excel-modal {
     width: 95%;
     height: 90vh;
@@ -553,9 +474,6 @@
     width: 100%;
   }
 
-  /* =========================
-     POPUP
-  ========================= */
   .popup-box {
     width: 90%;
     padding: 14px;
@@ -570,9 +488,6 @@
     width: 100%;
   }
 
-  /* =========================
-     TOAST
-  ========================= */
   .success-toast,
   .delete-toast {
     top: 10px;
@@ -580,9 +495,6 @@
     font-size: 12px;
   }
 
-  /* =========================
-     INLINE HEADER
-  ========================= */
   .inline-header {
     flex-direction: column;
     align-items: flex-start;
@@ -591,18 +503,5 @@
 
   .close-btn {
     align-self: flex-end;
-  }
-
-  /* =========================
-     FINAL GAP KILLER (IMPORTANT)
-  ========================= */
-  .excel-card:last-child,
-  .modal-preview:last-child,
-  .inline-view:last-child {
-    margin-bottom: 0 !important;
-  }
-
-  .modal-body {
-    padding-bottom: 0 !important;
   }
 }
