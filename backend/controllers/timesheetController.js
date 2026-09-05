@@ -152,8 +152,7 @@ exports.getTimesheetByJob = (req, res) => {
       t.adminStatus,
 
       j.internalQc,
-      j.amdocsQc,
-      j.markupRequired
+      j.amdocsQc
 
     FROM timesheet_entries t
     LEFT JOIN job_creation j 
