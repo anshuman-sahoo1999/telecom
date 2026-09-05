@@ -268,7 +268,6 @@ const importExcel = async (req, res) => {
 
       totalRows += rows.length;
 
-      // Sequential execution taaki upar ki row pehle aur niche ki row baad me hi process ho
       for (let i = 0; i < rows.length; i++) {
         const row = rows[i];
 
@@ -705,10 +704,9 @@ const updateWork = (req, res) => {
 };
 
 /* ======================================
-   GETTERS (FIXED ORDER: ID KE HISAB SE)
+   GETTERS
 ====================================== */
 const getAllWork = (req, res) => {
-  // Yahan ORDER BY id ASC kar diya hai taaki jaise data insert hua tha wahi sequence frontend par dikhe
   db.query(
     "SELECT *, updated_at FROM work_updates ORDER BY id ASC",
     (err, rows) => {
