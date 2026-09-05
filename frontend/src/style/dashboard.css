@@ -1,7 +1,7 @@
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
 
 :root {
-  --navy: #0f172a;
+  --navy: #283261;
   --sky: #0ea5e9;
   --blue: #2563eb;
   --green: #16a34a;
@@ -39,7 +39,7 @@ body{
   text-align:center;
   font-size:40px;
   font-weight:700;
-  color:var(--navy);
+  color:#1e3a8a;
 }
 
 .mainDesc{
