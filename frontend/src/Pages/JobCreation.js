@@ -11,7 +11,6 @@ const JobCreation = () => {
     jobId: "",
     receiveDate: "",
     ecdDate: "",
-    submissionDate: "",
   });
 
   useEffect(() => {
@@ -22,36 +21,36 @@ const JobCreation = () => {
     try {
       const masterRes = await axios.get("http://localhost:5000/api/master");
       const workRes = await axios.get("http://localhost:5000/api/work/bydomain");
+      const jobRes = await axios.get("http://localhost:5000/api/job/all");
 
-      // MASTER domains (F2, F3, Telecom)
-      const masterDomains = Object.keys(masterRes.data || {}).map((d) => ({
-        domain: d
-      }));
+      const normalize = (d) => (d || "").toString().trim().toUpperCase();
 
-      // WORK domains
-      const workDomains = (workRes.data || []).map((d) => ({
-        domain: d.domain
-      }));
+      // Master domains
+      const masterDomains = Object.keys(masterRes.data || {}).map((d) => normalize(d));
 
-      // MERGE
-      const merged = [...masterDomains, ...workDomains];
+      // Work domains
+      const workDomains = (workRes.data || []).map((d) => normalize(d.domain));
 
-      // REMOVE DUPLICATES
-      const unique = merged.filter(
-        (item, index, arr) =>
-          arr.findIndex(x => x.domain === item.domain) === index
-      );
+      // Job Creation domains
+      const jobDomains = (jobRes.data || []).map((j) => normalize(j.domain));
 
-      setDomains(unique);
+      // Merge all and remove duplicates
+      const merged = [...new Set([...masterDomains, ...workDomains, ...jobDomains])].filter(Boolean);
+
+      const uniqueFormatted = merged.map((d) => ({ domain: d }));
+      setDomains(uniqueFormatted);
 
     } catch (error) {
       console.log(error);
     }
   };
+
   const handleChange = (e) => {
+    const { name, value } = e.target;
+
     setFormData((prev) => ({
       ...prev,
-      [e.target.name]: e.target.value,
+      [name]: value,
     }));
   };
 
@@ -73,8 +72,9 @@ const JobCreation = () => {
           jobId: "",
           receiveDate: "",
           ecdDate: "",
-          submissionDate: "",
         });
+
+        fetchDomains();
       }
     } catch (error) {
       console.log(error);
@@ -144,27 +144,15 @@ const JobCreation = () => {
             />
           </div>
 
-          <div className="date-row">
-            <div className="form-group">
-              <label>ECD Date</label>
-              <input
-                type="date"
-                name="ecdDate"
-                value={formData.ecdDate}
-                onChange={handleChange}
-                required
-              />
-            </div>
-
-            <div className="form-group">
-              <label>Submission Date</label>
-              <input
-                type="date"
-                name="submissionDate"
-                value={formData.submissionDate}
-                onChange={handleChange}
-              />
-            </div>
+          <div className="form-group">
+            <label>ECD Date</label>
+            <input
+              type="date"
+              name="ecdDate"
+              value={formData.ecdDate}
+              onChange={handleChange}
+              required
+            />
           </div>
 
           <div className="button-wrapper">
