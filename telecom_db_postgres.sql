@@ -108,7 +108,7 @@ VALUES
 ON CONFLICT (id) DO NOTHING;
 
 -- Reset sequence for users
-SELECT setval(pg_get_serialsequence('users', 'id'), COALESCE(MAX(id), 1)) FROM users;
+SELECT setval(pg_get_serialsequence('users'::text, 'id'::text), COALESCE(MAX(id), 1)) FROM users;
 
 -- Seed Initial Timesheet Data
 INSERT INTO timesheet_entries (id, task, startTime, endTime, hours, created_at, jobId, employeeName, tlStatus, adminStatus, tlRevisedReason, adminRevisedReason, teamMember)
@@ -118,4 +118,4 @@ VALUES
 ON CONFLICT (id) DO NOTHING;
 
 -- Reset sequence for timesheet_entries
-SELECT setval(pg_get_serialsequence('timesheet_entries', 'id'), COALESCE(MAX(id), 1)) FROM timesheet_entries;
+SELECT setval(pg_get_serialsequence('timesheet_entries'::text, 'id'::text), COALESCE(MAX(id), 1)) FROM timesheet_entries;
