@@ -1,9 +1,8 @@
-import { API_BASE_URL } from "../config";
 import React, { useState } from "react";
 import axios from "axios";
 import "../style/TimesheetModal.css";
 
-const API_URL = `${API_BASE_URL}/api/timesheet`;
+const API_URL = "http://localhost:5000/api/timesheet";
 
 const TimesheetModal = ({ jobs, onClose }) => {
   // ✅ SAFE USER PARSE (NO CRASH)
