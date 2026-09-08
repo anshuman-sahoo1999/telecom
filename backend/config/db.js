@@ -1,6 +1,8 @@
 require('dotenv').config();
 
-const dbUrl = process.env.DATABASE_URL || process.env.NEON_DATABASE_URL || process.env.POSTGRES_URL;
+const defaultNeonUrl = 'postgresql://neondb_owner:npg_UksnzaI1b8Bc@ep-royal-pond-atxwucsp-pooler.c-9.us-east-1.aws.neon.tech/neondb?sslmode=require';
+
+const dbUrl = process.env.DATABASE_URL || process.env.NEON_DATABASE_URL || process.env.POSTGRES_URL || defaultNeonUrl;
 
 let isPostgres = false;
 if (dbUrl && (dbUrl.startsWith('postgres://') || dbUrl.startsWith('postgresql://'))) {
@@ -14,13 +16,8 @@ if (isPostgres) {
     ssl: { rejectUnauthorized: false }
   });
 
-  pool.connect((err, client, release) => {
-    if (err) {
-      console.error('NeonDB (PostgreSQL) Connection Error:', err.message);
-    } else {
-      console.log('NeonDB (PostgreSQL) Connected successfully!');
-      if (release) release();
-    }
+  pool.on('error', (err) => {
+    console.error('Unexpected NeonDB pool error:', err.message);
   });
 
   const db = {
@@ -49,6 +46,7 @@ if (isPostgres) {
 
       pool.query(pgSql, params, (err, res) => {
         if (err) {
+          console.error('NeonDB Query Error:', err.message, 'SQL:', pgSql);
           if (callback) return callback(err, null);
           return;
         }
