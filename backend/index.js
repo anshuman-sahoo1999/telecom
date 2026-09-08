@@ -29,6 +29,15 @@ app.use("/api/job", jobCreationRoutes);
 app.use("/api/timesheet", timesheetRoutes);
 app.use("/api/capacity-forecast", capacityRoutes);
 
+// Global Error Handler for Vercel Serverless Function resilience
+app.use((err, req, res, next) => {
+  console.error("Global Server Error:", err);
+  res.status(500).json({
+    success: false,
+    message: err.message || "Internal Server Error"
+  });
+});
+
 const PORT = process.env.PORT || 5000;
 
 if (require.main === module) {
