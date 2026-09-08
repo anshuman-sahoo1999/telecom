@@ -1,4 +1,3 @@
-import { API_BASE_URL } from "../config";
 import React, { useState, useEffect, useCallback, useRef } from "react";
 import axios from "axios";
 import html2canvas from "html2canvas";
@@ -55,10 +54,10 @@ export default function CapacityForecast() {
 
   const fetchAllData = useCallback(async () => {
     try {
-      const workRes = await axios.get(`${API_BASE_URL}/api/work/all`);
+      const workRes = await axios.get("http://localhost:5000/api/work/all");
       setAllWorkData(workRes.data);
 
-      const masterRes = await axios.get(`${API_BASE_URL}/api/master`);
+      const masterRes = await axios.get("http://localhost:5000/api/master");
       const data = masterRes.data || {};
       setMasterDataMap(data);
       const domainList = Object.keys(data);
@@ -79,7 +78,7 @@ export default function CapacityForecast() {
 
   const fetchCapacityRecords = useCallback(async () => {
     try {
-      const res = await axios.get(`${API_BASE_URL}/api/capacity-forecast`);
+      const res = await axios.get("http://localhost:5000/api/capacity-forecast");
       setRecords(res.data || []);
     } catch (err) {
       console.error("Error fetching capacity records:", err);
@@ -167,7 +166,7 @@ export default function CapacityForecast() {
     };
 
     try {
-      await axios.post(`${API_BASE_URL}/api/capacity-forecast`, payloadData);
+      await axios.post("http://localhost:5000/api/capacity-forecast", payloadData);
       alert("Data submitted successfully!");
       fetchCapacityRecords();
     } catch (err) {
@@ -233,7 +232,7 @@ export default function CapacityForecast() {
     };
 
     try {
-      await axios.put(`${API_BASE_URL}/api/capacity-forecast/${rowId}`, payloadData);
+      await axios.put(`http://localhost:5000/api/capacity-forecast/${rowId}`, payloadData);
       alert("Record updated successfully!");
       setEditingRowId(null);
       fetchCapacityRecords();
@@ -246,7 +245,7 @@ export default function CapacityForecast() {
   const handleDelete = async (id) => {
     if (!window.confirm("Are you sure you want to delete this record?")) return;
     try {
-      await axios.delete(`${API_BASE_URL}/api/capacity-forecast/${id}`);
+      await axios.delete(`http://localhost:5000/api/capacity-forecast/${id}`);
       alert("Record deleted successfully!");
       fetchCapacityRecords();
     } catch (err) {
