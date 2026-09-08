@@ -52,7 +52,35 @@ if (isPostgres) {
           if (callback) return callback(err, null);
           return;
         }
-        const results = res ? (res.rows || []) : [];
+        const rawRows = res ? (res.rows || []) : [];
+        const results = rawRows.map(row => {
+          if (!row || typeof row !== 'object') return row;
+          return {
+            ...row,
+            memberType: row.membertype ?? row.memberType,
+            totalExperience: row.totalexperience ?? row.totalExperience,
+            telecomExperience: row.telecomexperience ?? row.telecomExperience,
+            skillSets: row.skillsets ?? row.skillSets,
+            mobileNo: row.mobileno ?? row.mobileNo,
+            lastExpUpdate: row.lastexpupdate ?? row.lastExpUpdate,
+            jobId: row.jobid ?? row.jobId,
+            receiveDate: row.receivedate ?? row.receiveDate,
+            ecdDate: row.ecddate ?? row.ecdDate,
+            submissionDate: row.submissiondate ?? row.submissionDate,
+            internalQc: row.internalqc ?? row.internalQc,
+            amdocsQc: row.amdocsqc ?? row.amdocsQc,
+            jobType: row.jobtype ?? row.jobType,
+            startTime: row.starttime ?? row.startTime,
+            endTime: row.endtime ?? row.endTime,
+            employeeName: row.employeename ?? row.employeeName,
+            tlStatus: row.tlstatus ?? row.tlStatus,
+            adminStatus: row.adminstatus ?? row.adminStatus,
+            tlRevisedReason: row.tlrevisedreason ?? row.tlRevisedReason,
+            adminRevisedReason: row.adminrevisedreason ?? row.adminRevisedReason,
+            teamMember: row.teammember ?? row.teamMember
+          };
+        });
+
         if (res) {
           results.affectedRows = res.rowCount;
           if (res.rows && res.rows.length > 0 && res.rows[0].id !== undefined) {
