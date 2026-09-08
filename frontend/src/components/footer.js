@@ -1,3 +1,4 @@
+import { API_BASE_URL } from "../config";
 import React, { useEffect, useState } from "react";
 import axios from "axios";
 import { FaAward, FaQuoteLeft } from "react-icons/fa";
@@ -12,7 +13,7 @@ const Footer = () => {
   useEffect(() => {
     // 1. Fetch Top Performers Data
     axios
-      .get("http://localhost:5000/api/timesheet/all")
+      .get(`${API_BASE_URL}/api/timesheet/all`)
       .then((res) => {
         const timesheetData = res.data?.data || [];
         const performers = Object.values(

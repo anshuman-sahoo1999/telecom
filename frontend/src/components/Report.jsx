@@ -1,3 +1,4 @@
+import { API_BASE_URL } from "../config";
 import React, { useEffect, useState } from "react";
 import axios from "axios";
 import "../style/reports.css";
@@ -43,7 +44,7 @@ export default function Reports({ domain, states }) {
   // FETCH LAST UPDATE MAP[cite: 3]
   useEffect(() => {
     axios
-      .get("http://localhost:5000/api/work/domain-last-update")
+      .get(`${API_BASE_URL}/api/work/domain-last-update`)
       .then((res) => {
         const mapObj = {};
         if (Array.isArray(res.data)) {
@@ -75,7 +76,7 @@ export default function Reports({ domain, states }) {
   // ================= FETCH DATA =================
   useEffect(() => {
     axios
-      .get("http://localhost:5000/api/work/all")
+      .get(`${API_BASE_URL}/api/work/all`)
       .then((res) => {
         setData(res.data || []);
       });

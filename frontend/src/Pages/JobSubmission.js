@@ -1,3 +1,4 @@
+import { API_BASE_URL } from "../config";
 import React, { useEffect, useState } from "react";
 import axios from "axios";
 import "../style/JobSubmission.css";
@@ -38,8 +39,8 @@ const JobSubmission = () => {
 
 const loadDistinctDomains = async () => {
     try {
-      const masterResponse = await axios.get("http://localhost:5000/api/master");
-      const workResponse = await axios.get("http://localhost:5000/api/work/bydomain");
+      const masterResponse = await axios.get(`${API_BASE_URL}/api/master`);
+      const workResponse = await axios.get(`${API_BASE_URL}/api/work/bydomain`);
 
       // Sabhi domains ko uppercase me convert karke map kar rahe hain taaki case mismatch na ho
       const primaryDomains = Object.keys(masterResponse.data || {}).map((d) => ({
@@ -65,7 +66,7 @@ const loadDistinctDomains = async () => {
   useEffect(() => {
     const fetchFilteredMetricsAndIds = async () => {
       try {
-        const response = await axios.get("http://localhost:5000/api/job/all");
+        const response = await axios.get(`${API_BASE_URL}/api/job/all`);
         let allJobs = response.data || [];
 
         // Case-insensitive domain filter
@@ -123,7 +124,7 @@ const loadDistinctDomains = async () => {
       };
 
       const response = await axios.post(
-        "http://localhost:5000/api/job/submit",
+        `${API_BASE_URL}/api/job/submit`,
         payload
       );
 

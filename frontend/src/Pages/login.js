@@ -2,6 +2,7 @@ import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import axios from "axios";
 import { FaEye, FaEyeSlash } from "react-icons/fa";
+import { API_BASE_URL } from "../config";
 import "../style/login.css";
 
 const Login = () => {
@@ -26,7 +27,7 @@ const Login = () => {
         : `${email.trim()}${emailDomain}`;
 
       const res = await axios.post(
-        "http://localhost:5000/api/auth/login",
+        `${API_BASE_URL}/api/auth/login`,
         {
           login_id: finalEmail,
           password,

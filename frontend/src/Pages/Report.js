@@ -1,3 +1,4 @@
+import { API_BASE_URL } from "../config";
 import React, { useEffect, useState, useRef } from "react";
 import axios from "axios";
 import jsPDF from "jspdf";
@@ -69,7 +70,7 @@ const handleSave = async () => {
       };
 
       const res = await axios.put(
-        `http://localhost:5000/api/work/update/${editForm.id}`,
+        `${API_BASE_URL}/api/work/update/${editForm.id}`,
         payload
       );
 
@@ -95,7 +96,7 @@ const handleSave = async () => {
 
     try {
       const res = await axios.delete(
-        `http://localhost:5000/api/work/delete/${id}`
+        `${API_BASE_URL}/api/work/delete/${id}`
       );
 
       if (res.status === 200) {
@@ -110,7 +111,7 @@ const handleSave = async () => {
 
   const fetchData = async () => {
     try {
-      const res = await axios.get("http://localhost:5000/api/work/all");
+      const res = await axios.get(`${API_BASE_URL}/api/work/all`);
       console.log("res",res);
       
       setData(res.data);

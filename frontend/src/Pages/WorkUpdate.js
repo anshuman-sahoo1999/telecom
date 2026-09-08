@@ -1,3 +1,4 @@
+import { API_BASE_URL } from "../config";
 import React, { useState, useEffect, useRef } from "react";
 import axios from "axios";
 import ExcelJS from "exceljs";
@@ -37,7 +38,7 @@ export default function WorkUpdate({ refreshDashboard }) {
   /* ================= FETCH FILE LIST ================= */
   const fetchData = async () => {
     try {
-      const res = await axios.get("http://localhost:5000/api/work/all");
+      const res = await axios.get(`${API_BASE_URL}/api/work/all`);
       setImports(res.data || []);
     } catch (err) {
       console.log(err);
@@ -144,7 +145,7 @@ export default function WorkUpdate({ refreshDashboard }) {
       formData.append("file", excelFile);
 
       await axios.post(
-        "http://localhost:5000/api/work/import-excel",
+        `${API_BASE_URL}/api/work/import-excel`,
         formData,
         { headers: { "Content-Type": "multipart/form-data" } }
       );
@@ -176,7 +177,7 @@ export default function WorkUpdate({ refreshDashboard }) {
       if (!window.confirm(`Delete file "${fileName}"?`)) return;
 
       await axios.delete(
-        `http://localhost:5000/api/work/delete-file/${fileName}`
+        `${API_BASE_URL}/api/work/delete-file/${fileName}`
       );
 
       fetchData();
@@ -202,7 +203,7 @@ export default function WorkUpdate({ refreshDashboard }) {
       let data = [];
       try {
         const res = await axios.get(
-          `http://localhost:5000/api/work/file/${fileName}`
+          `${API_BASE_URL}/api/work/file/${fileName}`
         );
         data = res.data || [];
       } catch (err) {

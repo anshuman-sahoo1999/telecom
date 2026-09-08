@@ -1,3 +1,4 @@
+import { API_BASE_URL } from "../config";
 import React, { useState, useEffect } from "react";
 import axios from "axios";
 import { FaHome, FaClock, FaPlus } from "react-icons/fa";
@@ -28,7 +29,7 @@ const TeamMemberDashboard = () => {
       const domain = userData?.domain;
 
       const res = await axios.get(
-        `http://localhost:5000/api/job/all?domain=${domain}`
+        `${API_BASE_URL}/api/job/all?domain=${domain}`
       );
 
       setJobs(res.data || []);

@@ -1,10 +1,11 @@
+import { API_BASE_URL } from "../config";
 import React, { useState, useEffect } from "react";
 import axios from "axios";
 import "../style/masterdomian.css";
 
 const API_BASE =
   process.env.REACT_APP_API_BASE ||
-  "http://localhost:5000/api/master";
+  `${API_BASE_URL}/api/master`;
 
 const MasterDomainCreation = () => {
   const [domains, setDomains] = useState([]);
@@ -28,7 +29,7 @@ const MasterDomainCreation = () => {
       // 2. Work Data se bhi existing domains fetch karein taaki koi chhoote nahi
       let workList = [];
       try {
-        const workRes = await axios.get("http://localhost:5000/api/work/all");
+        const workRes = await axios.get(`${API_BASE_URL}/api/work/all`);
         if (Array.isArray(workRes.data)) {
           workList = workRes.data.map(item => item.domain).filter(Boolean);
         }

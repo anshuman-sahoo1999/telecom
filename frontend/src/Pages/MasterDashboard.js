@@ -1,3 +1,4 @@
+import { API_BASE_URL } from "../config";
 import React, { useEffect, useState } from "react";
 import axios from "axios";
 import { FaUserPlus, FaUsers } from "react-icons/fa";
@@ -49,7 +50,7 @@ const MasterDashboard = () => {
 
     const getUsers = async () => {
         try {
-            const res = await axios.get("http://localhost:5000/api/auth/users");
+            const res = await axios.get(`${API_BASE_URL}/api/auth/users`);
             setUsers(res.data);
         } catch (err) {
             console.log(err);
@@ -64,8 +65,8 @@ const MasterDashboard = () => {
     useEffect(() => {
         const loadDomains = async () => {
             try {
-                const masterRes = await axios.get("http://localhost:5000/api/master");
-                const workRes = await axios.get("http://localhost:5000/api/work/bydomain");
+                const masterRes = await axios.get(`${API_BASE_URL}/api/master`);
+                const workRes = await axios.get(`${API_BASE_URL}/api/work/bydomain`);
 
                 const masterDomains = Object.keys(masterRes.data || {});
                 const workDomains = (workRes.data || []).map((d) => d.domain);
@@ -83,7 +84,7 @@ const MasterDashboard = () => {
 
     const fetchDomains = async () => {
         try {
-            const res = await axios.get("http://localhost:5000/api/work/bydomain");
+            const res = await axios.get(`${API_BASE_URL}/api/work/bydomain`);
             const data = res.data || [];
             const cleanDomains = data.map(d =>
                 typeof d === "string" ? d : d.domain
@@ -102,7 +103,7 @@ const MasterDashboard = () => {
             const finalEmail = `${cleanEmail}${emailDomain}`;
 
             await axios.post(
-                "http://localhost:5000/api/auth/create-user",
+                `${API_BASE_URL}/api/auth/create-user`,
                 {
                     name,
                     emp_id,
@@ -158,7 +159,7 @@ const MasterDashboard = () => {
             if (result.isConfirmed) {
                 try {
                     await axios.delete(
-                        `http://localhost:5000/api/auth/delete-user/${id}`
+                        `${API_BASE_URL}/api/auth/delete-user/${id}`
                     );
 
                     setUsers((prev) =>
@@ -213,7 +214,7 @@ const MasterDashboard = () => {
     const saveEdit = async (id) => {
         try {
             await axios.put(
-                `http://localhost:5000/api/auth/update-user/${id}`,
+                `${API_BASE_URL}/api/auth/update-user/${id}`,
                 editRowData
             );
 
@@ -263,7 +264,7 @@ const MasterDashboard = () => {
         }
 
         try {
-            await axios.put(`http://localhost:5000/api/auth/update-password/${passEditId}`, {
+            await axios.put(`${API_BASE_URL}/api/auth/update-password/${passEditId}`, {
                 password: newPass
             });
 

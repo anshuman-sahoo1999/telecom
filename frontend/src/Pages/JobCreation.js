@@ -1,3 +1,4 @@
+import { API_BASE_URL } from "../config";
 import React, { useEffect, useState } from "react";
 import axios from "axios";
 import "../style/jobcreation.css";
@@ -19,9 +20,9 @@ const JobCreation = () => {
 
   const fetchDomains = async () => {
     try {
-      const masterRes = await axios.get("http://localhost:5000/api/master");
-      const workRes = await axios.get("http://localhost:5000/api/work/bydomain");
-      const jobRes = await axios.get("http://localhost:5000/api/job/all");
+      const masterRes = await axios.get(`${API_BASE_URL}/api/master`);
+      const workRes = await axios.get(`${API_BASE_URL}/api/work/bydomain`);
+      const jobRes = await axios.get(`${API_BASE_URL}/api/job/all`);
 
       const normalize = (d) => (d || "").toString().trim().toUpperCase();
 
@@ -59,7 +60,7 @@ const JobCreation = () => {
 
     try {
       const res = await axios.post(
-        "http://localhost:5000/api/job/create",
+        `${API_BASE_URL}/api/job/create`,
         formData
       );
 

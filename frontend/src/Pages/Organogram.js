@@ -1,3 +1,4 @@
+import { API_BASE_URL } from "../config";
 import React, { useState, useEffect, useRef } from "react";
 import axios from "axios";
 import { FaSitemap, FaProjectDiagram, FaFileExport, FaExpand, FaCompress } from "react-icons/fa";
@@ -82,7 +83,7 @@ const Organogram = () => {
 
     const fetchUsers = async () => {
         try {
-            const res = await axios.get("http://localhost:5000/api/auth/all-user-details");
+            const res = await axios.get(`${API_BASE_URL}/api/auth/all-user-details`);
             setUsers(res.data.users || []);
         } catch (err) {
             console.log(err);
@@ -91,7 +92,7 @@ const Organogram = () => {
 
     const fetchDomains = async () => {
         try {
-            const res = await axios.get("http://localhost:5000/api/work/bydomain");
+            const res = await axios.get(`${API_BASE_URL}/api/work/bydomain`);
             setDomains(res.data || []);
         } catch (err) {
             console.log(err);
@@ -130,7 +131,7 @@ const Organogram = () => {
         }).then(async (result) => {
             if (result.isConfirmed) {
                 try {
-                    await axios.delete(`http://localhost:5000/api/auth/delete-user/${id}`);
+                    await axios.delete(`${API_BASE_URL}/api/auth/delete-user/${id}`);
                     setUsers((prev) => prev.filter((u) => u.id !== id));
                     Swal.fire("Deleted!", "User deleted successfully ✔", "success");
                 } catch (error) {
@@ -296,12 +297,12 @@ const Organogram = () => {
                 })
             );
             try {
-                await axios.put(`http://localhost:5000/api/auth/update-position/${draggedUser.id}`, {
+                await axios.put(`${API_BASE_URL}/api/auth/update-position/${draggedUser.id}`, {
                     domain: targetDomain,
                     memberType: null,
                 });
                 if (targetTL) {
-                    await axios.put(`http://localhost:5000/api/auth/update-position/${targetTL.id}`, {
+                    await axios.put(`${API_BASE_URL}/api/auth/update-position/${targetTL.id}`, {
                         domain: oldDomain,
                         memberType: null,
                     });
@@ -341,12 +342,12 @@ const Organogram = () => {
                     u.memberType === targetType &&
                     (u.domain || "").split(",").map((x) => x.trim()).includes(targetDomain)
             );
-            await axios.put(`http://localhost:5000/api/auth/update-position/${draggedId}`, {
+            await axios.put(`${API_BASE_URL}/api/auth/update-position/${draggedId}`, {
                 domain: targetDomain,
                 memberType: targetType,
             });
             if (targetUser) {
-                await axios.put(`http://localhost:5000/api/auth/update-position/${targetUser.id}`, {
+                await axios.put(`${API_BASE_URL}/api/auth/update-position/${targetUser.id}`, {
                     domain: draggedUser.domain,
                     memberType: draggedUser.memberType,
                 });

@@ -1,3 +1,4 @@
+import { API_BASE_URL } from "../config";
 import React, { useEffect, useState } from "react";
 import axios from "axios";
 import "../style/TimesheetPage.css";
@@ -12,7 +13,7 @@ const fetchData = () => {
   const domain = user?.domain;
 
   axios
-    .get(`http://localhost:5000/api/timesheet/all?domain=${domain}`)
+    .get(`${API_BASE_URL}/api/timesheet/all?domain=${domain}`)
     .then((res) => {
       setData(res.data?.data || []);
     })

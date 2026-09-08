@@ -1,3 +1,4 @@
+import { API_BASE_URL } from "../config";
 import React, { useState, useRef, useEffect, useCallback, useMemo } from "react";
 import { useOutletContext } from "react-router-dom";
 import { ComposableMap, Geographies, Geography } from "react-simple-maps";
@@ -147,15 +148,15 @@ export default function TelecomMap() {
 
   const fetchAllData = async () => {
     try {
-      const workRes = await axios.get("http://localhost:5000/api/work/all");
+      const workRes = await axios.get(`${API_BASE_URL}/api/work/all`);
       setAllWorkData(workRes.data || []);
       setCurrentFilterData(workRes.data || []);
 
-      const masterRes = await axios.get("http://localhost:5000/api/master");
+      const masterRes = await axios.get(`${API_BASE_URL}/api/master`);
       const data = masterRes.data || {};
       setDomains(Object.keys(data));
 
-      const stateMapRes = await axios.get("http://localhost:5000/api/work/state-wise-jobs");
+      const stateMapRes = await axios.get(`${API_BASE_URL}/api/work/state-wise-jobs`);
       setMapReportData(stateMapRes.data || {});
     } catch (err) {
       console.error("Error fetching dashboard data:", err);

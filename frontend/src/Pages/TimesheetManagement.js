@@ -1,3 +1,4 @@
+import { API_BASE_URL } from "../config";
 import React, { useEffect, useState, useRef } from "react";
 import axios from "axios";
 import "../style/Timesheet.css";
@@ -25,7 +26,7 @@ const TimesheetManagement = () => {
 
   useEffect(() => {
     axios
-      .get("http://localhost:5000/api/timesheet/all")
+      .get(`${API_BASE_URL}/api/timesheet/all`)
       .then((res) => {
         const formatted = (res.data?.data || []).map((item) => {
           const dateObj = item.created_at
@@ -69,8 +70,8 @@ const TimesheetManagement = () => {
   useEffect(() => {
     const loadDomains = async () => {
       try {
-        const masterRes = await axios.get("http://localhost:5000/api/master");
-        const workRes = await axios.get("http://localhost:5000/api/work/bydomain");
+        const masterRes = await axios.get(`${API_BASE_URL}/api/master`);
+        const workRes = await axios.get(`${API_BASE_URL}/api/work/bydomain`);
 
         // MASTER domains (F2, F3, Telecom)
         const masterDomains = Object.keys(masterRes.data || {}).map((d) => ({
@@ -106,7 +107,7 @@ const TimesheetManagement = () => {
     }
 
     axios.get(
-      `http://localhost:5000/api/auth/tl/bydomain?domain=${filters.domain}`
+      `${API_BASE_URL}/api/auth/tl/bydomain?domain=${filters.domain}`
     )
       .then((res) => {
         setTls(res.data?.data || []);
@@ -118,7 +119,7 @@ const TimesheetManagement = () => {
   }, [filters.domain]);
   const changeStatus = async (id, status, revisedText = "") => {
     try {
-      await axios.put("http://localhost:5000/api/timesheet/update-status", {
+      await axios.put(`${API_BASE_URL}/api/timesheet/update-status`, {
         id,
         status,
         role: user.role,
@@ -202,7 +203,7 @@ const TimesheetManagement = () => {
       await Promise.all(
         selected.map((id) =>
           axios.put(
-            "http://localhost:5000/api/timesheet/update-status",
+            `${API_BASE_URL}/api/timesheet/update-status`,
             {
               id,
               status,
