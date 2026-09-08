@@ -1,4 +1,3 @@
-import { API_BASE_URL } from "../config";
 import React, { useEffect, useState } from "react";
 import axios from "axios";
 import { FaEdit, FaTrash } from "react-icons/fa";
@@ -57,7 +56,7 @@ const JobHistory = () => {
 
     const fetchReportData = async () => {
         try {
-            const res = await axios.get(`${API_BASE_URL}/api/work/all`);
+            const res = await axios.get("http://localhost:5000/api/work/all");
             const data = Array.isArray(res.data) ? res.data : (res.data?.data || []);
             setWorkDataReport(data);
         } catch (error) {
@@ -67,7 +66,7 @@ const JobHistory = () => {
 
     const fetchMasterDomains = async () => {
         try {
-            const res = await axios.get(`${API_BASE_URL}/api/master`);
+            const res = await axios.get("http://localhost:5000/api/master");
             const data = res.data || {};
             setDomains(Object.keys(data));
         } catch (error) {
@@ -78,7 +77,7 @@ const JobHistory = () => {
     const fetchWorkByJob = async (jobId) => {
         try {
             const res = await axios.get(
-                `${API_BASE_URL}/api/timesheet/job/${jobId}`
+                `http://localhost:5000/api/timesheet/job/${jobId}`
             );
 
             const rawData = res.data?.data || [];
@@ -105,7 +104,7 @@ const JobHistory = () => {
 
     const fetchJobs = async () => {
         try {
-            const res = await axios.get(`${API_BASE_URL}/api/job/all`);
+            const res = await axios.get("http://localhost:5000/api/job/all");
             const data = Array.isArray(res.data) ? res.data : (res.data?.data || []);
             setJobs(data);
         } catch (error) {
@@ -158,8 +157,8 @@ const JobHistory = () => {
 
         try {
             const url = businessJobId
-                ? `${API_BASE_URL}/api/job/delete/${rowId}?jobId=${encodeURIComponent(businessJobId)}`
-                : `${API_BASE_URL}/api/job/delete/${rowId}`;
+                ? `http://localhost:5000/api/job/delete/${rowId}?jobId=${encodeURIComponent(businessJobId)}`
+                : `http://localhost:5000/api/job/delete/${rowId}`;
 
             await axios.delete(url);
             alert("Job Deleted Successfully");
@@ -204,7 +203,7 @@ const JobHistory = () => {
             };
 
             const res = await axios.put(
-                `${API_BASE_URL}/api/job/update/${id}`,
+                `http://localhost:5000/api/job/update/${id}`,
                 payload
             );
 
@@ -251,7 +250,7 @@ const JobHistory = () => {
             const domainVal = job.domain || "";
             if (domainVal) {
                 const res = await axios.get(
-                    `${API_BASE_URL}/api/auth/tl/bydomain?domain=${domainVal}`
+                    `http://localhost:5000/api/auth/tl/bydomain?domain=${domainVal}`
                 );
 
                 const tlData = res.data?.data || [];
