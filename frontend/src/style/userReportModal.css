@@ -1,0 +1,89 @@
+.profile-overlay {
+    position: fixed;
+    inset: 0;
+    background: transparent;
+    pointer-events: none;
+    z-index: 999999 !important;
+}
+
+/* TOOLTIP BOX */
+.profile-box {
+    width: 340px;
+    background: #ffffff;
+    border-radius: 10px;
+    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.3);
+    font-family: "Segoe UI", Arial, sans-serif;
+    overflow: hidden;
+    pointer-events: auto;
+    max-width: calc(100vw - 20px);
+    z-index: 1000000 !important;
+}
+
+/* HEADER */
+.profile-header {
+    background: linear-gradient(135deg, #1d2944, #385a92);
+    color: white;
+    padding: 5px 10px;
+    font-size: 13px;
+    font-weight: 600;
+}
+
+.profile-header h2 {
+    margin: 0;
+    font-size: 13px;
+}
+
+/* BODY - Height kam karne ke liye padding aur gap reduce kiya hai */
+.profile-body {
+    padding: 6px 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 3px;            
+    font-size: 12px;
+    background: #fafbfc;
+}
+
+/* ROW STYLE */
+.profile-body div {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    border-bottom: 1px dashed #e2e8f0;
+    padding: 2px 0;      
+}
+
+/* LABEL */
+.profile-body b {
+    min-width: 105px;
+    color: #334155;
+    font-weight: 600;
+    flex-shrink: 0;
+}
+
+/* VALUE */
+.profile-body span {
+    text-align: right;
+    color: #475569;
+    word-break: break-word;
+    overflow-wrap: break-word;
+    max-width: 180px;
+}
+
+/* Last row border remove */
+.profile-body div:last-child {
+    border-bottom: none;
+}
+
+/* Responsive for Mobile */
+@media (max-width: 768px) {
+    .profile-box {
+        width: 90vw;
+        max-width: 300px;
+        left: 50% !important;
+        transform: translateX(-50%);
+    }
+
+    .profile-body span {
+        max-width: 160px;
+    }
+}

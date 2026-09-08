@@ -1,0 +1,423 @@
+.footer {
+  background: #08111f;
+  color: white;
+  font-family: Arial, sans-serif;
+  max-height: 290px; 
+  overflow: hidden;
+  padding: 25px 80px;
+} 
+
+.footer__container {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 50px;
+}
+
+.footer__left {
+  width: 40%;
+  background: #ffffff;   /* white background */
+  color: #08111f;        /* dark text for contrast */
+  padding: 25px;
+  border-radius: 10px;
+}
+
+.footer__logo {
+  width: 95px;
+}
+.footer__left h3 {
+  font-size: 18px;
+  margin: 5px 0;
+  color: #08111f;
+}
+.footer__left p {
+    color: #08111f;
+  margin: 3px 0;
+  font-size: 14px;
+}
+
+/* RIGHT CONTAINER BOX */
+.footer__right {
+  width: 35%;
+  height: 220px; /* Is height ke andar pura content ghoomega */
+  overflow: hidden;
+  position: relative;
+}
+
+/* FIXED HEADER STYLING */
+.footer__title {
+  background: linear-gradient(90deg, #4ed600, #29258b);
+  height: 40px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  border-radius: 8px;
+  font-size: 16px;
+  font-weight: bold;
+  margin-bottom: 15px;
+  position: relative;
+  z-index: 10;
+}
+
+/* SCROLL DISPLAY WINDOW */
+.main-scroll-window {
+  width: 100%;
+  height: 280px; /* Content area height jisme se scroll guzrega */
+  overflow: hidden;
+  position: relative;
+}
+
+/* POORA SCROLL TRACK (List + Quote Ek Sath) */
+.main-scroll-track {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  position: absolute;
+  width: 100%;
+  /* Pure combine content ko aaram se dikhane ke liye 35s speed best hai */
+  animation: mainScrollResetUp 35s linear infinite;
+}
+
+.main-scroll-track:hover {
+  animation-play-state: paused;
+}
+
+.achievement-card {
+  background: #fff;
+  border-radius: 10px;
+  padding: 10px 15px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+}
+
+.quote-card {
+  background: rgba(255, 255, 255, 0.05);
+  border-left: 4px solid #4ed600;
+  border-radius: 6px;
+  padding: 15px;
+  box-sizing: border-box;
+}
+
+.quote-icon {
+  color: #4ed600;
+  font-size: 14px;
+  margin-bottom: 5px;
+  opacity: 0.8;
+}
+
+.quote-text {
+  font-size: 13.5px;
+  font-style: italic;
+  color: #f0f0f0;
+  margin: 0 0 5px 0;
+  line-height: 1.45;
+  word-wrap: break-word; 
+}
+
+.quote-author {
+  font-size: 12px;
+  color: #b0b0b0;
+  display: block;
+  text-align: right;
+  font-weight: bold;
+}
+
+/* RE-SET ANIMATION KEYFRAMES */
+@keyframes mainScrollResetUp {
+  0% {
+    transform: translateY(50%);  
+  }
+  100% {
+    transform: translateY(-100%); 
+  }
+}  
+.performer-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 0;
+  border-bottom: 1px solid #eee;
+}
+
+.performer-row:last-child {
+  border-bottom: none;
+}
+
+.award-wrapper {
+  position: relative;
+  width: 32px;
+  height: 32px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.award-icon {
+  font-size: 36px;
+  color: #FFD700;
+}
+
+.award-number {
+  position: absolute;
+  font-size: 13px;
+  font-weight: 900;
+  color: #35680c;
+  top: 1px;
+}
+
+.performer-info {
+  flex: 1;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.p-name {
+  font-size: 13.5px;
+  font-weight: 700;
+  color: #222;
+}
+
+.p-domain {
+  font-size: 11.5px;
+  color: #777;
+}
+
+.footer__bottom {
+  margin-top: 10px;
+  border-top: 1px solid #333;
+  padding-top: 10px;
+  text-align: center;
+  color: #aaa;
+  font-size: 12px;
+}
+
+/* ===========================
+   TABLET (1024px)
+=========================== */
+@media (max-width: 1024px) {
+  .footer {
+    padding: 25px 40px;
+    max-height: none;
+  }
+
+  .footer__container {
+    gap: 30px;
+  }
+
+  .footer__left {
+    width: 45%;
+    padding: 20px;
+  }
+
+  .footer__right {
+    width: 55%;
+    height: 240px;
+  }
+
+  .main-scroll-window {
+    height: 200px;
+  }
+
+  .footer__logo {
+    width: 80px;
+  }
+
+  .footer__left h3 {
+    font-size: 17px;
+  }
+
+  .footer__left p {
+    font-size: 13px;
+  }
+
+  .p-name {
+    font-size: 13px;
+  }
+
+  .p-domain {
+    font-size: 11px;
+  }
+
+  .quote-text {
+    font-size: 13px;
+  }
+}
+
+/* ===========================
+   MOBILE (768px)
+=========================== */
+@media (max-width: 768px) {
+
+  .footer {
+    padding: 20px;
+    max-height: none;
+  }
+
+  .footer__container {
+    flex-direction: column;
+    align-items: center;
+    gap: 25px;
+  }
+
+  .footer__left,
+  .footer__right {
+    width: 100%;
+  }
+
+  .footer__left {
+    padding: 20px;
+    text-align: center;
+  }
+
+  .footer__logo {
+    width: 75px;
+    margin: auto;
+    display: block;
+  }
+
+  .footer__left h3 {
+    font-size: 18px;
+  }
+
+  .footer__left p {
+    font-size: 14px;
+  }
+
+  .footer__right {
+    height: 250px;
+  }
+
+  .footer__title {
+    font-size: 15px;
+    height: 42px;
+  }
+
+  .main-scroll-window {
+    height: 190px;
+  }
+
+  .achievement-card {
+    padding: 10px;
+  }
+
+  .performer-row {
+    padding: 8px 0;
+    gap: 8px;
+  }
+
+  .award-icon {
+    font-size: 30px;
+  }
+
+  .award-number {
+    font-size: 11px;
+  }
+
+  .performer-info {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 2px;
+  }
+
+  .p-name {
+    font-size: 13px;
+  }
+
+  .p-domain {
+    font-size: 11px;
+  }
+
+  .quote-card {
+    padding: 12px;
+  }
+
+  .quote-text {
+    font-size: 12px;
+    line-height: 1.5;
+  }
+
+  .quote-author {
+    font-size: 11px;
+  }
+
+  .footer__bottom {
+    margin-top: 20px;
+    font-size: 11px;
+  }
+}
+
+/* ===========================
+   SMALL MOBILE (480px)
+=========================== */
+@media (max-width: 480px) {
+
+  .footer {
+    padding: 15px;
+  }
+
+  .footer__left {
+    padding: 15px;
+  }
+
+  .footer__logo {
+    width: 65px;
+  }
+
+  .footer__left h3 {
+    font-size: 16px;
+  }
+
+  .footer__left p {
+    font-size: 12px;
+  }
+
+  .footer__title {
+    font-size: 14px;
+    height: 38px;
+  }
+
+  .footer__right {
+    height: 230px;
+  }
+
+  .main-scroll-window {
+    height: 180px;
+  }
+
+  .performer-row {
+    gap: 6px;
+  }
+
+  .award-wrapper {
+    width: 26px;
+    height: 26px;
+  }
+
+  .award-icon {
+    font-size: 26px;
+  }
+
+  .award-number {
+    font-size: 10px;
+  }
+
+  .p-name {
+    font-size: 12px;
+  }
+
+  .p-domain {
+    font-size: 10px;
+  }
+
+  .quote-text {
+    font-size: 11px;
+  }
+
+  .quote-author {
+    font-size: 10px;
+  }
+
+  .footer__bottom {
+    font-size: 10px;
+  }
+}

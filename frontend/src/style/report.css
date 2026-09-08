@@ -1,0 +1,314 @@
+.export-box {
+  position: absolute;
+  top: 10px;
+  right: 20px;
+  z-index: 1000;
+  display: flex;
+}
+
+.export-btn {
+  background: linear-gradient(135deg, #385a92, #6d4ec7);
+  color: #fff;
+  border: none;
+  padding: 10px 14px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 14px;
+  transition: 0.2s;
+}
+
+.export-btn:hover {
+  background: #1d4ed8;
+}
+
+.export-dropdown {
+  position: absolute;
+  top: 45px;
+  right: 0;
+  background: #fff;
+  border-radius: 10px;
+  box-shadow: 0 10px 25px rgba(0,0,0,0.15);
+  min-width: 170px;
+  z-index: 9999;
+}
+
+.export-dropdown button {
+  width: 100%;
+  padding: 10px;
+  border: none;
+  background: white;
+  text-align: left;
+  cursor: pointer;
+}
+
+.export-dropdown button:hover {
+  background: #f3f4f6;
+}
+
+.report-wrapper {
+  position: relative;
+  min-height: 100vh;
+  font-family: "Inter", "Segoe UI", sans-serif;
+  padding: 20px;
+  background-color: #f8fafc;
+}
+
+.title {
+  font-size: 32px;
+  font-weight: 700;
+  color: #1e3a8a;
+  text-align: center;
+  margin-bottom: 45px;
+}
+
+.filters {
+  display: flex;
+  justify-content: space-between;
+  gap: 20px;
+  margin-bottom: 25px;
+}
+
+.left-filters,
+.right-filters {
+  display: flex;
+  gap: 16px;
+}
+
+.filter-group {
+  display: flex;
+  flex-direction: column;
+}
+
+.filter-group label {
+  font-size: 12px;
+  font-weight: 500;
+  color: #64748b;
+  margin-bottom: 5px;
+}
+
+select,
+input {
+  padding: 9px 12px;
+  border-radius: 8px;
+  border: 1px solid #cbd5f5;
+  background: #fff;
+  font-size: 14px;
+  transition: all 0.2s ease;
+}
+
+select:focus,
+input:focus {
+  border-color: #6366f1;
+  box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.15);
+  outline: none;
+}
+
+/* Table Wrapper for Proper Width & Scroll */
+.table-responsive-container {
+  width: 100%;
+  overflow-x: auto;
+  background: #ffffff;
+  border-radius: 14px;
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.06);
+  margin-bottom: 20px;
+  border: 1px solid #e2e8f0;
+}
+
+.table {
+  width: 100%;
+  min-width: 1400px; /* Forces wide table layout to prevent squeezing columns */
+  border-collapse: collapse;
+  background: #ffffff;
+}
+
+.table th {
+  background: linear-gradient(135deg, #6366f1, #2563eb);
+  color: #fff;
+  padding: 14px 12px;
+  font-size: 13px;
+  font-weight: 600;
+  text-align: left;
+  white-space: nowrap;
+}
+
+.table td {
+  padding: 12px;
+  font-size: 13px;
+  color: #334155;
+  border-bottom: 1px solid #f1f5f9;
+  white-space: nowrap; /* Prevents text breaking weirdly inside cells */
+}
+
+.table tbody tr:hover {
+  background: #f1f5ff;
+  transition: 0.2s;
+}
+
+.no-data {
+  text-align: center;
+  padding: 30px !important;
+  color: #64748b;
+  font-weight: 600;
+}
+
+.last-update {
+  margin-top: 12px;
+  font-size: 13px;
+  color: #475569;
+  font-weight: 500;
+}
+
+.pdf-hidden {
+  position: absolute;
+  top: 0;
+  left: -99999px;
+  width: 1200px;
+  opacity: 1;
+  pointer-events: none;
+  background: #fff;
+}
+
+.pdf-map {
+  position: absolute;
+  left: -9999px;
+  top: 0;
+  width: 1000px;
+  background: #ffffff;
+  padding: 20px;
+}
+
+.map-legend {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 8px;
+  position: relative;
+  margin-top: -12px;
+  margin-right: 20px;
+  font-size: 18px;
+  font-weight: 700;
+  color: #111827;
+}
+
+.legend-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.legend-selecteddot {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  border: 3px solid #15803D;
+  background: transparent;
+}
+
+.legend-not-selecteddot {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  border: 3px solid #ef4444;
+  background: transparent;
+}
+
+.job-main {
+  font-size: 13px;
+  font-weight: bold;
+  color: #33570a;
+}
+
+.pagination {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 15px;
+}
+
+.pagination button {
+  padding: 6px 14px;
+  border: 1px solid #cbd5e1;
+  background: white;
+  cursor: pointer;
+  border-radius: 6px;
+  font-weight: 500;
+}
+
+.pagination button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.page-input {
+  width: 60px;
+  text-align: center;
+  border: 1px solid #cbd5e1;
+  padding: 6px;
+  border-radius: 6px;
+}
+
+.action-buttons {
+  display: flex;
+  gap: 6px;
+  justify-content: center;
+  align-items: center;
+}
+
+.action-buttons button {
+  border: none;
+  outline: none;
+  padding: 6px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 600;
+  transition: all 0.25s ease;
+  color: white;
+}
+
+.edit-btn { background: linear-gradient(135deg, #2563eb, #1d4ed8); }
+.delete-btn { background: linear-gradient(135deg, #dc2626, #b91c1c); }
+.save-btn { background: linear-gradient(135deg, #16a34a, #15803d); }
+.cancel-btn { background: linear-gradient(135deg, #6b7280, #4b5563); }
+
+.table-update-info {
+  margin: 15px 0;
+  padding: 10px 15px;
+  background: #f8fafc;
+  border-left: 4px solid #2563eb;
+  border-radius: 6px;
+  font-size: 13px;
+  color: #586f8d;
+  font-style: italic;
+}
+
+.table-update-info p {
+  font-size: 13px;
+  line-height: 1.8;
+  margin: 0;
+}
+
+.star-icon {
+  font-size: 20px;
+  font-weight: bold;
+  vertical-align: middle;
+  color: #2563eb;
+}
+.table tbody tr.light-orange-row {
+  background-color: #ffedd5;
+}
+
+@media (max-width: 768px) {
+  .filters {
+    flex-direction: column;
+  }
+  .left-filters,
+  .right-filters {
+    flex-direction: column;
+    width: 100%;
+  }
+  .filter-group, select, input {
+    width: 100%;
+  }
+}
