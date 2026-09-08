@@ -703,6 +703,15 @@ const updateWork = (req, res) => {
   );
 };
 
+const safeParseJson = (val, fallback) => {
+  if (val === null || val === undefined) return fallback;
+  if (typeof val === "object") return val;
+  if (typeof val === "string") {
+    try { return JSON.parse(val); } catch { return fallback; }
+  }
+  return fallback;
+};
+
 /* ======================================
    GETTERS
 ====================================== */
@@ -712,13 +721,9 @@ const getAllWork = (req, res) => {
     (err, rows) => {
       if (err) return res.status(500).json(err);
 
-      const data = rows.map((row) => {
-        let monthsArr = [];
-        try { 
-          monthsArr = row.months ? JSON.parse(row.months) : []; 
-        } catch { 
-          monthsArr = row.months ? [row.months] : []; 
-        }
+      const data = (rows || []).map((row) => {
+        let monthsArr = safeParseJson(row.months, []);
+        if (!Array.isArray(monthsArr)) monthsArr = monthsArr ? [monthsArr] : [];
 
         monthsArr = cleanMonthArray(monthsArr);
 
@@ -730,7 +735,7 @@ const getAllWork = (req, res) => {
           ...row,
           month: displayMonth,
           months: monthsArr,
-          uom: row.uom ? JSON.parse(row.uom) : {},
+          uom: safeParseJson(row.uom, {}),
           lastUpdate: row.updated_at ? row.updated_at : row.created_at
         };
       });

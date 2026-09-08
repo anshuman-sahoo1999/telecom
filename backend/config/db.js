@@ -34,19 +34,21 @@ if (isPostgres) {
       // Convert MySQL JSON_ARRAY to Postgres json_build_array
       pgSql = pgSql.replace(/JSON_ARRAY\(/gi, 'json_build_array(');
 
-      // Replace ? placeholders with $1, $2, $3 ...
-      let paramIndex = 1;
-      pgSql = pgSql.replace(/\?/g, () => `$${paramIndex++}`);
+      // Only replace ? with $1, $2... if ? is present in query
+      if (pgSql.includes('?')) {
+        let paramIndex = 1;
+        pgSql = pgSql.replace(/\?/g, () => `$${paramIndex++}`);
+      }
 
-      // Append RETURNING id for INSERT queries if not present
+      // Append RETURNING id only for simple single INSERT queries (not ON CONFLICT or multi-statement)
       const isInsert = /^\s*INSERT\s+INTO/i.test(pgSql);
-      if (isInsert && !/RETURNING/i.test(pgSql)) {
+      if (isInsert && !/RETURNING/i.test(pgSql) && !/ON CONFLICT/i.test(pgSql) && !pgSql.includes(';')) {
         pgSql += ' RETURNING id';
       }
 
       pool.query(pgSql, params, (err, res) => {
         if (err) {
-          console.error('NeonDB Query Error:', err.message, 'SQL:', pgSql);
+          console.error('NeonDB Query Error:', err.message, 'SQL snippet:', pgSql.slice(0, 100));
           if (callback) return callback(err, null);
           return;
         }

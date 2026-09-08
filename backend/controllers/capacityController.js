@@ -55,6 +55,12 @@ const createCapacityForecast = (req, res) => {
   );
 };
 
+const safeParse = (v) => {
+  if (v === null || v === undefined) return {};
+  if (typeof v === "object") return v;
+  try { return JSON.parse(v); } catch { return {}; }
+};
+
 const getAllCapacityForecast = (req, res) => {
   db.query(
     "SELECT * FROM capacity_forecast ORDER BY id DESC",
@@ -66,9 +72,9 @@ const getAllCapacityForecast = (req, res) => {
         });
       }
 
-      const data = rows.map((row) => ({
+      const data = (rows || []).map((row) => ({
         ...row,
-        uom: row.uom ? JSON.parse(row.uom) : {}
+        uom: safeParse(row.uom)
       }));
 
       res.json(data);
