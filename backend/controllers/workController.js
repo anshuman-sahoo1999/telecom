@@ -13,7 +13,7 @@ const clean = (v) => {
 const normalize = (v) => clean(v).toUpperCase();
 
 /* ======================================
-   DATE HELPER (Database: MM-DD-YYYY)
+   DATE HELPER (Database Insertion Format)
 ====================================== */
 const parseExcelDate = (value) => {
   if (!value) return null;
@@ -31,7 +31,22 @@ const parseExcelDate = (value) => {
   const month = String(d.getMonth() + 1).padStart(2, '0');
   const day = String(d.getDate()).padStart(2, '0');
 
-  // MM-DD-YYYY format
+  // MySQL DATE type ke liye standard YYYY-MM-DD return karte hain taaki query fail na ho
+  return `${year}-${month}-${day}`;
+};
+
+/* ======================================
+   FORMAT DATE FOR FRONTEND (MM-DD-YYYY)
+====================================== */
+const formatDateToMMDDYYYY = (dateVal) => {
+  if (!dateVal) return "";
+  let d = new Date(dateVal);
+  if (isNaN(d.getTime())) return dateVal.toString();
+
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+
   return `${month}-${day}-${year}`;
 };
 
@@ -590,7 +605,6 @@ const createWork = (req, res) => {
   const formattedInternalQc = formatPercentage(internal_qc);
   const formattedAmdocsQc = formatPercentage(amdocs_qc);
   
-  // Format incoming direct dates if they are passed
   const formattedReceiveDate = parseExcelDate(receive_date);
   const formattedEcdDate = parseExcelDate(ecd_date);
   const formattedSubmissionDate = parseExcelDate(submission_date);
@@ -806,7 +820,7 @@ const safeParseJson = (val, fallback) => {
 };
 
 /* ======================================
-   GETTERS
+   GETTERS (Formatted to MM-DD-YYYY for Frontend)
 ====================================== */
 const getAllWork = (req, res) => {
   db.query(
@@ -829,6 +843,9 @@ const getAllWork = (req, res) => {
           month: displayMonth,
           months: monthsArr,
           uom: safeParseJson(row.uom, {}),
+          receive_date: formatDateToMMDDYYYY(row.receive_date),
+          ecd_date: formatDateToMMDDYYYY(row.ecd_date),
+          submission_date: formatDateToMMDDYYYY(row.submission_date),
           lastUpdate: row.updated_at ? row.updated_at : row.created_at
         };
       });
@@ -848,7 +865,12 @@ const getFileData = (req, res) => {
 
     const cleaned = rows.map((row) => {
       const { created_at, updated_at, file_name, id, ...rest } = row;
-      return rest;
+      return {
+        ...rest,
+        receive_date: formatDateToMMDDYYYY(rest.receive_date),
+        ecd_date: formatDateToMMDDYYYY(rest.ecd_date),
+        submission_date: formatDateToMMDDYYYY(rest.submission_date)
+      };
     });
 
     res.json(cleaned);
@@ -878,7 +900,13 @@ const getJobTypeStats = (req, res) => {
 const getMonthWiseReport = (req, res) => {
   db.query("SELECT * FROM work_updates ORDER BY id ASC", (err, rows) => {
     if (err) return res.status(500).json([]);
-    res.json(rows);
+    const formatted = rows.map(r => ({
+      ...r,
+      receive_date: formatDateToMMDDYYYY(r.receive_date),
+      ecd_date: formatDateToMMDDYYYY(r.ecd_date),
+      submission_date: formatDateToMMDDYYYY(r.submission_date)
+    }));
+    res.json(formatted);
   });
 };
 
