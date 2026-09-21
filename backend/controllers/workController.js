@@ -57,12 +57,13 @@ const formatPercentage = (value) => {
    MONTH HELPERS
 ====================================== */
 const getMonthValue = (row) => {
-  return (
-    row["Month of Service "] ||
-    row["Month of Service"] ||
-    row.Month ||
-    null
-  );
+  for (const key of Object.keys(row)) {
+    const k = key.toLowerCase().replace(/[\s_]/g, "");
+    if (k === "month" || k === "monthofservice" || k === "months") {
+      return row[key];
+    }
+  }
+  return null;
 };
 
 const formatMonth = (value) => {
@@ -91,42 +92,69 @@ const cleanMonthArray = (arr) => {
 };
 
 /* ======================================
-   STRICT DYNAMIC UOM EXTRACTION
+   DYNAMIC UOM EXTRACTION (AUTOMATIC)
 ====================================== */
 const extractUOM = (row) => {
   const uom = {};
 
-  const skipColumns = [
-    "sow", "job type", "job_type", "state", "market", "month", "month of service", 
-    "otp", "amdocs qc", "amdocs_qc", "internal qc", "internal_qc", 
-    "job id", "job_id", "jobid", "sl.no", "sl no", "sl.", "sl", "footage", 
-    "splice count", "receive date", "received date", "receive_date", "received_date",
+  // Yeh saare standard system columns hain. Jo column is list me nahi hoga, 
+  // woh automatic UOM ke andar chala jayega!
+  const systemColumns = [
+    "sow", "job type", "job_type", "state", "market", "region", "county",
+    "month", "month of service", "months", "otp", "amdocs qc", "amdocs_qc", 
+    "internal qc", "internal_qc", "job id", "job_id", "jobid", 
+    "receive date", "received date", "receive_date", "received_date",
     "ecd date", "ecd_date", "submission date", "submission_date", 
-    "current status", "current_status", "production engineers", "production engineers:", 
-    "production_engineers", "qc engineers", "qc engineers:", "qc_engineers", 
-    "region", "sl_no", "slno", "jobs delivered", "jobs_delivered"
+    "current status", "current_status", "production engineers", "production_engineers", 
+    "qc engineers", "qc_engineers", "sl no", "sl.no", "sl", "sl.", "sl_no", "slno", 
+    "file name", "file_name", "jobs delivered", "jobs_delivered", "domain", "status"
   ];
 
   Object.keys(row).forEach((key) => {
     if (!key) return;
     
     const cleanKey = key
+      .toString()
+      .toLowerCase()
+      .replace(/\./g, "")
+      .replace(/:/g, "")
       .replace(/\(.*\)/g, "")
       .replace(/\*/g, "")
-      .replace(/:/g, "")
-      .trim()
-      .toLowerCase(); 
+      .replace(/[\s_]+/g, " ")
+      .trim(); 
 
-    if (skipColumns.includes(cleanKey)) return;
+    const compressedKey = cleanKey.replace(/\s+/g, "");
+    
+    const isSystemCol = systemColumns.some(sys => {
+      const cleanSys = sys.toLowerCase().replace(/[\s_.]+/g, "");
+      return compressedKey === cleanSys || cleanKey === sys.toLowerCase();
+    });
 
-    const value = row[key];
-    if (value === "" || value === null || value === undefined) return;
-    if (value instanceof Date) return;
-
-    uom[cleanKey] = value;
+    // Agar column system ka standard field nahi hai, toh use UOM me daal do
+    if (!isSystemCol) {
+      const value = row[key];
+      if (value !== "" && value !== null && value !== undefined && !(value instanceof Date)) {
+        uom[cleanKey] = value;
+      }
+    }
   });
 
   return uom;
+};
+
+/* ======================================
+   HELPER TO FIND FIELD FLEXIBLY IN ROW
+====================================== */
+const findValueInRow = (row, possibleKeys) => {
+  for (const key of Object.keys(row)) {
+    const cleanKey = key.toLowerCase().replace(/[\s_.]+/g, "").trim();
+    for (const pk of possibleKeys) {
+      if (cleanKey === pk.toLowerCase().replace(/[\s_.]+/g, "")) {
+        return row[key];
+      }
+    }
+  }
+  return "";
 };
 
 /* ======================================
@@ -300,26 +328,24 @@ const importExcel = async (req, res) => {
         await new Promise((resolve) => {
           try {
             const domain = normalize(sheetName); 
-            const sow = clean(row.SOW || row.sow || "");
-            const jobType = normalize(row["Job Type"] || row.job_type || "");
-            const jobIdVal = clean(row["Job ID"] || row.job_id || row.jobId || "");
+            const sow = clean(findValueInRow(row, ["SOW"]));
+            const jobType = normalize(findValueInRow(row, ["Job Type", "job_type"]));
+            const jobIdVal = clean(findValueInRow(row, ["Job ID", "job_id", "jobId"]));
             
-            const otpVal = clean(row.OTP || row.otp || "");
+            const otpVal = clean(findValueInRow(row, ["OTP"]));
+            const currentStatusVal = clean(findValueInRow(row, ["Current Status", "current_status"]));
+            const productionEngineersVal = clean(findValueInRow(row, ["Production Engineers", "production_engineers"]));
+            const qcEngineersVal = clean(findValueInRow(row, ["QC Engineers", "qc_engineers"]));
             
-            const amdocsQcVal = formatPercentage(row["Amdocs QC"] || row["AMDOCS QC"] || row.amdocs_qc);
-            const internalQcVal = formatPercentage(row["Internal QC"] || row["INTERNAL QC"] || row.internal_qc);
+            const amdocsQcVal = formatPercentage(findValueInRow(row, ["Amdocs QC", "amdocs_qc"]));
+            const internalQcVal = formatPercentage(findValueInRow(row, ["Internal QC", "internal_qc"]));
             
-            const receiveDateVal = parseExcelDate(row["Receive Date"] || row.receive_date);
-            const ecdDateVal = parseExcelDate(row["ECD Date"] || row.ecd_date);
-            const submissionDateVal = parseExcelDate(row["Submission Date"] || row.submission_date);
+            const receiveDateVal = parseExcelDate(findValueInRow(row, ["Receive Date", "receive_date"]));
+            const ecdDateVal = parseExcelDate(findValueInRow(row, ["ECD Date", "ecd_date"]));
+            const submissionDateVal = parseExcelDate(findValueInRow(row, ["Submission Date", "submission_date"]));
 
             let rawLocation = clean(
-              row.State ||
-              row.STATE ||
-              row.state ||
-              row.Market ||
-              row.market ||
-              row.Region
+              findValueInRow(row, ["State", "Market", "Region"])
             );
 
             let state = "";
@@ -390,7 +416,7 @@ const importExcel = async (req, res) => {
 
                   const updateSql = `
                     UPDATE work_updates
-                    SET months = ?, uom = ?, otp = ?, amdocs_qc = ?, internal_qc = ?, jobs_delivered = ?, receive_date = COALESCE(?, receive_date), ecd_date = COALESCE(?, ecd_date), submission_date = COALESCE(?, submission_date), updated_at = CURRENT_TIMESTAMP
+                    SET months = ?, uom = ?, otp = ?, current_status = ?, production_engineers = ?, qc_engineers = ?, amdocs_qc = ?, internal_qc = ?, jobs_delivered = ?, receive_date = COALESCE(?, receive_date), ecd_date = COALESCE(?, ecd_date), submission_date = COALESCE(?, submission_date), updated_at = CURRENT_TIMESTAMP
                     WHERE id = ?
                   `;
 
@@ -400,6 +426,9 @@ const importExcel = async (req, res) => {
                       JSON.stringify(existingMonths),
                       JSON.stringify(mergedUOM),
                       otpVal,
+                      currentStatusVal,
+                      productionEngineersVal,
+                      qcEngineersVal,
                       amdocsQcVal,
                       internalQcVal,
                       newJobsDelivered,
@@ -440,8 +469,8 @@ const importExcel = async (req, res) => {
             function insertNewRow() {
               const insertSql = `
                 INSERT INTO work_updates
-                (file_name, months, domain, sow, job_type, region, state, county, uom, otp, amdocs_qc, internal_qc, jobs_delivered, job_id, receive_date, ecd_date, submission_date)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?)
+                (file_name, months, domain, sow, job_type, region, state, county, uom, otp, current_status, production_engineers, qc_engineers, amdocs_qc, internal_qc, jobs_delivered, job_id, receive_date, ecd_date, submission_date)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?)
               `;
 
               db.query(
@@ -457,6 +486,9 @@ const importExcel = async (req, res) => {
                   county,
                   JSON.stringify(uom),
                   otpVal,
+                  currentStatusVal,
+                  productionEngineersVal,
+                  qcEngineersVal,
                   amdocsQcVal,
                   internalQcVal,
                   jobIdVal || null,
@@ -526,6 +558,9 @@ const createWork = (req, res) => {
     county,
     uom,
     otp,
+    current_status,
+    production_engineers,
+    qc_engineers,
     internal_qc,
     amdocs_qc,
     jobs_delivered,
@@ -557,20 +592,20 @@ const createWork = (req, res) => {
     if (existingId) {
       const updateSql = `
         UPDATE work_updates
-        SET months = ?, domain = ?, sow = ?, job_type = ?, region = ?, state = ?, county = ?, uom = ?, otp = ?, internal_qc = ?, amdocs_qc = ?, jobs_delivered = ?, receive_date = COALESCE(?, receive_date), ecd_date = COALESCE(?, ecd_date), submission_date = COALESCE(?, submission_date), updated_at = CURRENT_TIMESTAMP
+        SET months = ?, domain = ?, sow = ?, job_type = ?, region = ?, state = ?, county = ?, uom = ?, otp = ?, current_status = ?, production_engineers = ?, qc_engineers = ?, internal_qc = ?, amdocs_qc = ?, jobs_delivered = ?, receive_date = COALESCE(?, receive_date), ecd_date = COALESCE(?, ecd_date), submission_date = COALESCE(?, submission_date), updated_at = CURRENT_TIMESTAMP
         WHERE id = ?
       `;
-      db.query(updateSql, [JSON.stringify(parsedMonths), fixedDomain, sow, fixedJobType, region, state, county, JSON.stringify(uom || {}), clean(otp), formattedInternalQc, formattedAmdocsQc, Number(jobs_delivered || 1), receive_date || null, ecd_date || null, submission_date || null, existingId], (err) => {
+      db.query(updateSql, [JSON.stringify(parsedMonths), fixedDomain, sow, fixedJobType, region, state, county, JSON.stringify(uom || {}), clean(otp), clean(current_status), clean(production_engineers), clean(qc_engineers), formattedInternalQc, formattedAmdocsQc, Number(jobs_delivered || 1), receive_date || null, ecd_date || null, submission_date || null, existingId], (err) => {
         if (err) return res.status(500).json(err);
         syncToJobCreation(existingId);
       });
     } else {
       const insertSql = `
         INSERT INTO work_updates
-        (months, domain, sow, job_type, region, state, county, uom, otp, internal_qc, amdocs_qc, jobs_delivered, job_id, receive_date, ecd_date, submission_date)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        (months, domain, sow, job_type, region, state, county, uom, otp, current_status, production_engineers, qc_engineers, internal_qc, amdocs_qc, jobs_delivered, job_id, receive_date, ecd_date, submission_date)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `;
-      db.query(insertSql, [JSON.stringify(parsedMonths), fixedDomain, sow, fixedJobType, region, state, county, JSON.stringify(uom || {}), clean(otp), formattedInternalQc, formattedAmdocsQc, Number(jobs_delivered || 1), cleanJobId, receive_date || null, ecd_date || null, submission_date || null], (err, result) => {
+      db.query(insertSql, [JSON.stringify(parsedMonths), fixedDomain, sow, fixedJobType, region, state, county, JSON.stringify(uom || {}), clean(otp), clean(current_status), clean(production_engineers), clean(qc_engineers), formattedInternalQc, formattedAmdocsQc, Number(jobs_delivered || 1), cleanJobId, receive_date || null, ecd_date || null, submission_date || null], (err, result) => {
         if (err) return res.status(500).json(err);
         syncToJobCreation(result.insertId);
       });
