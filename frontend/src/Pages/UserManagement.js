@@ -1,4 +1,3 @@
-import { API_BASE_URL } from "../config";
 import React, { useEffect, useState } from "react";
 import {
   FaUserShield,
@@ -90,8 +89,8 @@ const UserManagement = () => {
 
   const fetchDomains = async () => {
     try {
-      const masterRes = await axios.get(`${API_BASE_URL}/api/master`);
-      const workRes = await axios.get(`${API_BASE_URL}/api/work/bydomain`);
+      const masterRes = await axios.get("http://localhost:5000/api/master");
+      const workRes = await axios.get("http://localhost:5000/api/work/bydomain");
 
       const masterDomains = Object.keys(masterRes.data || {});
       const workDomains = (workRes.data || []).map(d =>
@@ -107,7 +106,7 @@ const UserManagement = () => {
 
   const fetchUsers = async () => {
     const res = await axios.get(
-      `${API_BASE_URL}/api/auth/all-user-details`
+      "http://localhost:5000/api/auth/all-user-details"
     );
     setUsers(res.data.users);
   };
@@ -184,7 +183,7 @@ const UserManagement = () => {
       const finalEmail = `${cleanEmail}${emailDomain}`;
       
       const res = await axios.post(
-        `${API_BASE_URL}/api/auth/create-user`,
+        "http://localhost:5000/api/auth/create-user",
         {
           name, emp_id, email: finalEmail, password, role, domain, 
           memberType: memberType.join(","), 
@@ -203,6 +202,11 @@ const UserManagement = () => {
         setRole("");
         setDomain([]);
         setMemberType([]);
+        setTotalExperience("");
+        setTelecomExperience("");
+        setSkillSets("");
+        setRegion("");
+        setMobileNo("");
 
         setToast({
           message: "User Created Successfully ✔",
@@ -226,7 +230,6 @@ const UserManagement = () => {
 
   const saveEdit = async (id) => {
     try {
-      // 🟢 FIX: Properly formatting memberType as a comma-separated string (or empty string if deselected completely)
       const formattedMemberTypes = Array.isArray(editData.memberType) 
         ? editData.memberType.join(",") 
         : editData.memberType;
@@ -242,7 +245,7 @@ const UserManagement = () => {
       };
 
       await axios.put(
-        `${API_BASE_URL}/api/auth/update-user/${id}`,
+        `http://localhost:5000/api/auth/update-user/${id}`,
         payload
       );
 
@@ -278,7 +281,7 @@ const UserManagement = () => {
       if (result.isConfirmed) {
         try {
           await axios.delete(
-            `${API_BASE_URL}/api/auth/delete-user/${id}`
+            `http://localhost:5000/api/auth/delete-user/${id}`
           );
 
           setUsers((prev) =>
