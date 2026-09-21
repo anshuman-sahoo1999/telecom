@@ -13,35 +13,53 @@ const clean = (v) => {
 const normalize = (v) => clean(v).toUpperCase();
 
 /* ======================================
-   DATE HELPER (Database Insertion Format)
+   ROBUST DATE HELPER FOR EXCEL & DB
 ====================================== */
 const parseExcelDate = (value) => {
   if (!value) return null;
-  
+
   let d;
   if (value instanceof Date) {
     d = value;
+  } else if (typeof value === 'number') {
+    // Excel serial date conversion
+    d = new Date(Math.round((value - (25567 + 2)) * 86400 * 1000));
   } else {
-    d = new Date(value);
+    // Handle string dates (e.g., MM/DD/YYYY or YYYY-MM-DD)
+    let strVal = value.toString().trim();
+    d = new Date(strVal);
   }
 
-  if (isNaN(d)) return null;
+  if (!d || isNaN(d.getTime())) return null;
 
   const year = d.getFullYear();
   const month = String(d.getMonth() + 1).padStart(2, '0');
   const day = String(d.getDate()).padStart(2, '0');
 
-  // MySQL DATE type ke liye standard YYYY-MM-DD return karte hain taaki query fail na ho
+  // MySQL DATE type ke liye standard YYYY-MM-DD
   return `${year}-${month}-${day}`;
 };
 
 /* ======================================
-   FORMAT DATE FOR FRONTEND (MM-DD-YYYY)
+   FIXED DATE FORMATTER FOR FRONTEND (MM-DD-YYYY)
 ====================================== */
 const formatDateToMMDDYYYY = (dateVal) => {
   if (!dateVal) return "";
+  
+  let strVal = dateVal.toString().trim();
+
+  // Agar database ya Excel se YYYY-MM-DD ya ISO format me aaya hai toh timezone shift se bachne ke liye direct split karein
+  if (/^\d{4}-\d{2}-\d{2}/.test(strVal)) {
+    const parts = strVal.substring(0, 10).split("-");
+    if (parts.length === 3) {
+      const [year, month, day] = parts;
+      return `${month}-${day}-${year}`;
+    }
+  }
+
+  // Agar koi aur format hai toh standard Date object se handle karein
   let d = new Date(dateVal);
-  if (isNaN(d.getTime())) return dateVal.toString();
+  if (isNaN(d.getTime())) return strVal;
 
   const year = d.getFullYear();
   const month = String(d.getMonth() + 1).padStart(2, '0');
@@ -167,8 +185,9 @@ const findValueInRow = (row, possibleKeys) => {
       const compressedPk = pk.toLowerCase().replace(/[^a-z0-9]/g, "");
       if (compressedKey === compressedPk) {
         let val = row[key];
-        if (val && typeof val === 'object' && val.text) {
-          val = val.text;
+        if (val && typeof val === 'object') {
+          if (val.text) val = val.text;
+          else if (val.result) val = val.result;
         }
         return val;
       }
@@ -336,8 +355,9 @@ const importExcel = async (req, res) => {
           const headerName = headers[col];
           if (headerName) {
             let cellVal = row.getCell(col).value;
-            if (cellVal && typeof cellVal === 'object' && cellVal.text) {
-              cellVal = cellVal.text;
+            if (cellVal && typeof cellVal === 'object') {
+              if (cellVal.text) cellVal = cellVal.text;
+              else if (cellVal.result) cellVal = cellVal.result;
             }
             obj[headerName] = cellVal;
           }
