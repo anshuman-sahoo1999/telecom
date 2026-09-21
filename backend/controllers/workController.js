@@ -132,7 +132,10 @@ const extractUOM = (row) => {
 
     // Agar column system ka standard field nahi hai, toh use UOM me daal do
     if (!isSystemCol) {
-      const value = row[key];
+      let value = row[key];
+      if (value && typeof value === 'object' && value.text) {
+        value = value.text;
+      }
       if (value !== "" && value !== null && value !== undefined && !(value instanceof Date)) {
         uom[cleanKey] = value;
       }
@@ -150,7 +153,11 @@ const findValueInRow = (row, possibleKeys) => {
     const cleanKey = key.toLowerCase().replace(/[\s_.]+/g, "").trim();
     for (const pk of possibleKeys) {
       if (cleanKey === pk.toLowerCase().replace(/[\s_.]+/g, "")) {
-        return row[key];
+        let val = row[key];
+        if (val && typeof val === 'object' && val.text) {
+          val = val.text;
+        }
+        return val;
       }
     }
   }
@@ -300,20 +307,29 @@ const importExcel = async (req, res) => {
       const rows = [];
       const headers = [];
 
-      worksheet.getRow(1).eachCell((cell, colNumber) => {
-        headers[colNumber] = cell.value ? cell.value.toString().trim() : "";
-      });
+      const headerRow = worksheet.getRow(1);
+      const totalColumns = headerRow.cellCount || worksheet.columnCount;
+
+      // Safely map headers including blank/empty space columns
+      for (let col = 1; col <= totalColumns; col++) {
+        const cellVal = headerRow.getCell(col).value;
+        headers[col] = cellVal ? cellVal.toString().trim() : "";
+      }
 
       worksheet.eachRow((row, rowNumber) => {
         if (rowNumber === 1) return;
 
         const obj = {};
-        row.eachCell((cell, colNumber) => {
-          const headerName = headers[colNumber];
+        for (let col = 1; col <= totalColumns; col++) {
+          const headerName = headers[col];
           if (headerName) {
-            obj[headerName] = cell.value;
+            let cellVal = row.getCell(col).value;
+            if (cellVal && typeof cellVal === 'object' && cellVal.text) {
+              cellVal = cellVal.text;
+            }
+            obj[headerName] = cellVal;
           }
-        });
+        }
 
         if (Object.keys(obj).length > 0) {
           rows.push(obj);
