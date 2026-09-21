@@ -13,7 +13,7 @@ const clean = (v) => {
 const normalize = (v) => clean(v).toUpperCase();
 
 /* ======================================
-   ROBUST DATE HELPER FOR EXCEL & DB (Saves as YYYY-MM-DD)
+   MODIFIED DATE HELPER (Saves as MM-DD-YYYY directly to DB)
 ====================================== */
 const parseExcelDate = (value) => {
   if (!value) return null;
@@ -35,41 +35,29 @@ const parseExcelDate = (value) => {
   const month = String(d.getMonth() + 1).padStart(2, '0');
   const day = String(d.getDate()).padStart(2, '0');
 
-  // MySQL DATE type ke liye standard YYYY-MM-DD
-  return `${year}-${month}-${day}`;
+  // Ab yeh backend se MM-DD-YYYY format return karega taaki DB me wahi save ho
+  return `${month}-${day}-${year}`;
 };
 
 /* ======================================
-   BULLETPROOF FRONTEND FORMATTER (Strictly MM-DD-YYYY)
+   FRONTEND FORMATTER (Directly returns MM-DD-YYYY)
 ====================================== */
 const formatDateToMMDDYYYY = (dateVal) => {
   if (!dateVal) return "";
+  let strVal = dateVal.toString().trim();
+  
+  // Agar already MM-DD-YYYY format me hai ya kuch aur, toh direct return karein
+  const match = strVal.match(/^(\d{2})-(\d{2})-(\d{4})$/);
+  if (match) return strVal;
 
-  let year, month, day;
-
-  if (dateVal instanceof Date) {
-    if (isNaN(dateVal.getTime())) return "";
-    year = dateVal.getFullYear();
-    month = String(dateVal.getMonth() + 1).padStart(2, '0');
-    day = String(dateVal.getDate()).padStart(2, '0');
-  } else {
-    let strVal = dateVal.toString().trim();
-    
-    // Regex to catch YYYY-MM-DD at the start (supports ISO strings and MySQL formats)
-    const match = strVal.match(/^(\d{4})-(\d{2})-(\d{2})/);
-    if (match) {
-      [, year, month, day] = match;
-    } else {
-      let d = new Date(strVal);
-      if (isNaN(d.getTime())) return strVal;
-      year = d.getFullYear();
-      month = String(d.getMonth() + 1).padStart(2, '0');
-      day = String(d.getDate()).padStart(2, '0');
-    }
+  // Agar YYYY-MM-DD format me hai toh usko MM-DD-YYYY me convert karein
+  const isoMatch = strVal.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (isoMatch) {
+    const [, year, month, day] = isoMatch;
+    return `${month}-${day}-${year}`;
   }
 
-  // Strictly returning MM-DD-YYYY
-  return `${month}-${day}-${year}`;
+  return strVal;
 };
 
 /* ======================================
