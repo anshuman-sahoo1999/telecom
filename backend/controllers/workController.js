@@ -100,9 +100,11 @@ const extractUOM = (row) => {
     "sow", "job type", "job_type", "state", "market", "month", "month of service", 
     "otp", "amdocs qc", "amdocs_qc", "internal qc", "internal_qc", 
     "job id", "job_id", "jobid", "sl.no", "sl no", "sl.", "sl", "footage", 
-    "splice count", "receive date", "ecd date", "submission date", 
-    "current status", "production engineers", "production engineers:", "qc engineers", 
-    "region", "sl_no", "slno", "received date"
+    "splice count", "receive date", "received date", "receive_date", "received_date",
+    "ecd date", "ecd_date", "submission date", "submission_date", 
+    "current status", "current_status", "production engineers", "production engineers:", 
+    "production_engineers", "qc engineers", "qc engineers:", "qc_engineers", 
+    "region", "sl_no", "slno", "jobs delivered", "jobs_delivered"
   ];
 
   Object.keys(row).forEach((key) => {
@@ -111,6 +113,7 @@ const extractUOM = (row) => {
     const cleanKey = key
       .replace(/\(.*\)/g, "")
       .replace(/\*/g, "")
+      .replace(/:/g, "")
       .trim()
       .toLowerCase(); 
 
