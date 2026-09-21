@@ -13,7 +13,7 @@ const clean = (v) => {
 const normalize = (v) => clean(v).toUpperCase();
 
 /* ======================================
-   ROBUST DATE HELPER FOR EXCEL & DB
+   ROBUST DATE HELPER FOR EXCEL & DB (Saves as YYYY-MM-DD)
 ====================================== */
 const parseExcelDate = (value) => {
   if (!value) return null;
@@ -25,7 +25,6 @@ const parseExcelDate = (value) => {
     // Excel serial date conversion
     d = new Date(Math.round((value - (25567 + 2)) * 86400 * 1000));
   } else {
-    // Handle string dates (e.g., MM/DD/YYYY or YYYY-MM-DD)
     let strVal = value.toString().trim();
     d = new Date(strVal);
   }
@@ -41,30 +40,35 @@ const parseExcelDate = (value) => {
 };
 
 /* ======================================
-   FIXED DATE FORMATTER FOR FRONTEND (MM-DD-YYYY)
+   BULLETPROOF FRONTEND FORMATTER (Strictly MM-DD-YYYY)
 ====================================== */
 const formatDateToMMDDYYYY = (dateVal) => {
   if (!dateVal) return "";
-  
-  let strVal = dateVal.toString().trim();
 
-  // Agar database ya Excel se YYYY-MM-DD ya ISO format me aaya hai toh timezone shift se bachne ke liye direct split karein
-  if (/^\d{4}-\d{2}-\d{2}/.test(strVal)) {
-    const parts = strVal.substring(0, 10).split("-");
-    if (parts.length === 3) {
-      const [year, month, day] = parts;
-      return `${month}-${day}-${year}`;
+  let year, month, day;
+
+  if (dateVal instanceof Date) {
+    if (isNaN(dateVal.getTime())) return "";
+    year = dateVal.getFullYear();
+    month = String(dateVal.getMonth() + 1).padStart(2, '0');
+    day = String(dateVal.getDate()).padStart(2, '0');
+  } else {
+    let strVal = dateVal.toString().trim();
+    
+    // Regex to catch YYYY-MM-DD at the start (supports ISO strings and MySQL formats)
+    const match = strVal.match(/^(\d{4})-(\d{2})-(\d{2})/);
+    if (match) {
+      [, year, month, day] = match;
+    } else {
+      let d = new Date(strVal);
+      if (isNaN(d.getTime())) return strVal;
+      year = d.getFullYear();
+      month = String(d.getMonth() + 1).padStart(2, '0');
+      day = String(d.getDate()).padStart(2, '0');
     }
   }
 
-  // Agar koi aur format hai toh standard Date object se handle karein
-  let d = new Date(dateVal);
-  if (isNaN(d.getTime())) return strVal;
-
-  const year = d.getFullYear();
-  const month = String(d.getMonth() + 1).padStart(2, '0');
-  const day = String(d.getDate()).padStart(2, '0');
-
+  // Strictly returning MM-DD-YYYY
   return `${month}-${day}-${year}`;
 };
 
