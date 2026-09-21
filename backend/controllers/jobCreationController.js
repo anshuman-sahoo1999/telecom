@@ -21,13 +21,23 @@ exports.createJob = (req, res) => {
     receivedDate, 
     ecdDate,
     submissionDate,
-    month
+    month,
+    amdocsQc,
+    amdocs_qc,
+    internalQc,
+    internal_qc,
+    otp,
+    internalOtp
   } = req.body;
 
   const finalReceiveDate = receiveDate || receivedDate || null;
   const formattedEcdDate = ecdDate && ecdDate !== "" ? ecdDate : null;
   const formattedSubmissionDate = submissionDate && submissionDate !== "" ? submissionDate : null;
   
+  const finalAmdocsQc = amdocsQc !== undefined ? amdocsQc : (amdocs_qc || null);
+  const finalInternalQc = internalQc !== undefined ? internalQc : (internal_qc || null);
+  const finalOtp = otp || internalOtp || null;
+
   const cleanJobId = clean(jobId);
   const cleanDomain = normalize(domain);
   const cleanMonth = cleanSingleMonth(month);
@@ -87,25 +97,28 @@ exports.createJob = (req, res) => {
               receive_date = COALESCE(?, receive_date), 
               ecd_date = COALESCE(?, ecd_date), 
               submission_date = COALESCE(?, submission_date),
+              amdocs_qc = COALESCE(NULLIF(?, ''), amdocs_qc),
+              internal_qc = COALESCE(NULLIF(?, ''), internal_qc),
+              otp = COALESCE(NULLIF(?, ''), otp),
               updated_at = CURRENT_TIMESTAMP
           WHERE TRIM(job_id) = TRIM(?)
         `;
-        db.query(updateWorkSql, [cleanDomain, market, cleanMonth, cleanMonth, finalReceiveDate, formattedEcdDate, formattedSubmissionDate, cleanJobId], () => {
+        db.query(updateWorkSql, [cleanDomain, market, cleanMonth, cleanMonth, finalReceiveDate, formattedEcdDate, formattedSubmissionDate, finalAmdocsQc, finalInternalQc, finalOtp, cleanJobId], () => {
           return res.json({
             success: true,
-            message: "Job synced successfully with correct month & updated timestamp",
+            message: "Job synced successfully with correct QC, OTP & month",
             id: newId
           });
         });
       } else {
         const insertWorkSql = `
-          INSERT INTO work_updates (domain, state, job_id, months, receive_date, ecd_date, submission_date, jobs_delivered, uom)
-          VALUES (?, ?, ?, ?, ?, ?, ?, 1, '{}')
+          INSERT INTO work_updates (domain, state, job_id, months, receive_date, ecd_date, submission_date, amdocs_qc, internal_qc, otp, jobs_delivered, uom)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, '{}')
         `;
-        db.query(insertWorkSql, [cleanDomain, market, cleanJobId, JSON.stringify(cleanMonth ? [cleanMonth] : []), finalReceiveDate, formattedEcdDate, formattedSubmissionDate], () => {
+        db.query(insertWorkSql, [cleanDomain, market, cleanJobId, JSON.stringify(cleanMonth ? [cleanMonth] : []), finalReceiveDate, formattedEcdDate, formattedSubmissionDate, finalAmdocsQc, finalInternalQc, finalOtp], () => {
           return res.json({
             success: true,
-            message: "Job inserted successfully into Work Controller",
+            message: "Job inserted successfully into Work Controller with QC & OTP",
             id: newId
           });
         });
@@ -119,7 +132,7 @@ exports.createJob = (req, res) => {
 // ============================
 exports.getAllJobs = (req, res) => {
   const queryJC = "SELECT id, jobId, domain, market, month, receiveDate, ecdDate, submissionDate, updated_at FROM job_creation";
-  const queryWU = "SELECT id, job_id AS jobId, domain, state AS market, receive_date AS receiveDate, ecd_date AS ecdDate, submission_date AS submissionDate, updated_at FROM work_updates WHERE job_id IS NOT NULL AND job_id != '-' AND job_id != ''";
+  const queryWU = "SELECT id, job_id AS jobId, domain, state AS market, receive_date AS receiveDate, ecd_date AS ecdDate, submission_date AS submissionDate, amdocs_qc, internal_qc, otp, updated_at FROM work_updates WHERE job_id IS NOT NULL AND job_id != '-' AND job_id != ''";
 
   db.query(queryJC, (errJC, jcRows) => {
     if (errJC) {
@@ -132,7 +145,8 @@ exports.getAllJobs = (req, res) => {
 
       const jobMap = new Map();
 
-      [...wuRows, ...jcRows].forEach(row => {
+      // Pehle work_updates ka data daalo taaki QC aur OTP fields prioritize ho sakein
+      [...jcRows, ...wuRows].forEach(row => {
         const jId = row.jobId ? row.jobId.toString().trim() : "";
         if (jId && jId !== "-") {
           if (jobMap.has(jId)) {
@@ -142,7 +156,10 @@ exports.getAllJobs = (req, res) => {
               ...row,
               domain: row.domain || existing.domain,
               submissionDate: row.submissionDate || existing.submissionDate,
-              receiveDate: row.receiveDate || existing.receiveDate
+              receiveDate: row.receiveDate || existing.receiveDate,
+              amdocs_qc: row.amdocs_qc || existing.amdocs_qc,
+              internal_qc: row.internal_qc || existing.internal_qc,
+              otp: row.otp || existing.otp
             });
           } else {
             jobMap.set(jId, row);
@@ -203,7 +220,7 @@ exports.updateJob = (req, res) => {
         if (upWerr) {
           return res.status(500).json({ success: false, message: upWerr.message });
         }
-        return res.json({ success: true, message: "Work updates table updated successfully." });
+        return res.json({ success: true, message: "Work updates table updated successfully with QC and OTP." });
       });
     } else {
       db.query(`SELECT id FROM job_creation WHERE id = ? LIMIT 1`, [paramId], (jErr, jRows) => {
@@ -234,7 +251,7 @@ exports.updateJob = (req, res) => {
             if (inErr) {
               return res.status(500).json({ success: false, message: inErr.message });
             }
-            return res.json({ success: true, message: "Record created and updated successfully." });
+            return res.json({ success: true, message: "Record created and updated successfully with QC & OTP." });
           });
         }
       });
