@@ -128,7 +128,7 @@ exports.createJob = (req, res) => {
 };
 
 // ============================
-// GET ALL JOBS (Combined from Job Creation & Work Updates)
+// GET ALL JOBS
 // ============================
 exports.getAllJobs = (req, res) => {
   const queryJC = "SELECT id, jobId, domain, market, month, receiveDate, ecdDate, submissionDate, updated_at FROM job_creation";
@@ -145,7 +145,6 @@ exports.getAllJobs = (req, res) => {
 
       const jobMap = new Map();
 
-      // Pehle work_updates ka data daalo taaki QC aur OTP fields prioritize ho sakein
       [...jcRows, ...wuRows].forEach(row => {
         const jId = row.jobId ? row.jobId.toString().trim() : "";
         if (jId && jId !== "-") {
