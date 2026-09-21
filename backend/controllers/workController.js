@@ -13,7 +13,7 @@ const clean = (v) => {
 const normalize = (v) => clean(v).toUpperCase();
 
 /* ======================================
-   DATE HELPER (Database: YYYY-MM-DD)
+   DATE HELPER
 ====================================== */
 const parseExcelDate = (value) => {
   if (!value) return null;
@@ -32,26 +32,6 @@ const parseExcelDate = (value) => {
   const day = String(d.getDate()).padStart(2, '0');
 
   return `${year}-${month}-${day}`;
-};
-
-/* ======================================
-   PERCENTAGE FORMATTER FOR QC
-====================================== */
-const formatPercentage = (value) => {
-  if (value === null || value === undefined || value === "") return "";
-  let str = value.toString().trim();
-  if (str.endsWith("%")) return str;
-
-  let num = Number(str);
-  if (!isNaN(num)) {
-    // If Excel stores percentage as decimal (e.g., 0.9 -> 90%, 0.95 -> 95%)
-    if (num > 0 && num <= 1) {
-      return `${Math.round(num * 100)}%`;
-    } else {
-      return `${num}%`;
-    }
-  }
-  return str;
 };
 
 /* ======================================
@@ -91,19 +71,15 @@ const cleanMonthArray = (arr) => {
   return arr.map(m => formatMonth(m)).filter(Boolean);
 };
 
-/* ======================================
-   STRICT DYNAMIC UOM EXTRACTION
-====================================== */
 const extractUOM = (row) => {
   const uom = {};
 
   const skipColumns = [
-    "sow", "job type", "job_type", "state", "market", "month", "month of service", 
+    "sow", "job type", "state", "market", "month", "month of service", 
     "otp", "amdocs qc", "amdocs_qc", "internal qc", "internal_qc", 
-    "job id", "job_id", "jobid", "sl.no", "sl no", "sl.", "sl", "footage", 
+    "job id", "job_id", "jobid", "sl.no", "sl no", "footage", 
     "splice count", "receive date", "ecd date", "submission date", 
-    "current status", "production engineers", "production engineers:", "qc engineers", 
-    "region", "sl_no", "slno", "received date"
+    "current status", "production engineers", "qc engineers", "region"
   ];
 
   Object.keys(row).forEach((key) => {
@@ -250,7 +226,7 @@ const helperSyncToJobCreation = (data) => {
 };
 
 /* ======================================
-   IMPORT EXCEL
+   IMPORT EXCEL (SEQUENTIAL ORDER MAINTAINED)
 ====================================== */
 const importExcel = async (req, res) => {
   try {
@@ -303,9 +279,8 @@ const importExcel = async (req, res) => {
             const jobIdVal = clean(row["Job ID"] || row.job_id || row.jobId || "");
             
             const otpVal = clean(row.OTP || row.otp || "");
-            
-            const amdocsQcVal = formatPercentage(row["Amdocs QC"] || row["AMDOCS QC"] || row.amdocs_qc);
-            const internalQcVal = formatPercentage(row["Internal QC"] || row["INTERNAL QC"] || row.internal_qc);
+            const amdocsQcVal = clean(row["Amdocs QC"] || row["AMDOCS QC"] || row.amdocs_qc || "");
+            const internalQcVal = clean(row["Internal QC"] || row["INTERNAL QC"] || row.internal_qc || "");
             
             const receiveDateVal = parseExcelDate(row["Receive Date"] || row.receive_date);
             const ecdDateVal = parseExcelDate(row["ECD Date"] || row.ecd_date);
@@ -536,9 +511,6 @@ const createWork = (req, res) => {
   const fixedDomain = normalize(domain);
   const fixedJobType = normalize(job_type);
   const cleanJobId = clean(job_id);
-
-  const formattedInternalQc = formatPercentage(internal_qc);
-  const formattedAmdocsQc = formatPercentage(amdocs_qc);
   
   let parsedMonths = [];
   if (Array.isArray(months)) {
@@ -558,7 +530,7 @@ const createWork = (req, res) => {
         SET months = ?, domain = ?, sow = ?, job_type = ?, region = ?, state = ?, county = ?, uom = ?, otp = ?, internal_qc = ?, amdocs_qc = ?, jobs_delivered = ?, receive_date = COALESCE(?, receive_date), ecd_date = COALESCE(?, ecd_date), submission_date = COALESCE(?, submission_date), updated_at = CURRENT_TIMESTAMP
         WHERE id = ?
       `;
-      db.query(updateSql, [JSON.stringify(parsedMonths), fixedDomain, sow, fixedJobType, region, state, county, JSON.stringify(uom || {}), clean(otp), formattedInternalQc, formattedAmdocsQc, Number(jobs_delivered || 1), receive_date || null, ecd_date || null, submission_date || null, existingId], (err) => {
+      db.query(updateSql, [JSON.stringify(parsedMonths), fixedDomain, sow, fixedJobType, region, state, county, JSON.stringify(uom || {}), clean(otp), clean(internal_qc), clean(amdocs_qc), Number(jobs_delivered || 1), receive_date || null, ecd_date || null, submission_date || null, existingId], (err) => {
         if (err) return res.status(500).json(err);
         syncToJobCreation(existingId);
       });
@@ -568,7 +540,7 @@ const createWork = (req, res) => {
         (months, domain, sow, job_type, region, state, county, uom, otp, internal_qc, amdocs_qc, jobs_delivered, job_id, receive_date, ecd_date, submission_date)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `;
-      db.query(insertSql, [JSON.stringify(parsedMonths), fixedDomain, sow, fixedJobType, region, state, county, JSON.stringify(uom || {}), clean(otp), formattedInternalQc, formattedAmdocsQc, Number(jobs_delivered || 1), cleanJobId, receive_date || null, ecd_date || null, submission_date || null], (err, result) => {
+      db.query(insertSql, [JSON.stringify(parsedMonths), fixedDomain, sow, fixedJobType, region, state, county, JSON.stringify(uom || {}), clean(otp), clean(internal_qc), clean(amdocs_qc), Number(jobs_delivered || 1), cleanJobId, receive_date || null, ecd_date || null, submission_date || null], (err, result) => {
         if (err) return res.status(500).json(err);
         syncToJobCreation(result.insertId);
       });
@@ -585,8 +557,8 @@ const createWork = (req, res) => {
       ecdDate: ecd_date || null,
       submissionDate: submission_date || null,
       otp: clean(otp),
-      amdocsQc: formattedAmdocsQc,
-      internalQc: formattedInternalQc
+      amdocsQc: clean(amdocs_qc),
+      internalQc: clean(internal_qc)
     });
 
     res.json({
@@ -608,9 +580,6 @@ const createWork = (req, res) => {
   }
 };
 
-/* ======================================
-   UPDATE WORK
-====================================== */
 const updateWork = (req, res) => {
   const { id } = req.params;
   const {
@@ -638,9 +607,6 @@ const updateWork = (req, res) => {
   const fixedDomain = normalize(domain);
   const fixedJobType = normalize(job_type);
   const cleanJobId = clean(job_id);
-
-  const formattedInternalQc = formatPercentage(internal_qc);
-  const formattedAmdocsQc = formatPercentage(amdocs_qc);
 
   let parsedMonths = [];
   if (Array.isArray(months)) {
@@ -699,8 +665,8 @@ const updateWork = (req, res) => {
       clean(production_engineers),
       clean(qc_engineers),
       clean(otp),
-      formattedInternalQc,
-      formattedAmdocsQc,
+      clean(internal_qc),
+      clean(amdocs_qc),
       receive_date || null,
       ecd_date || null,
       submission_date || null,
@@ -724,8 +690,8 @@ const updateWork = (req, res) => {
           ecdDate: ecd_date || null,
           submissionDate: submission_date || null,
           otp: clean(otp),
-          amdocsQc: formattedAmdocsQc,
-          internalQc: formattedInternalQc
+          amdocsQc: clean(amdocs_qc),
+          internalQc: clean(internal_qc)
         });
       }
 
@@ -840,7 +806,7 @@ const getStateWiseJobs = (req, res) => {
   );
 };
 
-const getDomainLastUpdate, getDomainLastUpdate = (req, res) => {
+const getDomainLastUpdate = (req, res) => {
   const sql = `SELECT domain, MAX(updated_at) AS lastUpdate FROM work_updates GROUP BY domain`;
 
   db.query(sql, (err, rows) => {
