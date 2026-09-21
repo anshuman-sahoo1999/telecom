@@ -35,6 +35,7 @@ const JobHistory = () => {
         jobId: "",
     });
 
+    // Format Date to Month-Date-Year (MM-DD-YYYY) for UI Display
     const formatLocalDate = (dateStr) => {
         if (!dateStr) return "-";
         const d = new Date(dateStr);
@@ -42,7 +43,7 @@ const JobHistory = () => {
         const year = d.getFullYear();
         const month = String(d.getMonth() + 1).padStart(2, "0");
         const day = String(d.getDate()).padStart(2, "0");
-        return `${year}-${month}-${day}`;
+        return `${month}-${day}-${year}`;
     };
 
     useEffect(() => {
@@ -126,7 +127,6 @@ const JobHistory = () => {
         })
     ];
 
-    // Deduplication logic to prevent duplicate UI rendering
     const uniqueMap = new Map();
     rawCombinedData.forEach(item => {
         const jId = String(item.jobId || item.job_id || "").trim();
@@ -140,7 +140,6 @@ const JobHistory = () => {
     });
     const combinedData = Array.from(uniqueMap.values());
 
-    // Normalize and convert all domains to uppercase so they never appear small
     const normalizeUpper = (d) => (d || "").toString().trim().toUpperCase();
     const masterDomains = (domains || []).map(normalizeUpper);
     const jobDomains = combinedData.map(j => normalizeUpper(j.domain));
@@ -292,8 +291,9 @@ const JobHistory = () => {
     const filteredJobs = combinedData.filter((job) => {
         const jobMonthYear = parseMonthField(job);
 
-        const receiveDateStr = formatLocalDate(job.receiveDate || job.receive_date);
-        const jobDate = receiveDateStr;
+        // For date comparison in filters, we keep standard YYYY-MM-DD comparison if input type="date" yields YYYY-MM-DD
+        const rawReceiveDate = job.receiveDate || job.receive_date;
+        const jobDate = rawReceiveDate ? new Date(rawReceiveDate).toISOString().split('T')[0] : "-";
 
         const matchMonthYear =
             !appliedFilters.monthYear ||
@@ -383,7 +383,6 @@ const JobHistory = () => {
                         }
                     >
                         <option value="">All Month-Year</option>
-
                         {[...new Set(
                             combinedData.map((job) => parseMonthField(job))
                         )]
@@ -406,7 +405,6 @@ const JobHistory = () => {
                         }
                     >
                         <option value="">All Domain</option>
-
                         {mergedDomains.map((d) => (
                             <option key={d} value={d}>
                                 {d}
@@ -425,7 +423,6 @@ const JobHistory = () => {
                         }
                     >
                         <option value="">All Market</option>
-
                         {combinedData
                             .map((j) => j.market || j.state)
                             .filter((v, i, a) => v && a.indexOf(v) === i)
@@ -472,7 +469,6 @@ const JobHistory = () => {
                     >
                         Apply
                     </button>
-
                     <button
                         className="job-clear-btn"
                         onClick={() =>
@@ -518,14 +514,15 @@ const JobHistory = () => {
                     <tbody>
                         {currentJobs.length > 0 ? (
                             currentJobs.map((job, index) => {
+                                // Dates will now render as MM-DD-YYYY
                                 const receiveStr = formatLocalDate(job.receiveDate || job.receive_date);
-                                const subDateVal = job.submissionDate || job.submission_date || job.submissiondate;
+                                const ecdStr = formatLocalDate(job.ecdDate || job.ecd_date);
+                                const subDateVal = formatLocalDate(job.submissionDate || job.submission_date || job.submissiondate);
                                 const monthVal = parseMonthField(job);
 
                                 const otpVal = job.otp || job.internalOtp;
                                 const amdocsVal = job.amdocsQc || job.amdocs_qc;
                                 
-                                // Check if OTP or Amdocs QC is missing or '-'
                                 const isMissingOtpOrAmdocs =
                                     !otpVal || otpVal === "-" || !amdocsVal || amdocsVal === "-";
 
@@ -535,14 +532,13 @@ const JobHistory = () => {
                                         className={isMissingOtpOrAmdocs ? "light-orange-row" : ""}
                                     >
                                         <td>{startIndex + index + 1}</td>
-
                                         <td>{monthVal}</td>
                                         <td>{job.domain ? job.domain.toUpperCase() : "-"}</td>
                                         <td>{job.market || job.state || "-"}</td>
                                         <td>{job.jobId || job.job_id || "-"}</td>
                                         <td>{receiveStr}</td>
-                                        <td>{formatLocalDate(job.ecdDate || job.ecd_date)}</td>
-                                        <td>{formatLocalDate(subDateVal)}</td>
+                                        <td>{ecdStr}</td>
+                                        <td>{subDateVal}</td>
                                         <td>
                                             <button
                                                 className="view-work-btn"
