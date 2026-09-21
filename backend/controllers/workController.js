@@ -58,7 +58,7 @@ const formatPercentage = (value) => {
 ====================================== */
 const getMonthValue = (row) => {
   for (const key of Object.keys(row)) {
-    const k = key.toLowerCase().replace(/[\s_]/g, "");
+    const k = key.toLowerCase().replace(/[^a-z0-9]/g, "");
     if (k === "month" || k === "monthofservice" || k === "months") {
       return row[key];
     }
@@ -92,18 +92,18 @@ const cleanMonthArray = (arr) => {
 };
 
 /* ======================================
-   DYNAMIC UOM EXTRACTION (AUTOMATIC)
+   DYNAMIC UOM EXTRACTION (STRICT ECD FILTER)
 ====================================== */
 const extractUOM = (row) => {
   const uom = {};
 
-  // Standard system columns (ECD aur baki dates ko bhi yahan include kar diya hai)
+  // Standard system columns jisme ECD ke sare variants shamil hain
   const systemColumns = [
     "sow", "job type", "job_type", "state", "market", "region", "county",
     "month", "month of service", "months", "otp", "amdocs qc", "amdocs_qc", 
     "internal qc", "internal_qc", "job id", "job_id", "jobid", 
     "receive date", "received date", "receive_date", "received_date",
-    "ecd date", "ecd_date", "ecd", "submission date", "submission_date", 
+    "ecd date", "ecd_date", "ecd-date", "ecddate", "ecd", "submission date", "submission_date", 
     "current status", "current_status", "production engineers", "production_engineers", 
     "qc engineers", "qc_engineers", "sl no", "sl.no", "sl", "sl.", "sl_no", "slno", 
     "file name", "file_name", "jobs delivered", "jobs_delivered", "domain", "status"
@@ -112,31 +112,30 @@ const extractUOM = (row) => {
   Object.keys(row).forEach((key) => {
     if (!key) return;
     
-    const cleanKey = key
-      .toString()
-      .toLowerCase()
-      .replace(/\./g, "")
-      .replace(/:/g, "")
-      .replace(/\(.*\)/g, "")
-      .replace(/\*/g, "")
-      .replace(/[\s_]+/g, " ")
-      .trim(); 
-
-    const compressedKey = cleanKey.replace(/\s+/g, "");
+    const compressedKey = key.toString().toLowerCase().replace(/[^a-z0-9]/g, "");
     
     const isSystemCol = systemColumns.some(sys => {
-      const cleanSys = sys.toLowerCase().replace(/[\s_.]+/g, "");
-      return compressedKey === cleanSys || cleanKey === sys.toLowerCase();
+      const cleanSys = sys.toLowerCase().replace(/[^a-z0-9]/g, "");
+      return compressedKey === cleanSys;
     });
 
-    // Agar column system ka standard field nahi hai, toh use UOM me daal do
+    // Agar column system list me hai, toh UOM me bilkul nahi jayega
     if (!isSystemCol) {
       let value = row[key];
       if (value && typeof value === 'object' && value.text) {
         value = value.text;
       }
       if (value !== "" && value !== null && value !== undefined && !(value instanceof Date)) {
-        uom[cleanKey] = value;
+        const cleanKeyName = key
+          .toString()
+          .toLowerCase()
+          .replace(/\./g, "")
+          .replace(/:/g, "")
+          .replace(/\(.*\)/g, "")
+          .replace(/\*/g, "")
+          .replace(/[\s_]+/g, " ")
+          .trim();
+        uom[cleanKeyName] = value;
       }
     }
   });
@@ -149,9 +148,10 @@ const extractUOM = (row) => {
 ====================================== */
 const findValueInRow = (row, possibleKeys) => {
   for (const key of Object.keys(row)) {
-    const cleanKey = key.toLowerCase().replace(/[\s_.]+/g, "").trim();
+    const compressedKey = key.toLowerCase().replace(/[^a-z0-9]/g, "");
     for (const pk of possibleKeys) {
-      if (cleanKey === pk.toLowerCase().replace(/[\s_.]+/g, "")) {
+      const compressedPk = pk.toLowerCase().replace(/[^a-z0-9]/g, "");
+      if (compressedKey === compressedPk) {
         let val = row[key];
         if (val && typeof val === 'object' && val.text) {
           val = val.text;
@@ -343,20 +343,20 @@ const importExcel = async (req, res) => {
           try {
             const domain = normalize(sheetName); 
             const sow = clean(findValueInRow(row, ["SOW"]));
-            const jobType = normalize(findValueInRow(row, ["Job Type", "job_type"]));
-            const jobIdVal = clean(findValueInRow(row, ["Job ID", "job_id", "jobId"]));
+            const jobType = normalize(findValueInRow(row, ["Job Type", "job_type", "job-type"]));
+            const jobIdVal = clean(findValueInRow(row, ["Job ID", "job_id", "jobId", "job-id"]));
             
             const otpVal = clean(findValueInRow(row, ["OTP"]));
-            const currentStatusVal = clean(findValueInRow(row, ["Current Status", "current_status"]));
+            const currentStatusVal = clean(findValueInRow(row, ["Current Status", "current_status", "current-status"]));
             const productionEngineersVal = clean(findValueInRow(row, ["Production Engineers", "production_engineers"]));
             const qcEngineersVal = clean(findValueInRow(row, ["QC Engineers", "qc_engineers"]));
             
             const amdocsQcVal = formatPercentage(findValueInRow(row, ["Amdocs QC", "amdocs_qc"]));
             const internalQcVal = formatPercentage(findValueInRow(row, ["Internal QC", "internal_qc"]));
             
-            const receiveDateVal = parseExcelDate(findValueInRow(row, ["Receive Date", "receive_date"]));
-            const ecdDateVal = parseExcelDate(findValueInRow(row, ["ECD Date", "ecd_date", "ECD"]));
-            const submissionDateVal = parseExcelDate(findValueInRow(row, ["Submission Date", "submission_date"]));
+            const receiveDateVal = parseExcelDate(findValueInRow(row, ["Receive Date", "receive_date", "receive-date"]));
+            const ecdDateVal = parseExcelDate(findValueInRow(row, ["ECD Date", "ecd_date", "ecd-date", "ecddate", "ECD"]));
+            const submissionDateVal = parseExcelDate(findValueInRow(row, ["Submission Date", "submission_date", "submission-date"]));
 
             let rawLocation = clean(
               findValueInRow(row, ["State", "Market", "Region"])
