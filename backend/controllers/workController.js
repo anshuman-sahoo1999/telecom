@@ -13,83 +13,48 @@ const clean = (v) => {
 const normalize = (v) => clean(v).toUpperCase();
 
 /* ======================================
-   PERCENTAGE HELPER
+   DATE HELPER (Database: YYYY-MM-DD)
+====================================== */
+const parseExcelDate = (value) => {
+  if (!value) return null;
+  
+  let d;
+  if (value instanceof Date) {
+    d = value;
+  } else {
+    d = new Date(value);
+  }
+
+  if (isNaN(d)) return null;
+
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+
+  return `${year}-${month}-${day}`;
+};
+
+/* ======================================
+   PERCENTAGE FORMATTER FOR QC
 ====================================== */
 const formatPercentage = (value) => {
-  if (value === null || value === undefined || value === "") {
-    return "";
-  }
-  if (typeof value === "number") {
-    if (value >= 0 && value <= 1) {
-      return `${(value * 100).toFixed(2).replace(/\.00$/, "")}%`;
-    }
-    return `${value}%`;
-  }
+  if (value === null || value === undefined || value === "") return "";
   let str = value.toString().trim();
-  if (!str) return "";
-  if (str.endsWith("%")) {
-    return str;
-  }
-  const num = Number(str);
+  if (str.endsWith("%")) return str;
+
+  let num = Number(str);
   if (!isNaN(num)) {
-    if (num >= 0 && num <= 1) {
-      return `${(num * 100).toFixed(2).replace(/\.00$/, "")}%`;
+    if (num > 0 && num <= 1) {
+      return `${Math.round(num * 100)}%`;
+    } else {
+      return `${num}%`;
     }
-    return `${num}%`;
   }
   return str;
 };
 
 /* ======================================
-   DATE HELPER (Fixed to YYYY-MM-DD)
-====================================== */
-const parseExcelDate = (value) => {
-  if (value === null || value === undefined || value === "") {
-    return null;
-  }
-
-  let d;
-  if (value instanceof Date) {
-    d = value;
-  }
-  else if (typeof value === "number") {
-    const excelEpoch = new Date(Date.UTC(1899, 11, 30));
-    d = new Date(excelEpoch.getTime() + value * 86400000);
-  }
-  else {
-    const str = value.toString().trim();
-    if (!str) return null;
-    
-    // Check for DD-MM-YYYY or DD/MM/YYYY
-    let matchDMY = str.match(/^(\d{1,2})[-/](\d{1,2})[-/](\d{4})$/);
-    if (matchDMY) {
-      const day = Number(matchDMY[1]);
-      const month = Number(matchDMY[2]);
-      const year = Number(matchDMY[3]);
-      d = new Date(year, month - 1, day);
-    }
-    // Check for YYYY-MM-DD
-    else if (/^\d{4}-\d{1,2}-\d{1,2}$/.test(str)) {
-      const [year, month, day] = str.split("-").map(Number);
-      d = new Date(year, month - 1, day);
-    }
-    else {
-      d = new Date(str);
-    }
-  }
-
-  if (isNaN(d.getTime())) {
-    return null;
-  }
-
-  const year = d.getFullYear();
-  const month = String(d.getMonth() + 1).padStart(2, "0");
-  const day = String(d.getDate()).padStart(2, "0");
-  return `${year}-${month}-${day}`; // Database friendly format: YYYY-MM-DD
-};
-
-/* ======================================
-   MONTH HELPERS (Fixed to YYYY-MM format)
+   MONTH HELPERS
 ====================================== */
 const getMonthValue = (row) => {
   return (
@@ -103,15 +68,18 @@ const getMonthValue = (row) => {
 const formatMonth = (value) => {
   if (!value) return null;
 
+  const months = [
+    "Jan", "Feb", "Mar", "Apr", "May", "Jun",
+    "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"
+  ];
+
   let strVal = String(value).trim();
-  if (!strVal) return null;
+  strVal = strVal.replace(/-\d{2,4}/g, "").trim();
 
   let d = new Date(strVal);
 
   if (!isNaN(d.getTime())) {
-    const year = d.getFullYear();
-    const month = String(d.getMonth() + 1).padStart(2, "0");
-    return `${year}-${month}`; // Standardized to YYYY-MM format for DB
+    return `${months[d.getMonth()]},${d.getFullYear()}`;
   }
 
   return strVal;
@@ -122,42 +90,39 @@ const cleanMonthArray = (arr) => {
   return arr.map(m => formatMonth(m)).filter(Boolean);
 };
 
+/* ======================================
+   STRICT DYNAMIC UOM EXTRACTION
+====================================== */
 const extractUOM = (row) => {
   const uom = {};
 
-  const separateFields = [
-    "sow","job type","job_type","state","market","region","county","month",
-    "month of service","month of service ","otp","amdocs qc","amdocs_qc",
-    "internal qc","internal_qc","job id","job_id","jobid","sl.no","sl no",
-    "slno","serial no","serial number","footage","splice count","receive date",
-    "receive_date","ecd date","ecd_date","submission date","submission_date",
-    "current status","current_status","production engineer","production engineers",
-    "production_engineer","production_engineers","qc engineer","qc engineers",
-    "qc_engineer","qc_engineers","region","domain","file name","file_name"
+  const skipColumns = [
+    "sow", "job type", "job_type", "state", "market", "month", "month of service", 
+    "otp", "amdocs qc", "amdocs_qc", "internal qc", "internal_qc", 
+    "job id", "job_id", "jobid", "sl.no", "sl no", "sl.", "sl", "footage", 
+    "splice count", "receive date", "ecd date", "submission date", 
+    "current status", "production engineers", "production engineers:", "qc engineers", 
+    "region", "sl_no", "slno", "received date"
   ];
 
   Object.keys(row).forEach((key) => {
     if (!key) return;
-
+    
     const cleanKey = key
       .replace(/\(.*\)/g, "")
       .replace(/\*/g, "")
       .trim()
-      .toLowerCase();
-    if (separateFields.includes(cleanKey)) {
-      return;
-    }
+      .toLowerCase(); 
+
+    if (skipColumns.includes(cleanKey)) return;
+
     const value = row[key];
-    if (
-      value === "" ||
-      value === null ||
-      value === undefined ||
-      value instanceof Date
-    ) {
-      return;
-    }
+    if (value === "" || value === null || value === undefined) return;
+    if (value instanceof Date) return;
+
     uom[cleanKey] = value;
   });
+
   return uom;
 };
 
@@ -173,6 +138,7 @@ const getStateNameFromCode = (code) => {
       return stateName;
     }
   }
+
   return "";
 };
 
@@ -336,16 +302,21 @@ const importExcel = async (req, res) => {
             const jobIdVal = clean(row["Job ID"] || row.job_id || row.jobId || "");
             
             const otpVal = clean(row.OTP || row.otp || "");
-            const amdocsQcVal = formatPercentage(row["Amdocs QC"] || row["AMDOCS QC"] || row.amdocs_qc || "");
-            const internalQcVal = formatPercentage(row["Internal QC"] || row["INTERNAL QC"] || row.internal_qc || "");
+            
+            const amdocsQcVal = formatPercentage(row["Amdocs QC"] || row["AMDOCS QC"] || row.amdocs_qc);
+            const internalQcVal = formatPercentage(row["Internal QC"] || row["INTERNAL QC"] || row.internal_qc);
             
             const receiveDateVal = parseExcelDate(row["Receive Date"] || row.receive_date);
             const ecdDateVal = parseExcelDate(row["ECD Date"] || row.ecd_date);
             const submissionDateVal = parseExcelDate(row["Submission Date"] || row.submission_date);
 
             let rawLocation = clean(
-              row.State || row.STATE || row.state ||
-              row.Market || row.market || row.Region
+              row.State ||
+              row.STATE ||
+              row.state ||
+              row.Market ||
+              row.market ||
+              row.Region
             );
 
             let state = "";
@@ -369,6 +340,7 @@ const importExcel = async (req, res) => {
               const matchedState = Object.keys(stateData).find(
                 s => s.toLowerCase() === formattedLocation.toLowerCase()
               );
+
               if (matchedState) {
                 state = matchedState;
                 region = getRegionFromState(state);
@@ -377,6 +349,7 @@ const importExcel = async (req, res) => {
 
             if (!state) {
               const countyResult = getStateFromCounty(formattedLocation);
+
               if (countyResult.state) {
                 county = countyResult.county;
                 state = countyResult.state;
@@ -439,12 +412,12 @@ const importExcel = async (req, res) => {
                           market: state || region,
                           cleanJobId: jobIdVal,
                           month,
-                          receiveDate: receiveDateVal,
-                          ecdDate: ecdDateVal,
-                          submissionDate: submissionDateVal,
                           otp: otpVal,
                           amdocsQc: amdocsQcVal,
-                          internalQc: internalQcVal
+                          internalQc: internalQcVal,
+                          receiveDate: receiveDateVal,
+                          ecdDate: ecdDateVal,
+                          submissionDate: submissionDateVal
                         });
                         success++;
                       } else {
@@ -496,12 +469,12 @@ const importExcel = async (req, res) => {
                         market: state || region,
                         cleanJobId: jobIdVal,
                         month,
-                        receiveDate: receiveDateVal,
-                        ecdDate: ecdDateVal,
-                        submissionDate: submissionDateVal,
                         otp: otpVal,
                         amdocsQc: amdocsQcVal,
-                        internalQc: internalQcVal
+                        internalQc: internalQcVal,
+                        receiveDate: receiveDateVal,
+                        ecdDate: ecdDateVal,
+                        submissionDate: submissionDateVal
                       });
                     }
                     success++;
@@ -522,7 +495,7 @@ const importExcel = async (req, res) => {
     }
 
     return res.json({
-      message: "Excel imported successfully with formatted dates and months",
+      message: "Excel imported successfully in proper order",
       totalRows,
       insertedOrUpdated: success,
       failed
@@ -562,6 +535,9 @@ const createWork = (req, res) => {
   const fixedDomain = normalize(domain);
   const fixedJobType = normalize(job_type);
   const cleanJobId = clean(job_id);
+
+  const formattedInternalQc = formatPercentage(internal_qc);
+  const formattedAmdocsQc = formatPercentage(amdocs_qc);
   
   let parsedMonths = [];
   if (Array.isArray(months)) {
@@ -572,10 +548,6 @@ const createWork = (req, res) => {
   parsedMonths = cleanMonthArray(parsedMonths);
   const firstMonth = parsedMonths.length > 0 ? parsedMonths[0] : null;
 
-  const formattedReceiveDate = parseExcelDate(receive_date);
-  const formattedEcdDate = parseExcelDate(ecd_date);
-  const formattedSubDate = parseExcelDate(submission_date);
-
   const checkSql = cleanJobId ? `SELECT id FROM work_updates WHERE TRIM(job_id) = TRIM(?) LIMIT 1` : null;
 
   const executeSave = (existingId = null) => {
@@ -585,24 +557,7 @@ const createWork = (req, res) => {
         SET months = ?, domain = ?, sow = ?, job_type = ?, region = ?, state = ?, county = ?, uom = ?, otp = ?, internal_qc = ?, amdocs_qc = ?, jobs_delivered = ?, receive_date = COALESCE(?, receive_date), ecd_date = COALESCE(?, ecd_date), submission_date = COALESCE(?, submission_date), updated_at = CURRENT_TIMESTAMP
         WHERE id = ?
       `;
-      db.query(updateSql, [
-        JSON.stringify(parsedMonths), 
-        fixedDomain, 
-        sow, 
-        fixedJobType, 
-        region, 
-        state, 
-        county, 
-        JSON.stringify(uom || {}), 
-        clean(otp), 
-        formatPercentage(internal_qc), 
-        formatPercentage(amdocs_qc), 
-        Number(jobs_delivered || 1), 
-        formattedReceiveDate, 
-        formattedEcdDate, 
-        formattedSubDate, 
-        existingId
-      ], (err) => {
+      db.query(updateSql, [JSON.stringify(parsedMonths), fixedDomain, sow, fixedJobType, region, state, county, JSON.stringify(uom || {}), clean(otp), formattedInternalQc, formattedAmdocsQc, Number(jobs_delivered || 1), receive_date || null, ecd_date || null, submission_date || null, existingId], (err) => {
         if (err) return res.status(500).json(err);
         syncToJobCreation(existingId);
       });
@@ -612,24 +567,7 @@ const createWork = (req, res) => {
         (months, domain, sow, job_type, region, state, county, uom, otp, internal_qc, amdocs_qc, jobs_delivered, job_id, receive_date, ecd_date, submission_date)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `;
-      db.query(insertSql, [
-        JSON.stringify(parsedMonths), 
-        fixedDomain, 
-        sow, 
-        fixedJobType, 
-        region, 
-        state, 
-        county, 
-        JSON.stringify(uom || {}), 
-        clean(otp), 
-        formatPercentage(internal_qc), 
-        formatPercentage(amdocs_qc), 
-        Number(jobs_delivered || 1), 
-        cleanJobId, 
-        formattedReceiveDate, 
-        formattedEcdDate, 
-        formattedSubDate
-      ], (err, result) => {
+      db.query(insertSql, [JSON.stringify(parsedMonths), fixedDomain, sow, fixedJobType, region, state, county, JSON.stringify(uom || {}), clean(otp), formattedInternalQc, formattedAmdocsQc, Number(jobs_delivered || 1), cleanJobId, receive_date || null, ecd_date || null, submission_date || null], (err, result) => {
         if (err) return res.status(500).json(err);
         syncToJobCreation(result.insertId);
       });
@@ -642,12 +580,12 @@ const createWork = (req, res) => {
       market: state || region,
       cleanJobId,
       month: firstMonth,
-      receiveDate: formattedReceiveDate,
-      ecdDate: formattedEcdDate,
-      submissionDate: formattedSubDate,
+      receiveDate: receive_date || null,
+      ecdDate: ecd_date || null,
+      submissionDate: submission_date || null,
       otp: clean(otp),
-      amdocsQc: clean(amdocs_qc),
-      internalQc: clean(internal_qc)
+      amdocsQc: formattedAmdocsQc,
+      internalQc: formattedInternalQc
     });
 
     res.json({
@@ -669,6 +607,9 @@ const createWork = (req, res) => {
   }
 };
 
+/* ======================================
+   UPDATE WORK
+====================================== */
 const updateWork = (req, res) => {
   const { id } = req.params;
   const {
@@ -697,6 +638,9 @@ const updateWork = (req, res) => {
   const fixedJobType = normalize(job_type);
   const cleanJobId = clean(job_id);
 
+  const formattedInternalQc = formatPercentage(internal_qc);
+  const formattedAmdocsQc = formatPercentage(amdocs_qc);
+
   let parsedMonths = [];
   if (Array.isArray(months)) {
     parsedMonths = months;
@@ -710,10 +654,6 @@ const updateWork = (req, res) => {
   }
   parsedMonths = cleanMonthArray(parsedMonths);
   const latestMonth = parsedMonths.length > 0 ? parsedMonths[parsedMonths.length - 1] : null;
-
-  const formattedReceiveDate = parseExcelDate(receive_date);
-  const formattedEcdDate = parseExcelDate(ecd_date);
-  const formattedSubDate = parseExcelDate(submission_date);
 
   const sql = `
     UPDATE work_updates
@@ -758,11 +698,11 @@ const updateWork = (req, res) => {
       clean(production_engineers),
       clean(qc_engineers),
       clean(otp),
-      formatPercentage(internal_qc),
-      formatPercentage(amdocs_qc),
-      formattedReceiveDate,
-      formattedEcdDate,
-      formattedSubDate,
+      formattedInternalQc,
+      formattedAmdocsQc,
+      receive_date || null,
+      ecd_date || null,
+      submission_date || null,
       id
     ],
     (err, result) => {
@@ -779,12 +719,12 @@ const updateWork = (req, res) => {
           market: state || region,
           cleanJobId,
           month: latestMonth,
-          receiveDate: formattedReceiveDate,
-          ecdDate: formattedEcdDate,
-          submissionDate: formattedSubDate,
+          receiveDate: receive_date || null,
+          ecdDate: ecd_date || null,
+          submissionDate: submission_date || null,
           otp: clean(otp),
-          amdocsQc: clean(amdocs_qc),
-          internalQc: clean(internal_qc)
+          amdocsQc: formattedAmdocsQc,
+          internalQc: formattedInternalQc
         });
       }
 
