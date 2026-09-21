@@ -13,7 +13,7 @@ const clean = (v) => {
 const normalize = (v) => clean(v).toUpperCase();
 
 /* ======================================
-   MODIFIED DATE HELPER (Saves as MM-DD-YYYY directly to DB)
+   STRICT MM-DD-YYYY DATE PARSER
 ====================================== */
 const parseExcelDate = (value) => {
   if (!value) return null;
@@ -22,10 +22,11 @@ const parseExcelDate = (value) => {
   if (value instanceof Date) {
     d = value;
   } else if (typeof value === 'number') {
-    // Excel serial date conversion
     d = new Date(Math.round((value - (25567 + 2)) * 86400 * 1000));
   } else {
     let strVal = value.toString().trim();
+    // Agar already MM-DD-YYYY format me hai toh wahi return kar do
+    if (/^\d{2}-\d{2}-\d{4}$/.test(strVal)) return strVal;
     d = new Date(strVal);
   }
 
@@ -35,21 +36,17 @@ const parseExcelDate = (value) => {
   const month = String(d.getMonth() + 1).padStart(2, '0');
   const day = String(d.getDate()).padStart(2, '0');
 
-  // Ab yeh backend se MM-DD-YYYY format return karega taaki DB me wahi save ho
+  // Strictly MM-DD-YYYY format return karega
   return `${month}-${day}-${year}`;
 };
 
 /* ======================================
-   FRONTEND FORMATTER (Directly returns MM-DD-YYYY)
+   FRONTEND FORMATTER
 ====================================== */
 const formatDateToMMDDYYYY = (dateVal) => {
   if (!dateVal) return "";
   let strVal = dateVal.toString().trim();
   
-  // Agar already MM-DD-YYYY format me hai ya kuch aur, toh direct return karein
-  const match = strVal.match(/^(\d{2})-(\d{2})-(\d{4})$/);
-  if (match) return strVal;
-
   // Agar YYYY-MM-DD format me hai toh usko MM-DD-YYYY me convert karein
   const isoMatch = strVal.match(/^(\d{4})-(\d{2})-(\d{2})/);
   if (isoMatch) {
@@ -57,7 +54,7 @@ const formatDateToMMDDYYYY = (dateVal) => {
     return `${month}-${day}-${year}`;
   }
 
-  return strVal;
+  return parseExcelDate(strVal) || strVal;
 };
 
 /* ======================================
