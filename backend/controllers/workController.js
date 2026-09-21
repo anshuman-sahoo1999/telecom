@@ -97,14 +97,13 @@ const cleanMonthArray = (arr) => {
 const extractUOM = (row) => {
   const uom = {};
 
-  // Yeh saare standard system columns hain. Jo column is list me nahi hoga, 
-  // woh automatic UOM ke andar chala jayega!
+  // Standard system columns (ECD aur baki dates ko bhi yahan include kar diya hai)
   const systemColumns = [
     "sow", "job type", "job_type", "state", "market", "region", "county",
     "month", "month of service", "months", "otp", "amdocs qc", "amdocs_qc", 
     "internal qc", "internal_qc", "job id", "job_id", "jobid", 
     "receive date", "received date", "receive_date", "received_date",
-    "ecd date", "ecd_date", "submission date", "submission_date", 
+    "ecd date", "ecd_date", "ecd", "submission date", "submission_date", 
     "current status", "current_status", "production engineers", "production_engineers", 
     "qc engineers", "qc_engineers", "sl no", "sl.no", "sl", "sl.", "sl_no", "slno", 
     "file name", "file_name", "jobs delivered", "jobs_delivered", "domain", "status"
@@ -310,7 +309,6 @@ const importExcel = async (req, res) => {
       const headerRow = worksheet.getRow(1);
       const totalColumns = headerRow.cellCount || worksheet.columnCount;
 
-      // Safely map headers including blank/empty space columns
       for (let col = 1; col <= totalColumns; col++) {
         const cellVal = headerRow.getCell(col).value;
         headers[col] = cellVal ? cellVal.toString().trim() : "";
@@ -357,7 +355,7 @@ const importExcel = async (req, res) => {
             const internalQcVal = formatPercentage(findValueInRow(row, ["Internal QC", "internal_qc"]));
             
             const receiveDateVal = parseExcelDate(findValueInRow(row, ["Receive Date", "receive_date"]));
-            const ecdDateVal = parseExcelDate(findValueInRow(row, ["ECD Date", "ecd_date"]));
+            const ecdDateVal = parseExcelDate(findValueInRow(row, ["ECD Date", "ecd_date", "ECD"]));
             const submissionDateVal = parseExcelDate(findValueInRow(row, ["Submission Date", "submission_date"]));
 
             let rawLocation = clean(
