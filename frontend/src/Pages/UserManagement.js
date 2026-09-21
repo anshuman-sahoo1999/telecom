@@ -16,7 +16,6 @@ const UserManagement = () => {
   const [domainTab, setDomainTab] = useState("ALL");
   const [domains, setDomains] = useState([]);
   
-  // Member Types list available for selection
   const memberTypeOptions = ["QA", "QC", "Production"];
 
   const [showCreateModal, setShowCreateModal] = useState(false);
@@ -106,10 +105,12 @@ const UserManagement = () => {
   };
 
   const fetchUsers = async () => {
-    const res = await axios.get(
-      `${API_BASE_URL}/api/auth/all-user-details`
-    );
-    setUsers(res.data.users);
+    try {
+      const res = await axios.get(`${API_BASE_URL}/api/auth/all-user-details`);
+      setUsers(res.data.users || res.data);
+    } catch (err) {
+      console.log(err);
+    }
   };
 
   const roleFiltered = users.filter((u) => {
@@ -158,10 +159,10 @@ const UserManagement = () => {
     setEditId(item.id);
     
     setEditData({
-      name: item.name,
-      emp_id: item.emp_id,
-      email: item.email,
-      role: item.role,
+      name: item.name || "",
+      emp_id: item.emp_id || "",
+      email: item.email || "",
+      role: item.role || "",
       memberType: getMemberTypesArray(item.memberType),
       domain: item.domain ? item.domain.split(",").map(d => d.trim()) : [],
       totalExperience: item.totalExperience || "",
@@ -192,7 +193,7 @@ const UserManagement = () => {
         }
       );
 
-      if (res.data?.success || res.status === 200) {
+      if (res.data?.success || res.status === 200 || res.status === 201) {
         fetchUsers();
         setShowCreateModal(false);
 
@@ -203,6 +204,11 @@ const UserManagement = () => {
         setRole("");
         setDomain([]);
         setMemberType([]);
+        setTotalExperience("");
+        setTelecomExperience("");
+        setSkillSets("");
+        setRegion("");
+        setMobileNo("");
 
         setToast({
           message: "User Created Successfully ✔",
@@ -226,7 +232,6 @@ const UserManagement = () => {
 
   const saveEdit = async (id) => {
     try {
-      // 🟢 FIX: Properly formatting memberType as a comma-separated string (or empty string if deselected completely)
       const formattedMemberTypes = Array.isArray(editData.memberType) 
         ? editData.memberType.join(",") 
         : editData.memberType;
@@ -458,8 +463,8 @@ const UserManagement = () => {
                       {(role === "TeamLead" || role === "TeamMember") && (
                         <>
                           <input
-                            type="number"
-                            placeholder="Total Experience (years)"
+                            type="text"
+                            placeholder="Total Experience"
                             value={totalExperience}
                             onChange={(e) => setTotalExperience(e.target.value)}
                           />
@@ -720,16 +725,16 @@ const UserManagement = () => {
                                   <span className="placeholder">Select Domain</span>
                                 )}
 
-                                {editData.domain.map((item, i) => (
+                                {editData.domain.map((dItem, i) => (
                                   <span className="tag" key={i}>
-                                    {item}
+                                    {dItem}
                                     <span
                                       className="remove"
                                       onClick={(e) => {
                                         e.stopPropagation();
                                         setEditData({
                                           ...editData,
-                                          domain: editData.domain.filter((d) => d !== item)
+                                          domain: editData.domain.filter((d) => d !== dItem)
                                         });
                                       }}
                                     >
@@ -770,6 +775,7 @@ const UserManagement = () => {
                           )}
                         </td>
 
+                        {/* ✅ Total Exp */}
                         <td>
                           {editId === item.id ? (
                             <input
@@ -786,6 +792,7 @@ const UserManagement = () => {
                           )}
                         </td>
 
+                        {/* ✅ Telecom Exp */}
                         <td>
                           {editId === item.id ? (
                             <input
@@ -802,6 +809,7 @@ const UserManagement = () => {
                           )}
                         </td>
 
+                        {/* ✅ Skill Sets */}
                         <td>
                           {editId === item.id ? (
                             <input
@@ -818,6 +826,7 @@ const UserManagement = () => {
                           )}
                         </td>
 
+                        {/* ✅ Region */}
                         <td>
                           {editId === item.id ? (
                             <input
@@ -834,6 +843,7 @@ const UserManagement = () => {
                           )}
                         </td>
 
+                        {/* ✅ Mobile No */}
                         <td>
                           {editId === item.id ? (
                             <input
@@ -891,4 +901,4 @@ const UserManagement = () => {
   );
 };
 
-export default UserManagement;
+export data export default UserManagement; // (Make sure standard export syntax is export default UserManagement;)
