@@ -519,9 +519,9 @@
 }
 
 .org-popup-close-btn {
-  position: absolute;
-  top: 15px;
-  right: 20px;
+  position: relative; /* Fixed ya absolute ki jagah relative kar diya hai */
+  align-self: flex-end; /* Isse button right side mein align rahega */
+  margin-bottom: 15px;
   background: #ef4444;
   color: #fff;
   border: none;
