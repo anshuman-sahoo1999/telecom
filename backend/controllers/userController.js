@@ -1,38 +1,72 @@
 const db = require("../config/db");
 
+// ➕ CREATE USER (With all details)
 exports.createUser = (req, res) => {
     const { 
-        name, emp_id, email, password, role, domain, 
-        memberType, totalExperience, telecomExperience, 
-        skillSets, region, mobileNo 
+        name, 
+        emp_id, 
+        email, 
+        role, 
+        domain, 
+        memberType, 
+        totalExperience, 
+        telecomExperience, 
+        skillSets, 
+        region, 
+        mobileNo 
     } = req.body;
 
+    if (!name || !role) {
+        return res.status(400).json({
+            success: false,
+            message: "Name and Role are required"
+        });
+    }
+
     const formattedDomain = Array.isArray(domain) ? domain.join(",") : (domain || "");
-    const formattedMemberType = Array.isArray(memberType) ? memberType.join(",") : (memberType || "");
+    let rawMemberType = Array.isArray(memberType) ? memberType.join(",") : (memberType || "");
+    const formattedMemberType = rawMemberType ? rawMemberType.slice(0, 10) : null;
 
     const sql = `
         INSERT INTO users 
-        (name, emp_id, email, password, role, domain, memberType, totalExperience, telecomExperience, skillSets, region, mobileNo) 
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        (name, emp_id, email, role, domain, memberType, totalExperience, telecomExperience, skillSets, region, mobileNo) 
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `;
 
     const values = [
-        name, emp_id || null, email || null, password || null, role, 
-        formattedDomain, formattedMemberType, totalExperience || null, 
-        telecomExperience || null, skillSets || null, region || null, mobileNo || null
+        name, 
+        emp_id || null, 
+        email || null, 
+        role, 
+        formattedDomain, 
+        formattedMemberType, 
+        ["TeamLead", "TeamMember"].includes(role) ? totalExperience : null, 
+        ["TeamLead", "TeamMember"].includes(role) ? telecomExperience : null, 
+        ["TeamLead", "TeamMember"].includes(role) ? skillSets : null, 
+        ["TeamLead", "TeamMember"].includes(role) ? region : null, 
+        ["TeamLead", "TeamMember"].includes(role) ? mobileNo : null
     ];
 
     db.query(sql, values, (err, result) => {
         if (err) {
-            return res.status(500).json({ success: false, message: err.message });
+            return res.status(500).json({
+                success: false,
+                message: err.message
+            });
         }
-        res.status(201).json({ success: true, message: "User created successfully", userId: result.insertId });
+
+        res.status(201).json({
+            success: true,
+            message: "User created successfully",
+            userId: result.insertId
+        });
     });
 };
 
-// 📄 GET ALL USERS
+
+// 📄 GET ALL USERS (Table Format)
 exports.getUsers = (req, res) => {
-    const sql = "SELECT * FROM user ORDER BY id DESC";
+    const sql = "SELECT * FROM users ORDER BY id DESC";
 
     db.query(sql, (err, result) => {
         if (err) {
@@ -45,7 +79,6 @@ exports.getUsers = (req, res) => {
         res.status(200).json({
             success: true,
             count: result.length,
-            users: result, // Frontend expects res.data.users[cite: 2]
             data: result
         });
     });
@@ -54,7 +87,7 @@ exports.getUsers = (req, res) => {
 
 // 🔍 GET USER BY ID
 exports.getUserById = (req, res) => {
-    const sql = "SELECT * FROM user WHERE id = ?";
+    const sql = "SELECT * FROM users WHERE id = ?";
 
     db.query(sql, [req.params.id], (err, result) => {
         if (err) {
@@ -79,12 +112,11 @@ exports.getUserById = (req, res) => {
 };
 
 
-// ✏️ UPDATE USER
+// ✏️ UPDATE USER (With all details)
 exports.updateUser = (req, res) => {
     const { 
         name, 
         emp_id, 
-        empId, 
         email, 
         role, 
         domain, 
@@ -96,25 +128,28 @@ exports.updateUser = (req, res) => {
         mobileNo 
     } = req.body;
 
-    const finalEmpId = emp_id || empId;
+    const formattedDomain = Array.isArray(domain) ? domain.join(",") : (domain || "");
+    let rawMemberType = Array.isArray(memberType) ? memberType.join(",") : (memberType || "");
+    const formattedMemberType = rawMemberType ? rawMemberType.slice(0, 10) : null;
 
-    const sql = `UPDATE user SET 
-        name=?, empId=?, email=?, role=?, domain=?, memberType=?, 
-        totalExperience=?, telecomExperience=?, skillSets=?, region=?, mobileNo=? 
-        WHERE id=?`;
+    const sql = `
+        UPDATE users 
+        SET name=?, emp_id=?, email=?, role=?, domain=?, memberType=?, totalExperience=?, telecomExperience=?, skillSets=?, region=?, mobileNo=? 
+        WHERE id=?
+    `;
 
     const values = [
         name, 
-        finalEmpId, 
+        emp_id || null, 
         email || null, 
         role, 
-        Array.isArray(domain) ? domain.join(",") : (domain || ""), 
-        Array.isArray(memberType) ? memberType.join(",") : (memberType || ""), 
-        totalExperience || null, 
-        telecomExperience || null, 
-        skillSets || null, 
-        region || null, 
-        mobileNo || null,
+        formattedDomain, 
+        formattedMemberType, 
+        ["TeamLead", "TeamMember"].includes(role) ? totalExperience : null, 
+        ["TeamLead", "TeamMember"].includes(role) ? telecomExperience : null, 
+        ["TeamLead", "TeamMember"].includes(role) ? skillSets : null, 
+        ["TeamLead", "TeamMember"].includes(role) ? region : null, 
+        ["TeamLead", "TeamMember"].includes(role) ? mobileNo : null,
         req.params.id
     ];
 
@@ -143,7 +178,7 @@ exports.updateUser = (req, res) => {
 
 // ❌ DELETE USER
 exports.deleteUser = (req, res) => {
-    const sql = "DELETE FROM user WHERE id=?";
+    const sql = "DELETE FROM users WHERE id=?";
 
     db.query(sql, [req.params.id], (err, result) => {
         if (err) {
