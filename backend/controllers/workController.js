@@ -25,8 +25,17 @@ const parseExcelDate = (value) => {
     d = new Date(Math.round((value - (25567 + 2)) * 86400 * 1000));
   } else {
     let strVal = value.toString().trim();
-    // Agar already MM-DD-YYYY format me hai toh wahi return kar do
+    
+    // Agar input pehle se MM-DD-YYYY hai
     if (/^\d{2}-\d{2}-\d{4}$/.test(strVal)) return strVal;
+    
+    // Agar input YYYY-MM-DD format me hai (HTML date picker ya ISO string)
+    const isoMatch = strVal.match(/^(\d{4})-(\d{2})-(\d{2})/);
+    if (isoMatch) {
+      const [, year, month, day] = isoMatch;
+      return `${month}-${day}-${year}`; // Convert to MM-DD-YYYY
+    }
+
     d = new Date(strVal);
   }
 
