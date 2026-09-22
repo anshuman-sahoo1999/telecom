@@ -1,67 +1,34 @@
 const db = require("../config/db");
 
-// ➕ CREATE USER
 exports.createUser = (req, res) => {
     const { 
-        name, 
-        emp_id, 
-        empId, 
-        email, 
-        password, 
-        role, 
-        domain, 
-        memberType, 
-        totalExperience, 
-        telecomExperience, 
-        skillSets, 
-        region, 
-        mobileNo 
+        name, emp_id, email, password, role, domain, 
+        memberType, totalExperience, telecomExperience, 
+        skillSets, region, mobileNo 
     } = req.body;
 
-    const finalEmpId = emp_id || empId;
+    const formattedDomain = Array.isArray(domain) ? domain.join(",") : (domain || "");
+    const formattedMemberType = Array.isArray(memberType) ? memberType.join(",") : (memberType || "");
 
-    if (!name || !finalEmpId || !role) {
-        return res.status(400).json({
-            success: false,
-            message: "Name, EmpId, and Role are required"
-        });
-    }
-
-    const sql = `INSERT INTO user 
-        (name, empId, email, password, role, domain, memberType, totalExperience, telecomExperience, skillSets, region, mobileNo) 
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
+    const sql = `
+        INSERT INTO users 
+        (name, emp_id, email, password, role, domain, memberType, totalExperience, telecomExperience, skillSets, region, mobileNo) 
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `;
 
     const values = [
-        name, 
-        finalEmpId, 
-        email || null, 
-        password || null, 
-        role, 
-        Array.isArray(domain) ? domain.join(",") : (domain || ""), 
-        Array.isArray(memberType) ? memberType.join(",") : (memberType || ""), 
-        totalExperience || null, 
-        telecomExperience || null, 
-        skillSets || null, 
-        region || null, 
-        mobileNo || null
+        name, emp_id || null, email || null, password || null, role, 
+        formattedDomain, formattedMemberType, totalExperience || null, 
+        telecomExperience || null, skillSets || null, region || null, mobileNo || null
     ];
 
     db.query(sql, values, (err, result) => {
         if (err) {
-            return res.status(500).json({
-                success: false,
-                message: err.message
-            });
+            return res.status(500).json({ success: false, message: err.message });
         }
-
-        res.status(201).json({
-            success: true,
-            message: "User created successfully",
-            userId: result.insertId
-        });
+        res.status(201).json({ success: true, message: "User created successfully", userId: result.insertId });
     });
 };
-
 
 // 📄 GET ALL USERS
 exports.getUsers = (req, res) => {
