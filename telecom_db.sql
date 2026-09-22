@@ -49,16 +49,16 @@ CREATE TABLE `job_creation` (
   `domain` varchar(100) DEFAULT NULL,
   `market` varchar(100) DEFAULT NULL,
   `jobId` varchar(100) DEFAULT NULL,
-  `receiveDate` date DEFAULT NULL,
-  `ecdDate` date DEFAULT NULL,
-  `submissionDate` date DEFAULT NULL,
+  `receiveDate` varchar(20) DEFAULT NULL,
+  `ecdDate` varchar(20) DEFAULT NULL,
+  `submissionDate` varchar(20) DEFAULT NULL,
   `month` varchar(50) DEFAULT NULL,
   `internalQc` varchar(50) DEFAULT NULL,
   `amdocsQc` varchar(50) DEFAULT NULL,
   `otp` varchar(50) DEFAULT NULL,
   `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
   `updated_at` timestamp NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp()
-) ;
+);
 
 -- --------------------------------------------------------
 
