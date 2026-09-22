@@ -165,9 +165,9 @@ CREATE TABLE `work_updates` (
   `otp` varchar(255) DEFAULT NULL,
   `internal_qc` varchar(255) DEFAULT NULL,
   `amdocs_qc` varchar(255) DEFAULT NULL,
-  `receive_date` date DEFAULT NULL,
-  `ecd_date` date DEFAULT NULL,
-  `submission_date` date DEFAULT NULL,
+  `receive_date` varchar(20) DEFAULT NULL,
+  `ecd_date` varchar(20) DEFAULT NULL,
+  `submission_date` varchar(20) DEFAULT NULL,
   `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
   `updated_at` timestamp NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp()
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
