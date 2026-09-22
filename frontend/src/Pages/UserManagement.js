@@ -107,7 +107,7 @@ const UserManagement = () => {
   const fetchUsers = async () => {
     try {
       const res = await axios.get(`${API_BASE_URL}/api/auth/all-user-details`);
-      setUsers(res.data.users || res.data);
+      setUsers(res.data.users || res.data.data || []);
     } catch (err) {
       console.log(err);
     }
@@ -155,21 +155,21 @@ const UserManagement = () => {
     return "default";
   };
 
-  const handleEdit = (item) => {
-    setEditId(item.id);
+  const handleEdit = (userItem) => {
+    setEditId(userItem.id);
     
     setEditData({
-      name: item.name || "",
-      emp_id: item.emp_id || "",
-      email: item.email || "",
-      role: item.role || "",
-      memberType: getMemberTypesArray(item.memberType),
-      domain: item.domain ? item.domain.split(",").map(d => d.trim()) : [],
-      totalExperience: item.totalExperience || "",
-      telecomExperience: item.telecomExperience || "",
-      skillSets: item.skillSets || "",
-      region: item.region || "",
-      mobileNo: item.mobileNo || ""
+      name: userItem.name || "",
+      emp_id: userItem.emp_id || userItem.empId || "",
+      email: userItem.email || "",
+      role: userItem.role || "",
+      memberType: getMemberTypesArray(userItem.memberType),
+      domain: userItem.domain ? userItem.domain.split(",").map(d => d.trim()) : [],
+      totalExperience: userItem.totalExperience || "",
+      telecomExperience: userItem.telecomExperience || "",
+      skillSets: userItem.skillSets || "",
+      region: userItem.region || "",
+      mobileNo: userItem.mobileNo || ""
     });
   };
 
@@ -187,9 +187,18 @@ const UserManagement = () => {
       const res = await axios.post(
         `${API_BASE_URL}/api/auth/create-user`,
         {
-          name, emp_id, email: finalEmail, password, role, domain, 
+          name, 
+          emp_id, 
+          email: finalEmail, 
+          password, 
+          role, 
+          domain, 
           memberType: memberType.join(","), 
-          totalExperience, telecomExperience, skillSets, region, mobileNo
+          totalExperience, 
+          telecomExperience, 
+          skillSets, 
+          region, 
+          mobileNo
         }
       );
 
@@ -422,14 +431,14 @@ const UserManagement = () => {
                             {memberType.length === 0 && (
                               <span className="placeholder">Select Member Type</span>
                             )}
-                            {memberType.map((item, i) => (
+                            {memberType.map((mItem, i) => (
                               <span className="tag" key={i}>
-                                {item}
+                                {mItem}
                                 <span
                                   className="remove"
                                   onClick={(e) => {
                                     e.stopPropagation();
-                                    setMemberType(memberType.filter((m) => m !== item));
+                                    setMemberType(memberType.filter((m) => m !== mItem));
                                   }}
                                 >
                                   ✖
@@ -499,14 +508,14 @@ const UserManagement = () => {
                           {domain.length === 0 && (
                             <span className="placeholder">Select Domain</span>
                           )}
-                          {domain.map((item, i) => (
+                          {domain.map((dItem, i) => (
                             <span className="tag" key={i}>
-                              {item}
+                              {dItem}
                               <span
                                 className="remove"
                                 onClick={(e) => {
                                   e.stopPropagation();
-                                  setDomain(domain.filter((d) => d !== item));
+                                  setDomain(domain.filter((d) => d !== dItem));
                                 }}
                               >
                                 ✖
@@ -647,16 +656,16 @@ const UserManagement = () => {
                                   <span className="placeholder">Select Member Type</span>
                                 )}
 
-                                {editData.memberType.map((m, i) => (
+                                {editData.memberType.map((mVal, i) => (
                                   <span className="tag" key={i}>
-                                    {m}
+                                    {mVal}
                                     <span
                                       className="remove"
                                       onClick={(e) => {
                                         e.stopPropagation();
                                         setEditData({
                                           ...editData,
-                                          memberType: editData.memberType.filter((type) => type !== m)
+                                          memberType: editData.memberType.filter((type) => type !== mVal)
                                         });
                                       }}
                                     >
@@ -775,7 +784,6 @@ const UserManagement = () => {
                           )}
                         </td>
 
-                        {/* ✅ Total Exp */}
                         <td>
                           {editId === item.id ? (
                             <input
@@ -792,7 +800,6 @@ const UserManagement = () => {
                           )}
                         </td>
 
-                        {/* ✅ Telecom Exp */}
                         <td>
                           {editId === item.id ? (
                             <input
@@ -809,7 +816,6 @@ const UserManagement = () => {
                           )}
                         </td>
 
-                        {/* ✅ Skill Sets */}
                         <td>
                           {editId === item.id ? (
                             <input
@@ -826,7 +832,6 @@ const UserManagement = () => {
                           )}
                         </td>
 
-                        {/* ✅ Region */}
                         <td>
                           {editId === item.id ? (
                             <input
@@ -843,7 +848,6 @@ const UserManagement = () => {
                           )}
                         </td>
 
-                        {/* ✅ Mobile No */}
                         <td>
                           {editId === item.id ? (
                             <input
@@ -901,4 +905,4 @@ const UserManagement = () => {
   );
 };
 
-export data export default UserManagement; // (Make sure standard export syntax is export default UserManagement;)
+export default UserManagement;
