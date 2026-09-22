@@ -18,34 +18,33 @@ const normalize = (v) => clean(v).toUpperCase();
 const parseExcelDate = (value) => {
   if (!value) return null;
 
+  let strVal = value.toString().trim();
+
+  // Agar already MM-DD-YYYY me hai toh wahi return karo
+  if (/^\d{2}-\d{2}-\d{4}$/.test(strVal)) return strVal;
+
+  // Agar YYYY-MM-DD format me hai toh usko MM-DD-YYYY me convert karo
+  const isoMatch = strVal.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (isoMatch) {
+    const [, year, month, day] = isoMatch;
+    return `${month}-${day}-${year}`;
+  }
+
   let d;
   if (value instanceof Date) {
     d = value;
-  } else if (typeof value === 'number') {
-    d = new Date(Math.round((value - (25567 + 2)) * 86400 * 1000));
+  } else if (!isNaN(value)) {
+    d = new Date(Math.round((Number(value) - (25567 + 2)) * 86400 * 1000));
   } else {
-    let strVal = value.toString().trim();
-    
-    // Agar input pehle se MM-DD-YYYY hai
-    if (/^\d{2}-\d{2}-\d{4}$/.test(strVal)) return strVal;
-    
-    // Agar input YYYY-MM-DD format me hai (HTML date picker ya ISO string)
-    const isoMatch = strVal.match(/^(\d{4})-(\d{2})-(\d{2})/);
-    if (isoMatch) {
-      const [, year, month, day] = isoMatch;
-      return `${month}-${day}-${year}`; // Convert to MM-DD-YYYY
-    }
-
     d = new Date(strVal);
   }
 
-  if (!d || isNaN(d.getTime())) return null;
+  if (!d || isNaN(d.getTime())) return strVal;
 
   const year = d.getFullYear();
   const month = String(d.getMonth() + 1).padStart(2, '0');
   const day = String(d.getDate()).padStart(2, '0');
 
-  // Strictly MM-DD-YYYY format return karega
   return `${month}-${day}-${year}`;
 };
 
