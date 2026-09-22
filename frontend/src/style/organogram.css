@@ -500,7 +500,7 @@
   display: flex;
   flex-direction: column;
   position: relative;
-  overflow: hidden;
+  overflow-y: auto; /* Isko bhi auto rakh sakte hain agar zaroorat ho */
   padding: 30px 10px 10px 10px;
 }
 
@@ -536,7 +536,7 @@
   justify-content: flex-start;
   padding: 40px 20px;
   box-sizing: border-box;
-  overflow-y: hidden;   /* Y-axis scrollbar hide */
+  overflow-y: auto;  
 }
 
 /* Popup/Fullscreen Tree */
