@@ -489,6 +489,7 @@
   justify-content: center;
   padding: 15px;
   box-sizing: border-box;
+  overflow: hidden; /* Overlay fix rahega */
 }
 
 .org-popup-content {
@@ -500,8 +501,21 @@
   display: flex;
   flex-direction: column;
   position: relative;
-  overflow-y: auto; /* Isko bhi auto rakh sakte hain agar zaroorat ho */
-  padding: 30px 10px 10px 10px;
+  overflow: hidden; 
+  padding: 50px 10px 20px 10px;
+}
+
+.org-tree-popup-container {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+  padding: 20px 20px 80px 20px; 
+  box-sizing: border-box;
+  overflow-y: auto !important;  
+  overflow-x: auto !important;  
 }
 
 .org-popup-close-btn {
@@ -525,18 +539,6 @@
 
 .org-popup-close-btn:hover {
   background: #dc2626;
-}
-
-.org-tree-popup-container {
-  width: 100%;
-  height: 100%;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: flex-start;
-  padding: 40px 20px;
-  box-sizing: border-box;
-  overflow-y: auto;  
 }
 
 /* Popup/Fullscreen Tree */
