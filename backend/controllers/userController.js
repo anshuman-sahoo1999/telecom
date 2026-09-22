@@ -1,6 +1,6 @@
 const db = require("../config/db");
 
-// ➕ CREATE USER (With all details)
+// ➕ CREATE USER
 exports.createUser = (req, res) => {
     const { 
         name, 
@@ -64,7 +64,7 @@ exports.createUser = (req, res) => {
 };
 
 
-// 📄 GET ALL USERS (Table Format)
+// 📄 GET ALL USERS
 exports.getUsers = (req, res) => {
     const sql = "SELECT * FROM users ORDER BY id DESC";
 
@@ -79,6 +79,7 @@ exports.getUsers = (req, res) => {
         res.status(200).json({
             success: true,
             count: result.length,
+            users: result,
             data: result
         });
     });
@@ -112,7 +113,7 @@ exports.getUserById = (req, res) => {
 };
 
 
-// ✏️ UPDATE USER (With all details)
+// ✏️ UPDATE USER
 exports.updateUser = (req, res) => {
     const { 
         name, 
