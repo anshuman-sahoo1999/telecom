@@ -120,8 +120,11 @@ export default function TelecomMap() {
   };
 
   const COLORS = ["#3b82f6", "#10b981", "#f59e0b", "#ef4444", "#8b5cf6", "#06b6d4"];
+  const QC_COLOR = "#f43f5e";
+  const OTP_COLOR = "#0ea5e9";
   const [selectedSubDomains, setSelectedSubDomains] = useState([]);
   const [hiddenDomains, setHiddenDomains] = useState([]);
+  const [pieMetric, setPieMetric] = useState("jobs"); // "jobs" | "qc" | "otp"
 
   const subDomainsMap = {
     ASE: ["Placement", "Activation"],
@@ -402,97 +405,120 @@ export default function TelecomMap() {
     }
   };
 
-  const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-
-  // Amdocs QC / OTP value ko percentage number me convert karne ke liye helper
-  // Handles: "95%", "0.95", "95", "Yes"/"No", "Pass"/"Fail", empty/null
-  const parseQcOtpValue = (val) => {
+  /* ======================================
+     QC / OTP HELPERS
+     NOTE: OTP is NEVER shown as a percentage anywhere (KPI, Bar, Pie, Tooltip).
+     It is always shown as a plain number/count.
+  ====================================== */
+  const parseQcPercent = (val) => {
     if (val === null || val === undefined || val === "") return null;
-    const str = val.toString().trim();
-    if (str === "") return null;
-    const lower = str.toLowerCase();
-    if (["yes", "y", "ok", "pass", "passed", "complete", "completed", "done"].includes(lower)) return 100;
-    if (["no", "n", "fail", "failed", "pending", "incomplete"].includes(lower)) return 0;
-    if (str.endsWith("%")) {
-      const num = Number(str.slice(0, -1).trim());
-      return isNaN(num) ? null : num;
-    }
-    const num = Number(str);
-    if (isNaN(num)) return null;
-    return num > 0 && num <= 1 ? num * 100 : num;
+    const num = parseFloat(String(val).replace(/%/g, "").trim());
+    return isNaN(num) ? null : num;
   };
 
+  const getOtpNumericValue = (val) => {
+    if (val === null || val === undefined || val === "") return 0;
+    const str = String(val).trim();
+    const num = parseFloat(str.replace(/%/g, ""));
+    if (!isNaN(num)) return num;
+    const lower = str.toLowerCase();
+    if (["yes", "y", "true", "ontime", "on time", "1"].includes(lower)) return 1;
+    return 0;
+  };
+
+  const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
   const monthlyJobsMap = {};
+  const monthlyQcMap = {};
+  const monthlyOtpMap = {};
 
   currentFilterData.forEach((item) => {
     const totalJobs = Number(item.jobsDelivered || item.jobs_delivered || 0);
-    const qcVal = parseQcOtpValue(item.amdocsQc || item.amdocs_qc);
-    const otpVal = parseQcOtpValue(item.otp);
-
+    const qcVal = parseQcPercent(item.amdocs_qc);
+    const otpVal = getOtpNumericValue(item.otp);
     item.months?.forEach((m) => {
       if (!m) return;
-      const [month] = (m || "").split(",");
-      if (!monthlyJobsMap[month]) {
-        monthlyJobsMap[month] = { jobs: 0, qcSum: 0, qcCount: 0, otpSum: 0, otpCount: 0 };
-      }
-      monthlyJobsMap[month].jobs += totalJobs;
+      const [month, year] = (m || "").split(",");
+      const fullYear = year && year.length === 2 ? Number(`20${year}`) : Number(year || currentYear);
+      if (!monthlyJobsMap[month]) monthlyJobsMap[month] = {};
+      if (!monthlyJobsMap[month][fullYear]) monthlyJobsMap[month][fullYear] = 0;
+      monthlyJobsMap[month][fullYear] += totalJobs;
+
+      if (!monthlyQcMap[month]) monthlyQcMap[month] = { sum: 0, count: 0 };
       if (qcVal !== null) {
-        monthlyJobsMap[month].qcSum += qcVal;
-        monthlyJobsMap[month].qcCount += 1;
+        monthlyQcMap[month].sum += qcVal;
+        monthlyQcMap[month].count += 1;
       }
-      if (otpVal !== null) {
-        monthlyJobsMap[month].otpSum += otpVal;
-        monthlyJobsMap[month].otpCount += 1;
-      }
+
+      if (!monthlyOtpMap[month]) monthlyOtpMap[month] = 0;
+      monthlyOtpMap[month] += otpVal;
     });
   });
 
-  // Month wise sirf Jobs, QC% aur OTP% - koi year wise split nahi
   const monthlyJobsSorted = monthNames.map((month) => {
-    const m = monthlyJobsMap[month] || { jobs: 0, qcSum: 0, qcCount: 0, otpSum: 0, otpCount: 0 };
+    const qcEntry = monthlyQcMap[month];
+    const qcAvg = qcEntry && qcEntry.count > 0 ? Number((qcEntry.sum / qcEntry.count).toFixed(1)) : 0;
     return {
       name: month,
-      Jobs: m.jobs,
-      "QC %": m.qcCount ? Number((m.qcSum / m.qcCount).toFixed(1)) : 0,
-      "OTP %": m.otpCount ? Number((m.otpSum / m.otpCount).toFixed(1)) : 0
+      ...(monthlyJobsMap[month] || {}),
+      QC: qcAvg,
+      OTP: Number((monthlyOtpMap[month] || 0).toFixed(2))
     };
   });
 
   const domainPieDataMap = {};
+  const domainQcAggMap = {};
+  const domainOtpAggMap = {};
 
   currentFilterData.forEach((item) => {
     const domain = (item.domain || "").toString().trim().toUpperCase();
     const jobs = Number(item.jobsDelivered || item.jobs_delivered || 0);
     if (!domain) return;
-    if (!domainPieDataMap[domain]) {
-      domainPieDataMap[domain] = { jobs: 0, qcSum: 0, qcCount: 0, otpSum: 0, otpCount: 0 };
-    }
-    domainPieDataMap[domain].jobs += jobs;
-    const qcVal = parseQcOtpValue(item.amdocsQc || item.amdocs_qc);
-    const otpVal = parseQcOtpValue(item.otp);
+    domainPieDataMap[domain] = (domainPieDataMap[domain] || 0) + jobs;
+
+    const qcVal = parseQcPercent(item.amdocs_qc);
     if (qcVal !== null) {
-      domainPieDataMap[domain].qcSum += qcVal;
-      domainPieDataMap[domain].qcCount += 1;
+      if (!domainQcAggMap[domain]) domainQcAggMap[domain] = { sum: 0, count: 0 };
+      domainQcAggMap[domain].sum += qcVal;
+      domainQcAggMap[domain].count += 1;
     }
-    if (otpVal !== null) {
-      domainPieDataMap[domain].otpSum += otpVal;
-      domainPieDataMap[domain].otpCount += 1;
-    }
+
+    domainOtpAggMap[domain] = (domainOtpAggMap[domain] || 0) + getOtpNumericValue(item.otp);
   });
 
-  const grandTotal = Object.values(domainPieDataMap).reduce((sum, d) => sum + d.jobs, 0);
+  const domainQcAvgMap = {};
+  Object.keys(domainQcAggMap).forEach((d) => {
+    domainQcAvgMap[d] = Number((domainQcAggMap[d].sum / domainQcAggMap[d].count).toFixed(1));
+  });
+
+  const grandTotal = Object.values(domainPieDataMap).reduce((sum, val) => sum + val, 0);
   const pieChartData = Object.keys(domainPieDataMap)
-    .filter((domain) => domainPieDataMap[domain].jobs > 0 && !hiddenDomains.includes(domain))
-    .map((domain) => {
-      const d = domainPieDataMap[domain];
-      return {
-        name: domain,
-        jobs: d.jobs,
-        value: grandTotal ? Number(((d.jobs / grandTotal) * 100).toFixed(2)) : 0,
-        qcPercent: d.qcCount ? Number((d.qcSum / d.qcCount).toFixed(1)) : 0,
-        otpPercent: d.otpCount ? Number((d.otpSum / d.otpCount).toFixed(1)) : 0
-      };
-    });
+    .filter((domain) => domainPieDataMap[domain] > 0 && !hiddenDomains.includes(domain))
+    .map((domain) => ({
+      name: domain,
+      jobs: domainPieDataMap[domain],
+      value: grandTotal ? Number(((domainPieDataMap[domain] / grandTotal) * 100).toFixed(2)) : 0
+    }));
+
+  const qcGrandTotal = Object.values(domainQcAvgMap).reduce((sum, val) => sum + val, 0);
+  const qcPieChartData = Object.keys(domainQcAvgMap)
+    .filter((domain) => domainQcAvgMap[domain] > 0 && !hiddenDomains.includes(domain))
+    .map((domain) => ({
+      name: domain,
+      raw: domainQcAvgMap[domain],
+      value: qcGrandTotal ? Number(((domainQcAvgMap[domain] / qcGrandTotal) * 100).toFixed(2)) : 0
+    }));
+
+  const otpGrandTotal = Object.values(domainOtpAggMap).reduce((sum, val) => sum + val, 0);
+  const otpPieChartData = Object.keys(domainOtpAggMap)
+    .filter((domain) => domainOtpAggMap[domain] > 0 && !hiddenDomains.includes(domain))
+    .map((domain) => ({
+      name: domain,
+      raw: domainOtpAggMap[domain],
+      value: otpGrandTotal ? Number(((domainOtpAggMap[domain] / otpGrandTotal) * 100).toFixed(2)) : 0
+    }));
+
+  const pieDataByMetric = { jobs: pieChartData, qc: qcPieChartData, otp: otpPieChartData };
+  const activePieData = pieDataByMetric[pieMetric] || pieChartData;
 
   const normalize = (d) => (d || "").toString().trim().toUpperCase();
   const masterDomains = (domains || []).map(normalize);
@@ -504,22 +530,51 @@ export default function TelecomMap() {
     jobs: allWorkData.filter(x => normalize(x.domain) === domain).reduce((sum, x) => sum + Number(x.jobsDelivered || x.jobs_delivered || 0), 0)
   }));
 
+  const allYears = [...new Set(monthlyJobsSorted.flatMap(item => Object.keys(item).filter(key => !["name", "QC", "OTP"].includes(key))))].sort();
   const getDomainJobs = (domain) => currentFilterData.filter((x) => normalize(x.domain) === normalize(domain)).reduce((sum, x) => sum + Number(x.jobsDelivered || x.jobs_delivered || 0), 0);
 
-  // Domain ke liye Amdocs QC% aur OTP% average nikalne ka helper (KPI card me use hoga)
-  const getDomainQcOtp = (domain) => {
-    const domainData = currentFilterData.filter((x) => normalize(x.domain) === normalize(domain));
-    let qcSum = 0, qcCount = 0, otpSum = 0, otpCount = 0;
-    domainData.forEach((x) => {
-      const qcVal = parseQcOtpValue(x.amdocsQc || x.amdocs_qc);
-      const otpVal = parseQcOtpValue(x.otp);
-      if (qcVal !== null) { qcSum += qcVal; qcCount += 1; }
-      if (otpVal !== null) { otpSum += otpVal; otpCount += 1; }
-    });
-    return {
-      qc: qcCount ? Number((qcSum / qcCount).toFixed(1)) : null,
-      otp: otpCount ? Number((otpSum / otpCount).toFixed(1)) : null
-    };
+  const getDomainQcAvg = (domain) => {
+    const val = domainQcAvgMap[normalize(domain)];
+    return val === undefined ? null : val;
+  };
+
+  const getDomainOtpTotal = (domain) => {
+    const val = domainOtpAggMap[normalize(domain)];
+    return val === undefined ? 0 : Number(val.toFixed(2));
+  };
+
+  /* ======================================
+     SHORT / COMPACT TOOLTIPS (Jobs, QC, OTP)
+     OTP is always plain number, never a %.
+  ====================================== */
+  const CustomBarTooltip = ({ active, payload, label }) => {
+    if (!active || !payload || !payload.length) return null;
+    const jobsTotal = payload
+      .filter((p) => allYears.includes(p.dataKey))
+      .reduce((sum, p) => sum + (Number(p.value) || 0), 0);
+    const qcItem = payload.find((p) => p.dataKey === "QC");
+    const otpItem = payload.find((p) => p.dataKey === "OTP");
+    return (
+      <div style={{ background: "#fff", border: "1px solid #e2e8f0", borderRadius: "6px", padding: "6px 10px", fontSize: "11px", fontWeight: 600, boxShadow: "0 2px 6px rgba(0,0,0,0.15)", lineHeight: 1.5 }}>
+        <div style={{ color: "#0f172a", marginBottom: "2px" }}>{label}</div>
+        <div style={{ color: "#2563eb" }}>Jobs: {jobsTotal}</div>
+        {qcItem && <div style={{ color: QC_COLOR }}>QC: {qcItem.value}%</div>}
+        {otpItem && <div style={{ color: OTP_COLOR }}>OTP: {otpItem.value}</div>}
+      </div>
+    );
+  };
+
+  const CustomPieTooltip = ({ active, payload }) => {
+    if (!active || !payload || !payload.length) return null;
+    const d = payload[0].payload;
+    return (
+      <div style={{ background: "#fff", border: "1px solid #e2e8f0", borderRadius: "6px", padding: "6px 10px", fontSize: "11px", fontWeight: 600, boxShadow: "0 2px 6px rgba(0,0,0,0.15)", lineHeight: 1.5 }}>
+        <div style={{ color: "#0f172a", marginBottom: "2px" }}>{d.name}</div>
+        {pieMetric === "jobs" && <div style={{ color: "#2563eb" }}>Jobs: {d.jobs} ({d.value}%)</div>}
+        {pieMetric === "qc" && <div style={{ color: QC_COLOR }}>QC: {d.raw}%</div>}
+        {pieMetric === "otp" && <div style={{ color: OTP_COLOR }}>OTP: {d.raw}</div>}
+      </div>
+    );
   };
 
   const getFileNameDateTime = () => {
@@ -617,20 +672,11 @@ export default function TelecomMap() {
                             return Object.entries(uomTotals).map(([key, value]) => `${key}: ${value}`).join(" | ");
                           })()}
                         </div>
+                        <div className="kpiQcOtpRow" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: "11px", fontWeight: 700, margin: "4px 0" }}>
+                          <span style={{ color: QC_COLOR }}>QC: {getDomainQcAvg(item.domain) !== null ? `${getDomainQcAvg(item.domain)}%` : "N/A"}</span>
+                          <span style={{ color: OTP_COLOR }}>OTP: {getDomainOtpTotal(item.domain)}</span>
+                        </div>
                         <div className="kpiValueModern">{getDomainJobs(item.domain)}<span> Jobs</span></div>
-                        {(() => {
-                          const { qc, otp } = getDomainQcOtp(item.domain);
-                          return (
-                            <div className="kpiQcOtpRow" style={{ display: "flex", gap: "10px", marginTop: "6px", flexWrap: "wrap" }}>
-                              <span style={{ fontSize: "12px", fontWeight: "700", padding: "2px 8px", borderRadius: "10px", background: `${color}15`, color: color }}>
-                                Amdocs QC: {qc !== null ? `${qc}%` : "N/A"}
-                              </span>
-                              <span style={{ fontSize: "12px", fontWeight: "700", padding: "2px 8px", borderRadius: "10px", background: `${color}15`, color: color }}>
-                                OTP: {otp !== null ? `${otp}%` : "N/A"}
-                              </span>
-                            </div>
-                          );
-                        })()}
                       </div>
                     </div>
                   );
@@ -751,27 +797,54 @@ export default function TelecomMap() {
 
             <div className="bottomChartsRow">
               <div className="chartBox">
-                <h3 className="chartTitle" style={{ marginBottom: "30px" }}>📊 Month Wise Jobs, QC &amp; OTP</h3>
+                <h3 className="chartTitle" style={{ marginBottom: "30px" }}>📊 Domain Wise Jobs</h3>
                 <ResponsiveContainer width="100%" height={350}>
-                  <BarChart data={monthlyJobsSorted} barGap={4} barCategoryGap={25}>
+                  <BarChart data={monthlyJobsSorted} barGap={0} barCategoryGap={25}>
                     <CartesianGrid strokeDasharray="3 3" />
                     <XAxis dataKey="name" interval={0} angle={-45} textAnchor="end" height={60} />
-                    <YAxis yAxisId="left" allowDecimals={false} label={{ value: "Jobs", angle: -90, position: "insideLeft" }} />
-                    <YAxis yAxisId="right" orientation="right" domain={[0, 100]} label={{ value: "%", angle: -90, position: "insideRight" }} />
-                    <Tooltip formatter={(v, name) => (name === "Jobs" ? [v, name] : [`${v}%`, name])} />
+                    <YAxis yAxisId="left" />
+                    <YAxis yAxisId="right" orientation="right" domain={[0, 100]} tickFormatter={(v) => `${v}%`} />
+                    <Tooltip content={<CustomBarTooltip />} />
                     <Legend />
-                    <Bar yAxisId="left" dataKey="Jobs" fill="#3b82f6" name="Jobs" barSize={window.innerWidth < 768 ? 12 : 24} radius={[6, 6, 0, 0]} />
-                    <Bar yAxisId="right" dataKey="QC %" fill="#10b981" name="QC %" barSize={window.innerWidth < 768 ? 12 : 24} radius={[6, 6, 0, 0]} />
-                    <Bar yAxisId="right" dataKey="OTP %" fill="#f59e0b" name="OTP %" barSize={window.innerWidth < 768 ? 12 : 24} radius={[6, 6, 0, 0]} />
+                    {allYears.map((year, index) => (
+                      <Bar key={year} yAxisId="left" dataKey={year} stackId="a" fill={COLORS[index % COLORS.length]} name={year} barSize={window.innerWidth < 768 ? 18 : 35} radius={[6, 6, 0, 0]} />
+                    ))}
+                    <Bar yAxisId="left" dataKey="OTP" fill={OTP_COLOR} name="OTP" barSize={window.innerWidth < 768 ? 12 : 22} radius={[6, 6, 0, 0]} />
+                    <Bar yAxisId="right" dataKey="QC" fill={QC_COLOR} name="Amdocs QC %" barSize={window.innerWidth < 768 ? 12 : 22} radius={[6, 6, 0, 0]} />
                   </BarChart>
                 </ResponsiveContainer>
               </div>
               <div className="chartBox">
-                <h3 className="chartTitle">🥧 Domain Wise Job / QC / OTP %</h3>
-                <ResponsiveContainer width="100%" height={360}>
+                <h3 className="chartTitle">🥧 Domain % Share</h3>
+                <div style={{ display: "flex", justifyContent: "center", gap: "8px", marginBottom: "8px" }}>
+                  {[
+                    { key: "jobs", label: "Jobs %" },
+                    { key: "qc", label: "Amdocs QC %" },
+                    { key: "otp", label: "OTP" }
+                  ].map((m) => (
+                    <button
+                      key={m.key}
+                      type="button"
+                      onClick={() => setPieMetric(m.key)}
+                      style={{
+                        padding: "3px 10px",
+                        borderRadius: "14px",
+                        fontSize: "11px",
+                        fontWeight: 700,
+                        cursor: "pointer",
+                        border: pieMetric === m.key ? "1px solid #111827" : "1px solid #cbd5e1",
+                        background: pieMetric === m.key ? "#111827" : "#fff",
+                        color: pieMetric === m.key ? "#fff" : "#334155"
+                      }}
+                    >
+                      {m.label}
+                    </button>
+                  ))}
+                </div>
+                <ResponsiveContainer width="100%" height={340}>
                   <PieChart>
                     <Pie
-                      data={pieChartData}
+                      data={activePieData}
                       dataKey="value"
                       nameKey="name"
                       cx="50%"
@@ -791,30 +864,16 @@ export default function TelecomMap() {
                       label={false}
                       labelLine={false}
                     >
-                      {pieChartData.map((entry, index) => (
+                      {activePieData.map((entry, index) => (
                         <Cell key={index} fill={COLORS[index % COLORS.length]} opacity={hiddenDomains.includes(entry.name) ? 0.15 : 1} />
                       ))}
                     </Pie>
-                    <Tooltip content={({ active, payload }) => {
-                      if (!active || !payload || !payload.length) return null;
-                      const d = payload[0].payload;
-                      return (
-                        <div style={{ background: "#fff", border: "1px solid #e5e7eb", borderRadius: "8px", padding: "10px 12px", boxShadow: "0 2px 8px rgba(0,0,0,0.12)" }}>
-                          <div style={{ fontWeight: "700", marginBottom: "6px" }}>{d.name}</div>
-                          <div style={{ fontSize: "12px", color: "#3b82f6", fontWeight: "600" }}>Job Share: {d.value}%</div>
-                          <div style={{ fontSize: "12px", color: "#10b981", fontWeight: "600" }}>Amdocs QC: {d.qcPercent}%</div>
-                          <div style={{ fontSize: "12px", color: "#f59e0b", fontWeight: "600" }}>OTP: {d.otpPercent}%</div>
-                        </div>
-                      );
-                    }} />
+                    <Tooltip content={<CustomPieTooltip />} />
                     <Legend content={() => (
                       <div style={{ display: "flex", justifyContent: "center", alignItems: "center", flexWrap: "wrap", gap: "14px", marginTop: "10px", fontSize: "13px", fontWeight: "600" }}>
                         <div onClick={() => setHiddenDomains([])} style={{ display: "flex", alignItems: "center", gap: "6px", cursor: "pointer" }}><span style={{ width: "16px", height: "10px", borderRadius: "2px", background: "#111827", display: "inline-block" }}></span>ALL</div>
-                        {pieChartData.filter(item => item.jobs > 0).map((entry, index) => (
-                          <div key={entry.name} onClick={() => { setHiddenDomains(prev => prev.includes(entry.name) ? prev.filter(x => x !== entry.name) : [...prev, entry.name]); }} style={{ display: "flex", alignItems: "center", gap: "6px", cursor: "pointer" }}>
-                            <span style={{ width: "16px", height: "10px", borderRadius: "2px", background: COLORS[index % COLORS.length], display: "inline-block" }}></span>
-                            {entry.name}: {entry.value}% (QC {entry.qcPercent}% / OTP {entry.otpPercent}%)
-                          </div>
+                        {activePieData.map((entry, index) => (
+                          <div key={entry.name} onClick={() => { setHiddenDomains(prev => prev.includes(entry.name) ? prev.filter(x => x !== entry.name) : [...prev, entry.name]); }} style={{ display: "flex", alignItems: "center", gap: "6px", cursor: "pointer" }}><span style={{ width: "16px", height: "10px", borderRadius: "2px", background: COLORS[index % COLORS.length], display: "inline-block" }}></span>{entry.name}</div>
                         ))}
                       </div>
                     )} />
