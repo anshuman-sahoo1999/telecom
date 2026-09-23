@@ -403,7 +403,6 @@ export default function TelecomMap() {
   };
 
   const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-  const monthlyJobsMap = {};
 
   // Case/spacing-safe field lookup — handles amdocs_qc, amdocsQc, "Amdocs QC", AMDOCS_QC, etc.
   const getFieldValue = (item, keys) => {
@@ -433,42 +432,40 @@ export default function TelecomMap() {
 
   const average = (arr) => (arr.length ? Number((arr.reduce((a, b) => a + b, 0) / arr.length).toFixed(2)) : 0);
 
+  // Year + Month wise Jobs, Amdocs QC % and OTP % — one bucket per "Month-Year"
+  const monthYearMap = {};
   currentFilterData.forEach((item) => {
     const totalJobs = Number(item.jobsDelivered || item.jobs_delivered || 0);
-    item.months?.forEach((m) => {
-      if (!m) return;
-      const [month, year] = (m || "").split(",");
-      const fullYear = year && year.length === 2 ? Number(`20${year}`) : Number(year || currentYear);
-      if (!monthlyJobsMap[month]) monthlyJobsMap[month] = {};
-      if (!monthlyJobsMap[month][fullYear]) monthlyJobsMap[month][fullYear] = 0;
-      monthlyJobsMap[month][fullYear] += totalJobs;
-    });
-  });
-
-  // Month wise Amdocs QC % and OTP % (averaged across every row that touches that month)
-  const monthlyQcOtpMap = {};
-  currentFilterData.forEach((item) => {
     const qcVal = parsePercentValue(getAmdocsQc(item));
     const otpVal = parsePercentValue(getOtp(item));
     item.months?.forEach((m) => {
       if (!m) return;
-      const [month] = (m || "").split(",");
+      const [month, year] = (m || "").split(",");
       if (!month) return;
-      if (!monthlyQcOtpMap[month]) monthlyQcOtpMap[month] = { qcSum: 0, qcCount: 0, otpSum: 0, otpCount: 0 };
-      if (qcVal !== null) { monthlyQcOtpMap[month].qcSum += qcVal; monthlyQcOtpMap[month].qcCount += 1; }
-      if (otpVal !== null) { monthlyQcOtpMap[month].otpSum += otpVal; monthlyQcOtpMap[month].otpCount += 1; }
+      const fullYear = year && year.length === 2 ? Number(`20${year}`) : Number(year || currentYear);
+      const key = `${month}-${fullYear}`;
+      if (!monthYearMap[key]) {
+        monthYearMap[key] = {
+          name: key, month, year: fullYear,
+          Jobs: 0, qcSum: 0, qcCount: 0, otpSum: 0, otpCount: 0
+        };
+      }
+      monthYearMap[key].Jobs += totalJobs;
+      if (qcVal !== null) { monthYearMap[key].qcSum += qcVal; monthYearMap[key].qcCount += 1; }
+      if (otpVal !== null) { monthYearMap[key].otpSum += otpVal; monthYearMap[key].otpCount += 1; }
     });
   });
 
-  const monthlyJobsSorted = monthNames.map((month) => {
-    const agg = monthlyQcOtpMap[month] || { qcSum: 0, qcCount: 0, otpSum: 0, otpCount: 0 };
-    return {
-      name: month,
-      ...(monthlyJobsMap[month] || {}),
-      QC: agg.qcCount ? Number((agg.qcSum / agg.qcCount).toFixed(2)) : 0,
-      OTP: agg.otpCount ? Number((agg.otpSum / agg.otpCount).toFixed(2)) : 0
-    };
-  });
+  const monthlyJobsSorted = Object.values(monthYearMap)
+    .map((v) => ({
+      name: v.name,
+      year: v.year,
+      monthIndex: monthNames.indexOf(v.month),
+      Jobs: v.Jobs,
+      QC: v.qcCount ? Number((v.qcSum / v.qcCount).toFixed(2)) : 0,
+      OTP: v.otpCount ? Number((v.otpSum / v.otpCount).toFixed(2)) : 0
+    }))
+    .sort((a, b) => (a.year - b.year) || (a.monthIndex - b.monthIndex));
 
   const domainPieDataMap = {};
 
@@ -506,7 +503,6 @@ export default function TelecomMap() {
     jobs: allWorkData.filter(x => normalize(x.domain) === domain).reduce((sum, x) => sum + Number(x.jobsDelivered || x.jobs_delivered || 0), 0)
   }));
 
-  const allYears = [...new Set(monthlyJobsSorted.flatMap(item => Object.keys(item).filter(key => key !== "name" && key !== "QC" && key !== "OTP")))].sort();
   const getDomainJobs = (domain) => currentFilterData.filter((x) => normalize(x.domain) === normalize(domain)).reduce((sum, x) => sum + Number(x.jobsDelivered || x.jobs_delivered || 0), 0);
   const getDomainAvgMetric = (domain, type) => {
     const domainData = currentFilterData.filter((x) => normalize(x.domain) === normalize(domain));
@@ -611,10 +607,10 @@ export default function TelecomMap() {
                             return Object.entries(uomTotals).map(([key, value]) => `${key}: ${value}`).join(" | ");
                           })()}
                         </div>
-                        <div className="kpiValueModern">{getDomainJobs(item.domain)}<span> Jobs</span></div>
-                        <div className="kpiMetricsRow" style={{ display: "flex", gap: "10px", marginTop: "6px", fontSize: "12px", fontWeight: 700 }}>
-                          <span style={{ color: "#16a34a" }}>Amdocs QC: {getDomainAvgMetric(item.domain, "qc")}%</span>
-                          <span style={{ color: "#2563eb" }}>OTP: {getDomainAvgMetric(item.domain, "otp")}%</span>
+                        <div className="kpiValueModern" style={{ display: "flex", alignItems: "center", gap: "12px", flexWrap: "wrap" }}>
+                          <span>{getDomainJobs(item.domain)}<span> Jobs</span></span>
+                          <span style={{ fontSize: "13px", fontWeight: 700, color: "#16a34a" }}>QC: {getDomainAvgMetric(item.domain, "qc")}%</span>
+                          <span style={{ fontSize: "13px", fontWeight: 700, color: "#2563eb" }}>OTP: {getDomainAvgMetric(item.domain, "otp")}%</span>
                         </div>
                       </div>
                     </div>
@@ -736,22 +732,23 @@ export default function TelecomMap() {
 
             <div className="bottomChartsRow">
               <div className="chartBox">
-                <h3 className="chartTitle" style={{ marginBottom: "30px" }}>📊 Month Wise Jobs, Amdocs QC & OTP</h3>
-                <ResponsiveContainer width="100%" height={350}>
-                  <BarChart data={monthlyJobsSorted} barGap={0} barCategoryGap={25}>
+                <h3 className="chartTitle" style={{ marginBottom: "30px" }}>📊 Year & Month Wise Jobs, Amdocs QC & OTP</h3>
+                <ResponsiveContainer width="100%" height={380}>
+                  <BarChart data={monthlyJobsSorted} barGap={4} barCategoryGap={25}>
                     <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis dataKey="name" interval={0} angle={-45} textAnchor="end" height={60} />
+                    <XAxis dataKey="name" interval={0} angle={-45} textAnchor="end" height={70} />
                     <YAxis yAxisId="left" label={{ value: "Jobs", angle: -90, position: "insideLeft" }} />
                     <YAxis yAxisId="right" orientation="right" domain={[0, 100]} label={{ value: "%", angle: 90, position: "insideRight" }} />
-                    <Tooltip formatter={(value, name) => (name === "QC" ? [`${value}%`, "Amdocs QC"] : name === "OTP" ? [`${value}%`, "OTP"] : [value, name])} />
+                    <Tooltip formatter={(value, name) => (name === "Amdocs QC %" ? [`${value}%`, "Amdocs QC"] : name === "OTP %" ? [`${value}%`, "OTP"] : [value, name])} />
                     <Legend />
-                    {allYears.map((year, index) => (
-                      <Bar key={year} yAxisId="left" dataKey={year} stackId="a" fill={COLORS[index % COLORS.length]} name={year} barSize={window.innerWidth < 768 ? 18 : 35} radius={[6, 6, 0, 0]} />
-                    ))}
-                    <Bar yAxisId="right" dataKey="QC" fill="#16a34a" name="Amdocs QC %" barSize={window.innerWidth < 768 ? 10 : 18} radius={[6, 6, 0, 0]} />
-                    <Bar yAxisId="right" dataKey="OTP" fill="#2563eb" name="OTP %" barSize={window.innerWidth < 768 ? 10 : 18} radius={[6, 6, 0, 0]} />
+                    <Bar yAxisId="left" dataKey="Jobs" fill="#3b82f6" name="Jobs" barSize={window.innerWidth < 768 ? 12 : 22} radius={[6, 6, 0, 0]} />
+                    <Bar yAxisId="right" dataKey="QC" fill="#16a34a" name="Amdocs QC %" barSize={window.innerWidth < 768 ? 12 : 22} radius={[6, 6, 0, 0]} />
+                    <Bar yAxisId="right" dataKey="OTP" fill="#f59e0b" name="OTP %" barSize={window.innerWidth < 768 ? 12 : 22} radius={[6, 6, 0, 0]} />
                   </BarChart>
                 </ResponsiveContainer>
+                <p style={{ textAlign: "center", fontSize: "12px", color: "#64748b", marginTop: "6px" }}>
+                  X-axis shows each Month-Year combination (e.g. Jan-2025, Feb-2025 ...) so you can see Jobs, Amdocs QC % and OTP % together, year wise and month wise.
+                </p>
               </div>
               <div className="chartBox">
                 <h3 className="chartTitle">🥧 Domain Wise Job / QC / OTP %</h3>
