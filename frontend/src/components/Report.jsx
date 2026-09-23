@@ -122,6 +122,24 @@ export default function Reports({ domain, states }) {
     return monthOrder.indexOf(am) - monthOrder.indexOf(bm);
   });
 
+  // ================= QC / OTP HELPERS =================
+  const parsePercent = (val) => {
+    if (val === null || val === undefined || val === "") return null;
+    const num = parseFloat(val.toString().replace("%", "").trim());
+    if (isNaN(num)) return null;
+    return num > 0 && num <= 1 ? Math.round(num * 100) : Math.round(num);
+  };
+
+  const isOtpMet = (val) => {
+    if (val === null || val === undefined || val === "") return null;
+    const str = val.toString().trim().toLowerCase();
+    if (["yes", "y", "met", "true", "ok", "pass", "passed"].includes(str)) return true;
+    if (["no", "n", "not met", "false", "fail", "failed", "0"].includes(str)) return false;
+    const num = parseFloat(str.replace("%", ""));
+    if (!isNaN(num)) return num > 0;
+    return null;
+  };
+
   // ================= JOB FORMAT =================
   const getJobData = (item) => {
     return {
@@ -192,6 +210,8 @@ export default function Reports({ domain, states }) {
                   <th>Region</th>
                   <th>Market Name</th>
                   <th>No.of Job Delivered</th>
+                  <th>Amdocs QC</th>
+                  <th>OTP</th>
                 </tr>
               </thead>
 
@@ -199,6 +219,8 @@ export default function Reports({ domain, states }) {
 
                 {filteredData.map((item, index) => {
                   const job = getJobData(item);
+                  const qcVal = parsePercent(item.amdocsQc || item.amdocs_qc);
+                  const otpMet = isOtpMet(item.otp);
 
                   return (
                     <tr key={index}>
@@ -222,6 +244,18 @@ export default function Reports({ domain, states }) {
                         <div className="job-main">{job.main}</div>
                         <div className="job-sub">{job.sub}</div>
                       </td>
+
+                      <td className="job-cell">
+                        <div className="job-main">{qcVal !== null ? `${qcVal}%` : "-"}</div>
+                        <div className="job-sub">Amdocs QC</div>
+                      </td>
+
+                      <td className="job-cell">
+                        <div className="job-main" style={{ color: otpMet === true ? "#16a34a" : otpMet === false ? "#dc2626" : "inherit" }}>
+                          {otpMet === true ? "Yes" : otpMet === false ? "No" : "-"}
+                        </div>
+                        <div className="job-sub">OTP</div>
+                      </td>
                     </tr>
                   );
                 })}
@@ -233,6 +267,8 @@ export default function Reports({ domain, states }) {
                   <td></td>
                   <td>Total Jobs Delivered</td>
                   <td className="highlight">{totalJobs}</td>
+                  <td></td>
+                  <td></td>
                 </tr>
 
               </tbody>
