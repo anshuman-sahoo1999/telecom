@@ -954,127 +954,6 @@ const getDomainLastUpdate = (req, res) => {
 };
 
 /* ======================================
-   QC % HELPER (STRICT NUMBER PARSE)
-====================================== */
-const parseQcPercentNumber = (val) => {
-  if (val === null || val === undefined || val === "") return null;
-  const num = Number(val.toString().replace("%", "").trim());
-  return isNaN(num) ? null : num;
-};
-
-/* ======================================
-   OTP "YES" HELPER (OTP IS NEVER TREATED AS %)
-====================================== */
-const isOtpYes = (val) => {
-  const v = (val || "").toString().trim().toLowerCase();
-  return v === "yes" || v === "y" || v === "true" || v === "1" || v === "on time" || v === "ontime";
-};
-
-/* ======================================
-   DOMAIN WISE JOBS + AMDOCS QC % + OTP (COUNT, NOT %)
-====================================== */
-const getDomainQcOtpStats = (req, res) => {
-  db.query(
-    `SELECT domain, jobs_delivered, amdocs_qc, otp FROM work_updates`,
-    (err, rows) => {
-      if (err) return res.status(500).json(err);
-
-      const domainMap = {};
-
-      (rows || []).forEach((row) => {
-        const domain = (row.domain || "").toString().trim().toUpperCase();
-        if (!domain) return;
-
-        if (!domainMap[domain]) {
-          domainMap[domain] = { domain, jobs: 0, qcSum: 0, qcCount: 0, otpYes: 0, otpTotal: 0 };
-        }
-
-        domainMap[domain].jobs += Number(row.jobs_delivered || 0);
-
-        const qcNum = parseQcPercentNumber(row.amdocs_qc);
-        if (qcNum !== null) {
-          domainMap[domain].qcSum += qcNum;
-          domainMap[domain].qcCount += 1;
-        }
-
-        const otpRaw = (row.otp || "").toString().trim();
-        if (otpRaw !== "") {
-          domainMap[domain].otpTotal += 1;
-          if (isOtpYes(otpRaw)) domainMap[domain].otpYes += 1;
-        }
-      });
-
-      const result = Object.values(domainMap).map((d) => ({
-        domain: d.domain,
-        jobs: d.jobs,
-        amdocsQc: d.qcCount > 0 ? Number((d.qcSum / d.qcCount).toFixed(1)) : 0,
-        otp: d.otpYes,
-        otpTotal: d.otpTotal
-      }));
-
-      res.json(result);
-    }
-  );
-};
-
-/* ======================================
-   MONTH WISE JOBS + AMDOCS QC % + OTP (COUNT, NOT %)
-====================================== */
-const getMonthWiseQcOtpStats = (req, res) => {
-  db.query(
-    `SELECT months, jobs_delivered, amdocs_qc, otp FROM work_updates`,
-    (err, rows) => {
-      if (err) return res.status(500).json(err);
-
-      const monthOrder = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-      const monthMap = {};
-      monthOrder.forEach((m) => {
-        monthMap[m] = { month: m, jobs: 0, qcSum: 0, qcCount: 0, otpYes: 0, otpTotal: 0 };
-      });
-
-      (rows || []).forEach((row) => {
-        let monthsArr = safeParseJson(row.months, []);
-        if (!Array.isArray(monthsArr)) monthsArr = monthsArr ? [monthsArr] : [];
-
-        const jobs = Number(row.jobs_delivered || 0);
-        const qcNum = parseQcPercentNumber(row.amdocs_qc);
-        const otpRaw = (row.otp || "").toString().trim();
-        const otpYesFlag = otpRaw !== "" && isOtpYes(otpRaw);
-
-        monthsArr.forEach((m) => {
-          if (!m) return;
-          const monthName = m.toString().split(",")[0].trim();
-          if (!monthMap[monthName]) return;
-
-          monthMap[monthName].jobs += jobs;
-          if (qcNum !== null) {
-            monthMap[monthName].qcSum += qcNum;
-            monthMap[monthName].qcCount += 1;
-          }
-          if (otpRaw !== "") {
-            monthMap[monthName].otpTotal += 1;
-            if (otpYesFlag) monthMap[monthName].otpYes += 1;
-          }
-        });
-      });
-
-      const result = monthOrder.map((m) => {
-        const d = monthMap[m];
-        return {
-          month: d.month,
-          jobs: d.jobs,
-          amdocsQc: d.qcCount > 0 ? Number((d.qcSum / d.qcCount).toFixed(1)) : 0,
-          otp: d.otpYes,
-          otpTotal: d.otpTotal
-        };
-      });
-
-      res.json(result);
-    }
-  );
-};
-
-/* ======================================
    DELETE FUNCTIONS
 ====================================== */
 const deleteWork = (req, res) => {
@@ -1136,8 +1015,6 @@ module.exports = {
   getMonthWiseReport,
   getStateWiseJobs,
   getDomainLastUpdate,
-  getDomainQcOtpStats,
-  getMonthWiseQcOtpStats,
   updateWork,
   updateJob: updateWork,
   deleteWork,
