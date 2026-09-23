@@ -438,9 +438,6 @@ export default function TelecomMap() {
   };
 
   const average = (arr) => (arr.length ? Number((arr.reduce((a, b) => a + b, 0) / arr.length).toFixed(2)) : 0);
-
-  // Month wise data, split year by year — same style as the original "Jobs per year" bars,
-  // but now every year also carries its own Amdocs QC % bar and a plain (non %) OTP bar.
   const monthlyMap = {}; // { month: { year: { jobs, qcSum, qcCount, otpSum, otpCount } } }
   currentFilterData.forEach((item) => {
     const totalJobs = Number(item.jobsDelivered || item.jobs_delivered || 0);
@@ -624,9 +621,9 @@ export default function TelecomMap() {
                           })()}
                         </div>
                         <div className="kpiValueModern" style={{ display: "flex", alignItems: "center", gap: "12px", flexWrap: "wrap" }}>
-                          <span>{getDomainJobs(item.domain)}<span> Jobs</span></span>
                           <span style={{ fontSize: "13px", fontWeight: 700, color: "#16a34a" }}>QC: {getDomainAvgQc(item.domain)}%</span>
                           <span style={{ fontSize: "13px", fontWeight: 700, color: "#2563eb" }}>OTP: {getDomainOtpTotal(item.domain)}</span>
+                          <span>{getDomainJobs(item.domain)}<span> Jobs</span></span>
                         </div>
                       </div>
                     </div>
