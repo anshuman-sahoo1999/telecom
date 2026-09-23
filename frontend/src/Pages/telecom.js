@@ -405,6 +405,24 @@ export default function TelecomMap() {
   const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
   const monthlyJobsMap = {};
 
+  // Case/spacing-safe field lookup — handles amdocs_qc, amdocsQc, "Amdocs QC", AMDOCS_QC, etc.
+  const getFieldValue = (item, keys) => {
+    if (!item) return null;
+    for (const key of Object.keys(item)) {
+      const compressed = key.toLowerCase().replace(/[^a-z0-9]/g, "");
+      for (const k of keys) {
+        if (compressed === k.toLowerCase().replace(/[^a-z0-9]/g, "")) {
+          const val = item[key];
+          return val === undefined ? null : val;
+        }
+      }
+    }
+    return null;
+  };
+
+  const getAmdocsQc = (item) => getFieldValue(item, ["amdocs_qc", "amdocsQc", "amdocs qc", "amdocsqc"]);
+  const getOtp = (item) => getFieldValue(item, ["otp"]);
+
   // Parse "95%" / "0.95" / 95 into a plain number (0-100). Returns null when not a valid %.
   const parsePercentValue = (val) => {
     if (val === null || val === undefined || val === "") return null;
@@ -430,8 +448,8 @@ export default function TelecomMap() {
   // Month wise Amdocs QC % and OTP % (averaged across every row that touches that month)
   const monthlyQcOtpMap = {};
   currentFilterData.forEach((item) => {
-    const qcVal = parsePercentValue(item.amdocs_qc || item.amdocsQc);
-    const otpVal = parsePercentValue(item.otp);
+    const qcVal = parsePercentValue(getAmdocsQc(item));
+    const otpVal = parsePercentValue(getOtp(item));
     item.months?.forEach((m) => {
       if (!m) return;
       const [month] = (m || "").split(",");
@@ -468,8 +486,8 @@ export default function TelecomMap() {
     .filter((domain) => domainPieDataMap[domain] > 0 && !hiddenDomains.includes(domain))
     .map((domain) => {
       const domainRows = currentFilterData.filter((x) => normalize(x.domain) === domain);
-      const qcAvg = average(domainRows.map((x) => parsePercentValue(x.amdocs_qc || x.amdocsQc)).filter((v) => v !== null));
-      const otpAvg = average(domainRows.map((x) => parsePercentValue(x.otp)).filter((v) => v !== null));
+      const qcAvg = average(domainRows.map((x) => parsePercentValue(getAmdocsQc(x))).filter((v) => v !== null));
+      const otpAvg = average(domainRows.map((x) => parsePercentValue(getOtp(x))).filter((v) => v !== null));
       return {
         name: domain,
         jobs: domainPieDataMap[domain],
@@ -490,9 +508,11 @@ export default function TelecomMap() {
 
   const allYears = [...new Set(monthlyJobsSorted.flatMap(item => Object.keys(item).filter(key => key !== "name" && key !== "QC" && key !== "OTP")))].sort();
   const getDomainJobs = (domain) => currentFilterData.filter((x) => normalize(x.domain) === normalize(domain)).reduce((sum, x) => sum + Number(x.jobsDelivered || x.jobs_delivered || 0), 0);
-  const getDomainAvgMetric = (domain, field) => {
+  const getDomainAvgMetric = (domain, type) => {
     const domainData = currentFilterData.filter((x) => normalize(x.domain) === normalize(domain));
-    const vals = domainData.map((x) => parsePercentValue(x[field])).filter((v) => v !== null);
+    const vals = domainData
+      .map((x) => parsePercentValue(type === "qc" ? getAmdocsQc(x) : getOtp(x)))
+      .filter((v) => v !== null);
     return average(vals);
   };
 
@@ -593,7 +613,7 @@ export default function TelecomMap() {
                         </div>
                         <div className="kpiValueModern">{getDomainJobs(item.domain)}<span> Jobs</span></div>
                         <div className="kpiMetricsRow" style={{ display: "flex", gap: "10px", marginTop: "6px", fontSize: "12px", fontWeight: 700 }}>
-                          <span style={{ color: "#16a34a" }}>Amdocs QC: {getDomainAvgMetric(item.domain, "amdocs_qc")}%</span>
+                          <span style={{ color: "#16a34a" }}>Amdocs QC: {getDomainAvgMetric(item.domain, "qc")}%</span>
                           <span style={{ color: "#2563eb" }}>OTP: {getDomainAvgMetric(item.domain, "otp")}%</span>
                         </div>
                       </div>
