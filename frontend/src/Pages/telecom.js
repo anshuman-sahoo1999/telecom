@@ -405,6 +405,16 @@ export default function TelecomMap() {
   const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
   const monthlyJobsMap = {};
 
+  // Parse "95%" / "0.95" / 95 into a plain number (0-100). Returns null when not a valid %.
+  const parsePercentValue = (val) => {
+    if (val === null || val === undefined || val === "") return null;
+    const num = parseFloat(val.toString().replace("%", "").trim());
+    if (isNaN(num)) return null;
+    return num > 0 && num <= 1 ? Number((num * 100).toFixed(2)) : Number(num.toFixed(2));
+  };
+
+  const average = (arr) => (arr.length ? Number((arr.reduce((a, b) => a + b, 0) / arr.length).toFixed(2)) : 0);
+
   currentFilterData.forEach((item) => {
     const totalJobs = Number(item.jobsDelivered || item.jobs_delivered || 0);
     item.months?.forEach((m) => {
@@ -417,7 +427,31 @@ export default function TelecomMap() {
     });
   });
 
-  const monthlyJobsSorted = monthNames.map((month) => ({ name: month, ...(monthlyJobsMap[month] || {}) }));
+  // Month wise Amdocs QC % and OTP % (averaged across every row that touches that month)
+  const monthlyQcOtpMap = {};
+  currentFilterData.forEach((item) => {
+    const qcVal = parsePercentValue(item.amdocs_qc || item.amdocsQc);
+    const otpVal = parsePercentValue(item.otp);
+    item.months?.forEach((m) => {
+      if (!m) return;
+      const [month] = (m || "").split(",");
+      if (!month) return;
+      if (!monthlyQcOtpMap[month]) monthlyQcOtpMap[month] = { qcSum: 0, qcCount: 0, otpSum: 0, otpCount: 0 };
+      if (qcVal !== null) { monthlyQcOtpMap[month].qcSum += qcVal; monthlyQcOtpMap[month].qcCount += 1; }
+      if (otpVal !== null) { monthlyQcOtpMap[month].otpSum += otpVal; monthlyQcOtpMap[month].otpCount += 1; }
+    });
+  });
+
+  const monthlyJobsSorted = monthNames.map((month) => {
+    const agg = monthlyQcOtpMap[month] || { qcSum: 0, qcCount: 0, otpSum: 0, otpCount: 0 };
+    return {
+      name: month,
+      ...(monthlyJobsMap[month] || {}),
+      QC: agg.qcCount ? Number((agg.qcSum / agg.qcCount).toFixed(2)) : 0,
+      OTP: agg.otpCount ? Number((agg.otpSum / agg.otpCount).toFixed(2)) : 0
+    };
+  });
+
   const domainPieDataMap = {};
 
   currentFilterData.forEach((item) => {
@@ -428,15 +462,23 @@ export default function TelecomMap() {
   });
 
   const grandTotal = Object.values(domainPieDataMap).reduce((sum, val) => sum + val, 0);
+  const normalize = (d) => (d || "").toString().trim().toUpperCase();
+
   const pieChartData = Object.keys(domainPieDataMap)
     .filter((domain) => domainPieDataMap[domain] > 0 && !hiddenDomains.includes(domain))
-    .map((domain) => ({
-      name: domain,
-      jobs: domainPieDataMap[domain],
-      value: grandTotal ? Number(((domainPieDataMap[domain] / grandTotal) * 100).toFixed(2)) : 0
-    }));
+    .map((domain) => {
+      const domainRows = currentFilterData.filter((x) => normalize(x.domain) === domain);
+      const qcAvg = average(domainRows.map((x) => parsePercentValue(x.amdocs_qc || x.amdocsQc)).filter((v) => v !== null));
+      const otpAvg = average(domainRows.map((x) => parsePercentValue(x.otp)).filter((v) => v !== null));
+      return {
+        name: domain,
+        jobs: domainPieDataMap[domain],
+        value: grandTotal ? Number(((domainPieDataMap[domain] / grandTotal) * 100).toFixed(2)) : 0,
+        qcAvg,
+        otpAvg
+      };
+    });
 
-  const normalize = (d) => (d || "").toString().trim().toUpperCase();
   const masterDomains = (domains || []).map(normalize);
   const workDomains = allWorkData.map(x => normalize(x.domain));
   const mergedDomains = [...new Set([...masterDomains, ...workDomains])];
@@ -446,8 +488,13 @@ export default function TelecomMap() {
     jobs: allWorkData.filter(x => normalize(x.domain) === domain).reduce((sum, x) => sum + Number(x.jobsDelivered || x.jobs_delivered || 0), 0)
   }));
 
-  const allYears = [...new Set(monthlyJobsSorted.flatMap(item => Object.keys(item).filter(key => key !== "name")))].sort();
+  const allYears = [...new Set(monthlyJobsSorted.flatMap(item => Object.keys(item).filter(key => key !== "name" && key !== "QC" && key !== "OTP")))].sort();
   const getDomainJobs = (domain) => currentFilterData.filter((x) => normalize(x.domain) === normalize(domain)).reduce((sum, x) => sum + Number(x.jobsDelivered || x.jobs_delivered || 0), 0);
+  const getDomainAvgMetric = (domain, field) => {
+    const domainData = currentFilterData.filter((x) => normalize(x.domain) === normalize(domain));
+    const vals = domainData.map((x) => parsePercentValue(x[field])).filter((v) => v !== null);
+    return average(vals);
+  };
 
   const getFileNameDateTime = () => {
     const now = new Date();
@@ -545,6 +592,10 @@ export default function TelecomMap() {
                           })()}
                         </div>
                         <div className="kpiValueModern">{getDomainJobs(item.domain)}<span> Jobs</span></div>
+                        <div className="kpiMetricsRow" style={{ display: "flex", gap: "10px", marginTop: "6px", fontSize: "12px", fontWeight: 700 }}>
+                          <span style={{ color: "#16a34a" }}>Amdocs QC: {getDomainAvgMetric(item.domain, "amdocs_qc")}%</span>
+                          <span style={{ color: "#2563eb" }}>OTP: {getDomainAvgMetric(item.domain, "otp")}%</span>
+                        </div>
                       </div>
                     </div>
                   );
@@ -665,22 +716,25 @@ export default function TelecomMap() {
 
             <div className="bottomChartsRow">
               <div className="chartBox">
-                <h3 className="chartTitle" style={{ marginBottom: "30px" }}>📊 Domain Wise Jobs</h3>
+                <h3 className="chartTitle" style={{ marginBottom: "30px" }}>📊 Month Wise Jobs, Amdocs QC & OTP</h3>
                 <ResponsiveContainer width="100%" height={350}>
                   <BarChart data={monthlyJobsSorted} barGap={0} barCategoryGap={25}>
                     <CartesianGrid strokeDasharray="3 3" />
                     <XAxis dataKey="name" interval={0} angle={-45} textAnchor="end" height={60} />
-                    <YAxis />
-                    <Tooltip />
+                    <YAxis yAxisId="left" label={{ value: "Jobs", angle: -90, position: "insideLeft" }} />
+                    <YAxis yAxisId="right" orientation="right" domain={[0, 100]} label={{ value: "%", angle: 90, position: "insideRight" }} />
+                    <Tooltip formatter={(value, name) => (name === "QC" ? [`${value}%`, "Amdocs QC"] : name === "OTP" ? [`${value}%`, "OTP"] : [value, name])} />
                     <Legend />
                     {allYears.map((year, index) => (
-                      <Bar key={year} dataKey={year} stackId="a" fill={COLORS[index % COLORS.length]} name={year} barSize={window.innerWidth < 768 ? 18 : 35} radius={[6, 6, 0, 0]} />
+                      <Bar key={year} yAxisId="left" dataKey={year} stackId="a" fill={COLORS[index % COLORS.length]} name={year} barSize={window.innerWidth < 768 ? 18 : 35} radius={[6, 6, 0, 0]} />
                     ))}
+                    <Bar yAxisId="right" dataKey="QC" fill="#16a34a" name="Amdocs QC %" barSize={window.innerWidth < 768 ? 10 : 18} radius={[6, 6, 0, 0]} />
+                    <Bar yAxisId="right" dataKey="OTP" fill="#2563eb" name="OTP %" barSize={window.innerWidth < 768 ? 10 : 18} radius={[6, 6, 0, 0]} />
                   </BarChart>
                 </ResponsiveContainer>
               </div>
               <div className="chartBox">
-                <h3 className="chartTitle">🥧 Domain % Share</h3>
+                <h3 className="chartTitle">🥧 Domain Wise Job / QC / OTP %</h3>
                 <ResponsiveContainer width="100%" height={360}>
                   <PieChart>
                     <Pie
@@ -708,7 +762,20 @@ export default function TelecomMap() {
                         <Cell key={index} fill={COLORS[index % COLORS.length]} opacity={hiddenDomains.includes(entry.name) ? 0.15 : 1} />
                       ))}
                     </Pie>
-                    <Tooltip formatter={(v) => `${v}%`} />
+                    <Tooltip
+                      content={({ active, payload }) => {
+                        if (!active || !payload || !payload.length) return null;
+                        const d = payload[0].payload;
+                        return (
+                          <div style={{ background: "#fff", border: "1px solid #e5e7eb", borderRadius: "8px", padding: "10px 14px", boxShadow: "0 2px 10px rgba(0,0,0,0.15)", fontSize: "13px" }}>
+                            <div style={{ fontWeight: 700, marginBottom: "4px" }}>{d.name}</div>
+                            <div>Job Share: <strong>{d.value}%</strong> ({d.jobs} Jobs)</div>
+                            <div style={{ color: "#16a34a" }}>Amdocs QC: <strong>{d.qcAvg}%</strong></div>
+                            <div style={{ color: "#2563eb" }}>OTP: <strong>{d.otpAvg}%</strong></div>
+                          </div>
+                        );
+                      }}
+                    />
                     <Legend content={() => (
                       <div style={{ display: "flex", justifyContent: "center", alignItems: "center", flexWrap: "wrap", gap: "14px", marginTop: "10px", fontSize: "13px", fontWeight: "600" }}>
                         <div onClick={() => setHiddenDomains([])} style={{ display: "flex", alignItems: "center", gap: "6px", cursor: "pointer" }}><span style={{ width: "16px", height: "10px", borderRadius: "2px", background: "#111827", display: "inline-block" }}></span>ALL</div>
