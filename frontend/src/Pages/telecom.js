@@ -555,24 +555,28 @@ export default function TelecomMap() {
     return `${year}-${month}-${day} at ${String(hours).padStart(2, "0")}.${minutes}.${seconds} ${ampm}`;
   };
 
-  // Short, compact bar-chart tooltip: Jobs + QC% + OTP (OTP never shown as %)
+  // Short, compact bar-chart tooltip: Job + QC% + OTP (OTP never shown as %)
   const BarChartTooltip = ({ active, payload, label }) => {
     if (!active || !payload || !payload.length) return null;
     const row = payload[0].payload;
     return (
-      <div style={{ background: "#fff", border: "1px solid #e2e8f0", borderRadius: 8, padding: "6px 9px", fontSize: 11, lineHeight: 1.5, boxShadow: "0 2px 8px rgba(0,0,0,0.15)" }}>
-        <div style={{ fontWeight: 700, marginBottom: 3, fontSize: 12 }}>{label}</div>
+      <div style={{ background: "#1e293b", border: "1px solid #334155", borderRadius: 8, padding: "8px 11px", fontSize: 11.5, lineHeight: 1.6, boxShadow: "0 4px 14px rgba(0,0,0,0.25)" }}>
+        <div style={{ fontWeight: 800, marginBottom: 5, fontSize: 12.5, color: "#fff" }}>{label}</div>
         {payload.map((p) => {
           const year = p.dataKey;
           const qc = row[`qc_${year}`];
           const otp = row[`otp_${year}`];
           return (
-            <div key={year} style={{ display: "flex", alignItems: "center", gap: 5, whiteSpace: "nowrap" }}>
-              <span style={{ width: 7, height: 7, borderRadius: "50%", background: p.color, display: "inline-block" }}></span>
-              <span style={{ fontWeight: 700 }}>{year}:</span>
-              <span>J {p.value}</span>
-              <span>QC {qc !== null && qc !== undefined ? `${qc}%` : "N/A"}</span>
-              <span>OTP {otp ?? 0}</span>
+            <div key={year} style={{ marginBottom: 4 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 5, marginBottom: 2 }}>
+                <span style={{ width: 8, height: 8, borderRadius: "50%", background: p.color, display: "inline-block" }}></span>
+                <span style={{ fontWeight: 800, color: "#fff" }}>{year}</span>
+              </div>
+              <div style={{ display: "flex", gap: 10, paddingLeft: 13, whiteSpace: "nowrap" }}>
+                <span style={{ color: "#60a5fa" }}>Job- <b style={{ fontWeight: 800 }}>{p.value}</b></span>
+                <span style={{ color: "#34d399" }}>QC- <b style={{ fontWeight: 800 }}>{qc !== null && qc !== undefined ? `${qc}%` : "N/A"}</b></span>
+                <span style={{ color: "#fbbf24" }}>OTP- <b style={{ fontWeight: 800 }}>{otp ?? 0}</b></span>
+              </div>
             </div>
           );
         })}
@@ -580,16 +584,16 @@ export default function TelecomMap() {
     );
   };
 
-  // Short, compact pie-chart tooltip: Jobs + QC% + OTP (OTP never shown as %)
+  // Short, compact pie-chart tooltip: Job + QC% + OTP (OTP never shown as %)
   const PieChartTooltip = ({ active, payload }) => {
     if (!active || !payload || !payload.length) return null;
     const d = payload[0].payload;
     return (
-      <div style={{ background: "#fff", border: "1px solid #e2e8f0", borderRadius: 8, padding: "6px 9px", fontSize: 11, lineHeight: 1.5, boxShadow: "0 2px 8px rgba(0,0,0,0.15)" }}>
-        <div style={{ fontWeight: 700, marginBottom: 3, fontSize: 12 }}>{d.name}</div>
-        <div>Jobs {d.jobs} ({d.value}%)</div>
-        <div>QC {d.qc !== null && d.qc !== undefined ? `${d.qc}%` : "N/A"}</div>
-        <div>OTP {d.otp ?? 0}</div>
+      <div style={{ background: "#1e293b", border: "1px solid #334155", borderRadius: 8, padding: "8px 11px", fontSize: 11.5, lineHeight: 1.7, boxShadow: "0 4px 14px rgba(0,0,0,0.25)" }}>
+        <div style={{ fontWeight: 800, marginBottom: 4, fontSize: 12.5, color: "#fff" }}>{d.name} <span style={{ color: "#94a3b8", fontWeight: 600 }}>({d.value}%)</span></div>
+        <div style={{ color: "#60a5fa" }}>Job- <b style={{ fontWeight: 800 }}>{d.jobs}</b></div>
+        <div style={{ color: "#34d399" }}>QC- <b style={{ fontWeight: 800 }}>{d.qc !== null && d.qc !== undefined ? `${d.qc}%` : "N/A"}</b></div>
+        <div style={{ color: "#fbbf24" }}>OTP- <b style={{ fontWeight: 800 }}>{d.otp ?? 0}</b></div>
       </div>
     );
   };
