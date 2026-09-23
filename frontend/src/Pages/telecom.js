@@ -573,9 +573,9 @@ export default function TelecomMap() {
                 <span style={{ fontWeight: 800, color: "#0f172a" }}>{year}</span>
               </div>
               <div style={{ display: "flex", gap: 10, paddingLeft: 13, whiteSpace: "nowrap" }}>
-                <span style={{ color: "#2563eb" }}>Job- <b style={{ fontWeight: 800 }}>{p.value}</b></span>
-                <span style={{ color: "#059669" }}>QC- <b style={{ fontWeight: 800 }}>{qc !== null && qc !== undefined ? `${qc}%` : "N/A"}</b></span>
-                <span style={{ color: "#d97706" }}>OTP- <b style={{ fontWeight: 800 }}>{otp ?? 0}</b></span>
+                <span style={{ color: "#2563eb" }}><b style={{ fontWeight: 800 }}>Job-</b> {p.value}</span>
+                <span style={{ color: "#059669" }}><b style={{ fontWeight: 800 }}>QC-</b> {qc !== null && qc !== undefined ? `${qc}%` : "N/A"}</span>
+                <span style={{ color: "#d97706" }}><b style={{ fontWeight: 800 }}>OTP-</b> {otp ?? 0}</span>
               </div>
             </div>
           );
@@ -591,9 +591,9 @@ export default function TelecomMap() {
     return (
       <div style={{ background: "#ffffff", border: "1px solid #e2e8f0", borderRadius: 8, padding: "8px 11px", fontSize: 11.5, lineHeight: 1.7, boxShadow: "0 4px 14px rgba(0,0,0,0.18)" }}>
         <div style={{ fontWeight: 800, marginBottom: 4, fontSize: 12.5, color: "#0f172a" }}>{d.name}</div>
-        <div style={{ color: "#2563eb" }}>Job- <b style={{ fontWeight: 800 }}>{d.jobs}</b> <span style={{ color: "#64748b", fontWeight: 600 }}>({d.value}%)</span></div>
-        <div style={{ color: "#059669" }}>QC- <b style={{ fontWeight: 800 }}>{d.qc !== null && d.qc !== undefined ? `${d.qc}%` : "N/A"}</b></div>
-        <div style={{ color: "#d97706" }}>OTP- <b style={{ fontWeight: 800 }}>{d.otp ?? 0}</b></div>
+        <div style={{ color: "#2563eb" }}><b style={{ fontWeight: 800 }}>Job-</b> {d.jobs} <span style={{ color: "#64748b", fontWeight: 600 }}>({d.value}%)</span></div>
+        <div style={{ color: "#059669" }}><b style={{ fontWeight: 800 }}>QC-</b> {d.qc !== null && d.qc !== undefined ? `${d.qc}%` : "N/A"}</div>
+        <div style={{ color: "#d97706" }}><b style={{ fontWeight: 800 }}>OTP-</b> {d.otp ?? 0}</div>
       </div>
     );
   };
