@@ -520,6 +520,31 @@ export default function TelecomMap() {
   const pieDataByMetric = { jobs: pieChartData, qc: qcPieChartData, otp: otpPieChartData };
   const activePieData = pieDataByMetric[pieMetric] || pieChartData;
 
+  /* ======================================
+     STATE-WISE DOMAIN STATS (Jobs + QC + OTP)
+     Used by the map hover tooltip. Built from allWorkData
+     to match mapReportData's unfiltered behaviour.
+  ====================================== */
+  const stateDomainStatsMap = {};
+  allWorkData.forEach((item) => {
+    if (!item.state) return;
+    const state = item.state.toString().trim();
+    const domain = (item.domain || "").toString().trim().toUpperCase();
+    if (!domain) return;
+    if (!stateDomainStatsMap[state]) stateDomainStatsMap[state] = {};
+    if (!stateDomainStatsMap[state][domain]) {
+      stateDomainStatsMap[state][domain] = { jobs: 0, qcSum: 0, qcCount: 0, otp: 0 };
+    }
+    const bucket = stateDomainStatsMap[state][domain];
+    bucket.jobs += Number(item.jobsDelivered || item.jobs_delivered || 0);
+    const qcVal = parseQcPercent(item.amdocs_qc);
+    if (qcVal !== null) {
+      bucket.qcSum += qcVal;
+      bucket.qcCount += 1;
+    }
+    bucket.otp += getOtpNumericValue(item.otp);
+  });
+
   const normalize = (d) => (d || "").toString().trim().toUpperCase();
   const masterDomains = (domains || []).map(normalize);
   const workDomains = allWorkData.map(x => normalize(x.domain));
@@ -566,13 +591,16 @@ export default function TelecomMap() {
 
   const CustomPieTooltip = ({ active, payload }) => {
     if (!active || !payload || !payload.length) return null;
-    const d = payload[0].payload;
+    const domain = payload[0].payload.name;
+    const jobs = domainPieDataMap[domain] || 0;
+    const qcAvg = domainQcAvgMap[domain];
+    const otpTotal = domainOtpAggMap[domain] || 0;
     return (
       <div style={{ background: "#fff", border: "1px solid #e2e8f0", borderRadius: "6px", padding: "6px 10px", fontSize: "11px", fontWeight: 600, boxShadow: "0 2px 6px rgba(0,0,0,0.15)", lineHeight: 1.5 }}>
-        <div style={{ color: "#0f172a", marginBottom: "2px" }}>{d.name}</div>
-        {pieMetric === "jobs" && <div style={{ color: "#2563eb" }}>Jobs: {d.jobs} ({d.value}%)</div>}
-        {pieMetric === "qc" && <div style={{ color: QC_COLOR }}>QC: {d.raw}%</div>}
-        {pieMetric === "otp" && <div style={{ color: OTP_COLOR }}>OTP: {d.raw}</div>}
+        <div style={{ color: "#0f172a", marginBottom: "2px" }}>{domain}</div>
+        <div style={{ color: "#2563eb" }}>Jobs: {jobs}</div>
+        <div style={{ color: QC_COLOR }}>QC: {qcAvg !== undefined ? `${qcAvg}%` : "N/A"}</div>
+        <div style={{ color: OTP_COLOR }}>OTP: {otpTotal}</div>
       </div>
     );
   };
@@ -899,8 +927,8 @@ export default function TelecomMap() {
       {tooltip.visible && (
         <div className="tooltipBox" style={window.innerWidth < 768 ? {} : { top: tooltip.y + 10, left: tooltip.x + 10 }}>
           {(() => {
-            const stateData = mapReportData[tooltip.data?.state] || {};
-            const totalJobsDelivered = Object.values(stateData).reduce((sum, val) => sum + Number(val || 0), 0);
+            const stateData = stateDomainStatsMap[tooltip.data?.state] || {};
+            const totalJobsDelivered = Object.values(stateData).reduce((sum, val) => sum + Number(val.jobs || 0), 0);
             return (
               <div style={{ display: "flex", justifyContent: "space-between", padding: "10px", background: "#f1f5f9", fontWeight: "700" }}>
                 <div style={{ fontSize: "14px", color: "#0f4a63" }}>{getRegionByState(tooltip.data?.state)} - {tooltip.data?.state}</div>
@@ -909,16 +937,23 @@ export default function TelecomMap() {
             );
           })()}
           <div style={{ padding: "10px" }}>
-            {Object.entries(mapReportData[tooltip.data?.state] || {})
-              .filter(([d, jobs]) => Number(jobs) > 0)
-              .map(([d, jobs]) => (
-                <div key={d} style={{ marginBottom: "10px", borderBottom: "1px solid #eee", paddingBottom: "6px" }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", fontWeight: "700", fontSize: "13px" }}>
-                    <span>{d}</span>
-                    <span style={{ color: "#16a34a", fontWeight: "700" }}>{jobs} Jobs</span>
+            {Object.entries(stateDomainStatsMap[tooltip.data?.state] || {})
+              .filter(([d, stats]) => Number(stats.jobs) > 0)
+              .map(([d, stats]) => {
+                const qcAvg = stats.qcCount > 0 ? Number((stats.qcSum / stats.qcCount).toFixed(1)) : null;
+                return (
+                  <div key={d} style={{ marginBottom: "10px", borderBottom: "1px solid #eee", paddingBottom: "6px" }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", fontWeight: "700", fontSize: "13px" }}>
+                      <span>{d}</span>
+                      <span style={{ color: "#16a34a", fontWeight: "700" }}>{stats.jobs} Jobs</span>
+                    </div>
+                    <div style={{ display: "flex", justifyContent: "space-between", fontSize: "11px", fontWeight: 700, marginTop: "3px" }}>
+                      <span style={{ color: QC_COLOR }}>QC: {qcAvg !== null ? `${qcAvg}%` : "N/A"}</span>
+                      <span style={{ color: OTP_COLOR }}>OTP: {stats.otp}</span>
+                    </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
           </div>
         </div>
       )}
