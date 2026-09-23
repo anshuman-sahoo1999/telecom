@@ -430,42 +430,50 @@ export default function TelecomMap() {
     return num > 0 && num <= 1 ? Number((num * 100).toFixed(2)) : Number(num.toFixed(2));
   };
 
+  // OTP is NEVER shown as a percentage — just the plain numeric value as stored.
+  const parseRawNumber = (val) => {
+    if (val === null || val === undefined || val === "") return null;
+    const num = parseFloat(val.toString().replace("%", "").trim());
+    return isNaN(num) ? null : num;
+  };
+
   const average = (arr) => (arr.length ? Number((arr.reduce((a, b) => a + b, 0) / arr.length).toFixed(2)) : 0);
 
-  // Year + Month wise Jobs, Amdocs QC % and OTP % — one bucket per "Month-Year"
-  const monthYearMap = {};
+  // Month wise data, split year by year — same style as the original "Jobs per year" bars,
+  // but now every year also carries its own Amdocs QC % bar and a plain (non %) OTP bar.
+  const monthlyMap = {}; // { month: { year: { jobs, qcSum, qcCount, otpSum, otpCount } } }
   currentFilterData.forEach((item) => {
     const totalJobs = Number(item.jobsDelivered || item.jobs_delivered || 0);
     const qcVal = parsePercentValue(getAmdocsQc(item));
-    const otpVal = parsePercentValue(getOtp(item));
+    const otpVal = parseRawNumber(getOtp(item));
     item.months?.forEach((m) => {
       if (!m) return;
       const [month, year] = (m || "").split(",");
       if (!month) return;
       const fullYear = year && year.length === 2 ? Number(`20${year}`) : Number(year || currentYear);
-      const key = `${month}-${fullYear}`;
-      if (!monthYearMap[key]) {
-        monthYearMap[key] = {
-          name: key, month, year: fullYear,
-          Jobs: 0, qcSum: 0, qcCount: 0, otpSum: 0, otpCount: 0
-        };
-      }
-      monthYearMap[key].Jobs += totalJobs;
-      if (qcVal !== null) { monthYearMap[key].qcSum += qcVal; monthYearMap[key].qcCount += 1; }
-      if (otpVal !== null) { monthYearMap[key].otpSum += otpVal; monthYearMap[key].otpCount += 1; }
+      if (!monthlyMap[month]) monthlyMap[month] = {};
+      if (!monthlyMap[month][fullYear]) monthlyMap[month][fullYear] = { jobs: 0, qcSum: 0, qcCount: 0, otpSum: 0, otpCount: 0 };
+      monthlyMap[month][fullYear].jobs += totalJobs;
+      if (qcVal !== null) { monthlyMap[month][fullYear].qcSum += qcVal; monthlyMap[month][fullYear].qcCount += 1; }
+      if (otpVal !== null) { monthlyMap[month][fullYear].otpSum += otpVal; monthlyMap[month][fullYear].otpCount += 1; }
     });
   });
 
-  const monthlyJobsSorted = Object.values(monthYearMap)
-    .map((v) => ({
-      name: v.name,
-      year: v.year,
-      monthIndex: monthNames.indexOf(v.month),
-      Jobs: v.Jobs,
-      QC: v.qcCount ? Number((v.qcSum / v.qcCount).toFixed(2)) : 0,
-      OTP: v.otpCount ? Number((v.otpSum / v.otpCount).toFixed(2)) : 0
-    }))
-    .sort((a, b) => (a.year - b.year) || (a.monthIndex - b.monthIndex));
+  const allYears = [...new Set(Object.values(monthlyMap).flatMap((yearObj) => Object.keys(yearObj)))].sort();
+
+  const monthlyJobsSorted = monthNames.map((month) => {
+    const entry = { name: month };
+    allYears.forEach((year) => {
+      const d = monthlyMap[month]?.[year] || { jobs: 0, qcSum: 0, qcCount: 0, otpSum: 0, otpCount: 0 };
+      entry[`Jobs-${year}`] = d.jobs;
+      entry[`QC-${year}`] = d.qcCount ? Number((d.qcSum / d.qcCount).toFixed(2)) : 0;
+      entry[`OTP-${year}`] = Number(d.otpSum.toFixed(2));
+    });
+    return entry;
+  });
+
+  const qcColors = ["#16a34a", "#22c55e", "#4ade80", "#86efac", "#15803d"];
+  const otpColors = ["#f59e0b", "#fb923c", "#fdba74", "#ea580c", "#c2410c"];
 
   const domainPieDataMap = {};
 
@@ -484,13 +492,16 @@ export default function TelecomMap() {
     .map((domain) => {
       const domainRows = currentFilterData.filter((x) => normalize(x.domain) === domain);
       const qcAvg = average(domainRows.map((x) => parsePercentValue(getAmdocsQc(x))).filter((v) => v !== null));
-      const otpAvg = average(domainRows.map((x) => parsePercentValue(getOtp(x))).filter((v) => v !== null));
+      const otpTotal = domainRows.reduce((sum, x) => {
+        const v = parseRawNumber(getOtp(x));
+        return sum + (v === null ? 0 : v);
+      }, 0);
       return {
         name: domain,
         jobs: domainPieDataMap[domain],
         value: grandTotal ? Number(((domainPieDataMap[domain] / grandTotal) * 100).toFixed(2)) : 0,
         qcAvg,
-        otpAvg
+        otpTotal
       };
     });
 
@@ -504,12 +515,17 @@ export default function TelecomMap() {
   }));
 
   const getDomainJobs = (domain) => currentFilterData.filter((x) => normalize(x.domain) === normalize(domain)).reduce((sum, x) => sum + Number(x.jobsDelivered || x.jobs_delivered || 0), 0);
-  const getDomainAvgMetric = (domain, type) => {
+  const getDomainAvgQc = (domain) => {
     const domainData = currentFilterData.filter((x) => normalize(x.domain) === normalize(domain));
-    const vals = domainData
-      .map((x) => parsePercentValue(type === "qc" ? getAmdocsQc(x) : getOtp(x)))
-      .filter((v) => v !== null);
+    const vals = domainData.map((x) => parsePercentValue(getAmdocsQc(x))).filter((v) => v !== null);
     return average(vals);
+  };
+  const getDomainOtpTotal = (domain) => {
+    const domainData = currentFilterData.filter((x) => normalize(x.domain) === normalize(domain));
+    return domainData.reduce((sum, x) => {
+      const v = parseRawNumber(getOtp(x));
+      return sum + (v === null ? 0 : v);
+    }, 0);
   };
 
   const getFileNameDateTime = () => {
@@ -609,8 +625,8 @@ export default function TelecomMap() {
                         </div>
                         <div className="kpiValueModern" style={{ display: "flex", alignItems: "center", gap: "12px", flexWrap: "wrap" }}>
                           <span>{getDomainJobs(item.domain)}<span> Jobs</span></span>
-                          <span style={{ fontSize: "13px", fontWeight: 700, color: "#16a34a" }}>QC: {getDomainAvgMetric(item.domain, "qc")}%</span>
-                          <span style={{ fontSize: "13px", fontWeight: 700, color: "#2563eb" }}>OTP: {getDomainAvgMetric(item.domain, "otp")}%</span>
+                          <span style={{ fontSize: "13px", fontWeight: 700, color: "#16a34a" }}>QC: {getDomainAvgQc(item.domain)}%</span>
+                          <span style={{ fontSize: "13px", fontWeight: 700, color: "#2563eb" }}>OTP: {getDomainOtpTotal(item.domain)}</span>
                         </div>
                       </div>
                     </div>
@@ -734,20 +750,26 @@ export default function TelecomMap() {
               <div className="chartBox">
                 <h3 className="chartTitle" style={{ marginBottom: "30px" }}>📊 Year & Month Wise Jobs, Amdocs QC & OTP</h3>
                 <ResponsiveContainer width="100%" height={380}>
-                  <BarChart data={monthlyJobsSorted} barGap={4} barCategoryGap={25}>
+                  <BarChart data={monthlyJobsSorted} barGap={2} barCategoryGap={25}>
                     <CartesianGrid strokeDasharray="3 3" />
                     <XAxis dataKey="name" interval={0} angle={-45} textAnchor="end" height={70} />
-                    <YAxis yAxisId="left" label={{ value: "Jobs", angle: -90, position: "insideLeft" }} />
-                    <YAxis yAxisId="right" orientation="right" domain={[0, 100]} label={{ value: "%", angle: 90, position: "insideRight" }} />
-                    <Tooltip formatter={(value, name) => (name === "Amdocs QC %" ? [`${value}%`, "Amdocs QC"] : name === "OTP %" ? [`${value}%`, "OTP"] : [value, name])} />
+                    <YAxis yAxisId="left" label={{ value: "Jobs / OTP", angle: -90, position: "insideLeft" }} />
+                    <YAxis yAxisId="right" orientation="right" domain={[0, 100]} label={{ value: "QC %", angle: 90, position: "insideRight" }} />
+                    <Tooltip formatter={(value, name) => (name.startsWith("QC") ? [`${value}%`, name] : [value, name])} />
                     <Legend />
-                    <Bar yAxisId="left" dataKey="Jobs" fill="#3b82f6" name="Jobs" barSize={window.innerWidth < 768 ? 12 : 22} radius={[6, 6, 0, 0]} />
-                    <Bar yAxisId="right" dataKey="QC" fill="#16a34a" name="Amdocs QC %" barSize={window.innerWidth < 768 ? 12 : 22} radius={[6, 6, 0, 0]} />
-                    <Bar yAxisId="right" dataKey="OTP" fill="#f59e0b" name="OTP %" barSize={window.innerWidth < 768 ? 12 : 22} radius={[6, 6, 0, 0]} />
+                    {allYears.map((year, index) => (
+                      <Bar key={`jobs-${year}`} yAxisId="left" dataKey={`Jobs-${year}`} fill={COLORS[index % COLORS.length]} name={`Jobs ${year}`} barSize={window.innerWidth < 768 ? 8 : 16} radius={[4, 4, 0, 0]} />
+                    ))}
+                    {allYears.map((year, index) => (
+                      <Bar key={`qc-${year}`} yAxisId="right" dataKey={`QC-${year}`} fill={qcColors[index % qcColors.length]} name={`QC % ${year}`} barSize={window.innerWidth < 768 ? 8 : 16} radius={[4, 4, 0, 0]} />
+                    ))}
+                    {allYears.map((year, index) => (
+                      <Bar key={`otp-${year}`} yAxisId="left" dataKey={`OTP-${year}`} fill={otpColors[index % otpColors.length]} name={`OTP ${year}`} barSize={window.innerWidth < 768 ? 8 : 16} radius={[4, 4, 0, 0]} />
+                    ))}
                   </BarChart>
                 </ResponsiveContainer>
                 <p style={{ textAlign: "center", fontSize: "12px", color: "#64748b", marginTop: "6px" }}>
-                  X-axis shows each Month-Year combination (e.g. Jan-2025, Feb-2025 ...) so you can see Jobs, Amdocs QC % and OTP % together, year wise and month wise.
+                  Har month ke liye, har year alag bar mein: Jobs aur OTP (left axis, plain number), Amdocs QC % (right axis, %).
                 </p>
               </div>
               <div className="chartBox">
@@ -788,7 +810,7 @@ export default function TelecomMap() {
                             <div style={{ fontWeight: 700, marginBottom: "4px" }}>{d.name}</div>
                             <div>Job Share: <strong>{d.value}%</strong> ({d.jobs} Jobs)</div>
                             <div style={{ color: "#16a34a" }}>Amdocs QC: <strong>{d.qcAvg}%</strong></div>
-                            <div style={{ color: "#2563eb" }}>OTP: <strong>{d.otpAvg}%</strong></div>
+                            <div style={{ color: "#2563eb" }}>OTP: <strong>{d.otpTotal}</strong></div>
                           </div>
                         );
                       }}
