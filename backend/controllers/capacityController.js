@@ -4,6 +4,12 @@ const db = require("../config/db");
 const clean = (v) => (v ? v.toString().trim() : "");
 const normalize = (v) => clean(v).toUpperCase();
 
+// Empty / invalid number becomes 0 (capacity, forecast, inflow are optional)
+const toNumber = (v) => {
+  const n = Number(v);
+  return Number.isFinite(n) ? n : 0;
+};
+
 const createCapacityForecast = (req, res) => {
   const {
     month,
@@ -15,6 +21,13 @@ const createCapacityForecast = (req, res) => {
   } = req.body;
 
   const fixedDomain = normalize(domain);
+
+  // Only month and domain are mandatory
+  if (!clean(month) || !fixedDomain) {
+    return res.status(400).json({
+      message: "Month and domain are required"
+    });
+  }
 
   const sql = `
     INSERT INTO capacity_forecast
@@ -34,9 +47,9 @@ const createCapacityForecast = (req, res) => {
     [
       clean(month),
       fixedDomain,
-      Number(capacity || 0),
-      Number(forecast || 0),
-      Number(inflow || 0),
+      toNumber(capacity),
+      toNumber(forecast),
+      toNumber(inflow),
       JSON.stringify(uom || {})
     ],
     (err, result) => {
@@ -95,6 +108,13 @@ const updateCapacityForecast = (req, res) => {
 
   const fixedDomain = normalize(domain);
 
+  // Only month and domain are mandatory
+  if (!clean(month) || !fixedDomain) {
+    return res.status(400).json({
+      message: "Month and domain are required"
+    });
+  }
+
   const sql = `
     UPDATE capacity_forecast
     SET month = ?, domain = ?, capacity = ?, forecast = ?, inflow = ?, uom = ?
@@ -106,9 +126,9 @@ const updateCapacityForecast = (req, res) => {
     [
       clean(month),
       fixedDomain,
-      Number(capacity || 0),
-      Number(forecast || 0),
-      Number(inflow || 0),
+      toNumber(capacity),
+      toNumber(forecast),
+      toNumber(inflow),
       JSON.stringify(uom || {}),
       id
     ],
