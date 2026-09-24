@@ -2,6 +2,8 @@ import React from "react";
 import { useDraggable } from "@dnd-kit/core";
 import { RxCross2 } from "react-icons/rx";
 import "../style/organogram.css";
+
+// FIX: localStorage ka data kharab ho to page crash na ho
 const getLoginUser = () => {
     try {
         return JSON.parse(localStorage.getItem("user"));
@@ -13,6 +15,8 @@ const getLoginUser = () => {
 const DraggableUser = ({ user, onDelete, onHover, disableDrag = false }) => {
     const loginUser = getLoginUser();
     const isAdmin = loginUser?.role === "Admin";
+
+    // Agar disableDrag true hai (jaise project view mein), toh dragging band rahegi
     const canDrag = isAdmin && !disableDrag;
 
     const {
@@ -24,6 +28,8 @@ const DraggableUser = ({ user, onDelete, onHover, disableDrag = false }) => {
     } = useDraggable({
         id: user.id.toString(),
         disabled: !canDrag,
+        // FIX: drop zone / collision detection ko pata rahe ki kaun drag ho raha hai (TeamLead ya member)
+        data: { role: user.role },
     });
 
     const style = {
@@ -32,7 +38,9 @@ const DraggableUser = ({ user, onDelete, onHover, disableDrag = false }) => {
             : undefined,
         opacity: isDragging ? 0.6 : 1,
         cursor: canDrag ? "grab" : "default",
+        // FIX: touchAction "none" sirf tab jab drag allowed ho, warna non-admin ka mobile scroll block hota tha
         touchAction: canDrag ? "none" : undefined,
+        // FIX: drag ke time node dusre columns ke upar dikhe, peeche na chhup jaye
         position: isDragging ? "relative" : undefined,
         zIndex: isDragging ? 9999 : undefined,
     };
