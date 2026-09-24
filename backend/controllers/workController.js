@@ -12,6 +12,15 @@ const clean = (v) => {
 };
 
 const normalize = (v) => clean(v).toUpperCase();
+const query = (sql, params = []) =>
+  new Promise((resolve, reject) => {
+    db.query(sql, params, (err, result) => (err ? reject(err) : resolve(result)));
+  });
+
+const isRealJobId = (v) => {
+  const s = clean(v);
+  return s !== "" && s !== "-";
+};
 
 /* ======================================
    CELL VALUE UNWRAPPER (formula / rich text / hyperlink)
@@ -774,7 +783,7 @@ const createWork = (req, res) => {
 /* ======================================
    UPDATE WORK
 ====================================== */
-const updateWork = (req, res) => {
+const updateWork = async (req, res) => {
   const { id } = req.params;
   const {
     months,
@@ -849,9 +858,15 @@ const updateWork = (req, res) => {
     WHERE id = ?
   `;
 
-  db.query(
-    sql,
-    [
+  try {
+    // Update se pehle purani Job ID yaad rakho.
+    // Agar Job ID badli aur job_creation me purani wali row chhod di,
+    // to wo "orphan" ban jati hai: Report se delete karne ke baad bhi
+    // Job History me dikhti rehti hai.
+    const oldRows = await query("SELECT job_id FROM work_updates WHERE id = ?", [id]);
+    const oldJobId = oldRows && oldRows.length > 0 ? clean(oldRows[0].job_id) : "";
+
+    const result = await query(sql, [
       JSON.stringify(parsedMonths),
       fixedDomain,
       sow,
@@ -872,36 +887,58 @@ const updateWork = (req, res) => {
       formattedEcdDate,
       formattedSubmissionDate,
       id
-    ],
-    async (err, result) => {
-      if (err) {
-        return res.status(500).json({
-          message: "Update failed",
-          error: err
-        });
-      }
+    ]);
 
-      if (cleanJobId && cleanJobId !== "-") {
-        await helperSyncToJobCreation({
-          domain: fixedDomain,
-          market: state || region,
-          cleanJobId,
-          month: latestMonth,
-          receiveDate: formattedReceiveDate,
-          ecdDate: formattedEcdDate,
-          submissionDate: formattedSubmissionDate,
-          otp: clean(otp),
-          amdocsQc: formattedAmdocsQc,
-          internalQc: formattedInternalQc
-        });
-      }
+    const jobIdChanged =
+      isRealJobId(oldJobId) && oldJobId.toLowerCase() !== cleanJobId.toLowerCase();
 
-      res.json({
-        message: "Updated successfully and synced to Job Creation",
-        result
+    if (jobIdChanged) {
+      if (isRealJobId(cleanJobId)) {
+        const newExists = await query(
+          "SELECT id FROM job_creation WHERE TRIM(jobId) = TRIM(?) LIMIT 1",
+          [cleanJobId]
+        );
+        if (newExists && newExists.length > 0) {
+          // Nayi Job ID ki row pehle se hai -> purani wali hata do (duplicate/orphan na bane)
+          await query("DELETE FROM job_creation WHERE TRIM(jobId) = TRIM(?)", [oldJobId]);
+        } else {
+          // Nayi row banane ki jagah purani row ka jobId rename karo
+          await query(
+            "UPDATE job_creation SET jobId = ?, updated_at = CURRENT_TIMESTAMP WHERE TRIM(jobId) = TRIM(?)",
+            [cleanJobId, oldJobId]
+          );
+        }
+      } else {
+        // Job ID hata di / "-" kar di -> purani job_creation row ka ab koi matlab nahi
+        await query("DELETE FROM job_creation WHERE TRIM(jobId) = TRIM(?)", [oldJobId]);
+      }
+    }
+
+    if (isRealJobId(cleanJobId)) {
+      await helperSyncToJobCreation({
+        domain: fixedDomain,
+        market: state || region,
+        cleanJobId,
+        month: latestMonth,
+        receiveDate: formattedReceiveDate,
+        ecdDate: formattedEcdDate,
+        submissionDate: formattedSubmissionDate,
+        otp: clean(otp),
+        amdocsQc: formattedAmdocsQc,
+        internalQc: formattedInternalQc
       });
     }
-  );
+
+    return res.json({
+      message: "Updated successfully and synced to Job Creation",
+      result
+    });
+  } catch (err) {
+    return res.status(500).json({
+      message: "Update failed",
+      error: err
+    });
+  }
 };
 
 const safeParseJson = (val, fallback) => {
@@ -1033,50 +1070,62 @@ const getDomainLastUpdate = (req, res) => {
 /* ======================================
    DELETE FUNCTIONS
 ====================================== */
-const deleteWork = (req, res) => {
+const deleteWork = async (req, res) => {
   const workId = req.params.id;
 
-  db.query("SELECT job_id FROM work_updates WHERE id = ?", [workId], (findErr, rows) => {
-    const jobId = (!findErr && rows && rows.length > 0) ? rows[0].job_id : null;
+  try {
+    const rows = await query("SELECT job_id FROM work_updates WHERE id = ?", [workId]);
+    const jobId = rows && rows.length > 0 ? clean(rows[0].job_id) : "";
 
-    db.query("DELETE FROM work_updates WHERE id = ?", [workId], (err) => {
-      if (err) return res.status(500).json(err);
+    await query("DELETE FROM work_updates WHERE id = ?", [workId]);
 
-      if (jobId && jobId !== "-" && jobId !== "") {
-        db.query("DELETE FROM job_creation WHERE TRIM(jobId) = TRIM(?)", [jobId], () => {});
-      }
+    // Ab job_creation ka delete bhi COMPLETE hone ke baad hi response jayega.
+    // Pehle response pehle chala jata tha aur frontend turant Job History
+    // dobara load kar leta tha, isliye purani row dikh jati thi (aur agar
+    // delete fail hota to error bhi chhup jata tha).
+    if (isRealJobId(jobId)) {
+      await query("DELETE FROM job_creation WHERE TRIM(jobId) = TRIM(?)", [jobId]);
+    }
 
-      res.json({ message: "Deleted from both Work Controller and Job Creation successfully" });
-    });
-  });
+    return res.json({ message: "Deleted from both Work Controller and Job Creation successfully" });
+  } catch (err) {
+    console.error("deleteWork error:", err.message);
+    return res.status(500).json({ message: "Delete failed", error: err.message });
+  }
 };
 
-const deleteFile = (req, res) => {
+const deleteFile = async (req, res) => {
   const fileName = req.params.fileName;
-  
-  db.query("SELECT job_id FROM work_updates WHERE file_name = ?", [fileName], (findErr, rows) => {
-    const jobIds = (!findErr && rows) ? rows.map(r => r.job_id).filter(j => j && j !== "-") : [];
 
-    db.query("DELETE FROM work_updates WHERE file_name = ?", [fileName], (err) => {
-      if (err) return res.status(500).json(err);
+  try {
+    const rows = await query("SELECT job_id FROM work_updates WHERE file_name = ?", [fileName]);
+    const jobIds = [
+      ...new Set((rows || []).map((r) => clean(r.job_id)).filter(isRealJobId))
+    ];
 
-      if (jobIds.length > 0) {
-        db.query("DELETE FROM job_creation WHERE jobId IN (?)", [jobIds], () => {});
-      }
+    await query("DELETE FROM work_updates WHERE file_name = ?", [fileName]);
 
-      res.json({ message: "File and related jobs deleted successfully from both places" });
-    });
-  });
+    if (jobIds.length > 0) {
+      await query("DELETE FROM job_creation WHERE TRIM(jobId) IN (?)", [jobIds]);
+    }
+
+    return res.json({ message: "File and related jobs deleted successfully from both places" });
+  } catch (err) {
+    console.error("deleteFile error:", err.message);
+    return res.status(500).json({ message: "Delete failed", error: err.message });
+  }
 };
 
-const clearWork = (req, res) => {
-  db.query("DELETE FROM work_updates", (err) => {
-    if (err) return res.status(500).json(err);
-    
-    db.query("DELETE FROM job_creation", () => {});
+const clearWork = async (req, res) => {
+  try {
+    await query("DELETE FROM work_updates");
+    await query("DELETE FROM job_creation");
 
-    res.json({ message: "All data cleared from both places" });
-  });
+    return res.json({ message: "All data cleared from both places" });
+  } catch (err) {
+    console.error("clearWork error:", err.message);
+    return res.status(500).json({ message: "Clear failed", error: err.message });
+  }
 };
 
 /* ======================================
