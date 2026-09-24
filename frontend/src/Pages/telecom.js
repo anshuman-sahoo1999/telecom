@@ -614,7 +614,7 @@ export default function TelecomMap() {
     <div className="page">
       <div className={`topMenu ${menuOpen ? "expanded" : "collapsed"}`}>
         <button className={`menuBtn ${activePage === "dashboard" ? "active" : ""}`} onClick={() => { setActivePage("dashboard"); if (window.innerWidth <= 1100) setMenuOpen(false); }}><FaTachometerAlt className="menuIcon" />{menuOpen && "Dashboard"}</button>
-        <button className={`menuBtn ${activePage === "workupdate" ? "active" : ""}`} onClick={() => { setActivePage("workupdate"); if (window.innerWidth <= 1100) setMenuOpen(false); }}><FaUpload className="menuIcon" />{menuOpen && "Data Upload"}</button>
+        // <button className={`menuBtn ${activePage === "workupdate" ? "active" : ""}`} onClick={() => { setActivePage("workupdate"); if (window.innerWidth <= 1100) setMenuOpen(false); }}><FaUpload className="menuIcon" />{menuOpen && "Data Upload"}</button>
         <button className={`menuBtn ${activePage === "report" ? "active" : ""}`} onClick={() => { setActivePage("report"); if (window.innerWidth <= 1100) setMenuOpen(false); }}><FaChartBar className="menuIcon" />{menuOpen && "Report"}</button>
         {role === "Admin" && <button className={`menuBtn ${activePage === "user-management" ? "active" : ""}`} onClick={() => { setActivePage("user-management"); if (window.innerWidth <= 1100) setMenuOpen(false); }}><FaUsers className="menuIcon" />{menuOpen && "User Management"}</button>}
         {(role === "Admin" || role === "TeamLead") && <button className={`menuBtn ${activePage === "organogram" ? "active" : ""}`} onClick={() => { setActivePage("organogram"); if (window.innerWidth <= 1100) setMenuOpen(false); }}><FaSitemap className="menuIcon" />{menuOpen && "Organogram"}</button>}
@@ -660,10 +660,7 @@ export default function TelecomMap() {
         {activePage === "dashboard" && (
           <>
             <div className="kpiContainer">
-              <h2 className="kpiTitle">📊 KPI - Job Delivery Summary</h2>
-              <p className="kpiSubtitle" style={{ margin: "-6px 0 14px 0", fontSize: "13px", fontWeight: 600, color: "#64748b" }}>
-                Domain-wise Jobs Delivered along with Amdocs QC% and OTP% for each domain
-              </p>
+              <h2 className="kpiTitle">📊 KPI - Job Delivery / Amdocs QC / OTP Summary</h2>
               <div className="kpiGridModern">
                 {sortedDomainStats.map((item) => {
                   const color = domainColors[item.domain] || "#6366f1";
@@ -824,10 +821,7 @@ export default function TelecomMap() {
 
             <div className="bottomChartsRow">
               <div className="chartBox">
-                <h3 className="chartTitle" style={{ marginBottom: "6px" }}>📊 Month Wise Job Delivery, QC &amp; OTP</h3>
-                <p className="chartSubtitle" style={{ margin: "0 0 24px 0", fontSize: "12px", fontWeight: 600, color: "#64748b" }}>
-                  Jobs delivered per month by year — hover on a bar to view Amdocs QC% and OTP% for that month
-                </p>
+                <h3 className="chartTitle" style={{ marginBottom: "6px" }}>📊 Month Wise Job Delivery, Amdocs QC & OTP</h3>
                 <ResponsiveContainer width="100%" height={350}>
                   <BarChart data={monthlyJobsSorted} barGap={0} barCategoryGap={25}>
                     <CartesianGrid strokeDasharray="3 3" />
@@ -842,10 +836,7 @@ export default function TelecomMap() {
                 </ResponsiveContainer>
               </div>
               <div className="chartBox">
-                <h3 className="chartTitle" style={{ marginBottom: "6px" }}>🥧 Domain % Share</h3>
-                <p className="chartSubtitle" style={{ margin: "0 0 10px 0", fontSize: "12px", fontWeight: 600, color: "#64748b" }}>
-                  Share of jobs delivered by domain — hover on a slice to view Job%, Amdocs QC% and OTP% for that domain
-                </p>
+                <h3 className="chartTitle" style={{ marginBottom: "6px" }}>🥧 Domain % Share (Job, Amdocs QC & OTP)</h3>
                 <ResponsiveContainer width="100%" height={360}>
                   <PieChart>
                     <Pie
