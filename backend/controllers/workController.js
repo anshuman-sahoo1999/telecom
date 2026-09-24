@@ -12,6 +12,9 @@ const clean = (v) => {
 };
 
 const normalize = (v) => clean(v).toUpperCase();
+
+// db.query ko Promise bana diya, taaki delete/update me har query ka
+// khatam hone ka wait kar sakein (pehle fire-and-forget tha).
 const query = (sql, params = []) =>
   new Promise((resolve, reject) => {
     db.query(sql, params, (err, result) => (err ? reject(err) : resolve(result)));
