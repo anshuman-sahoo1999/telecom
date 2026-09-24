@@ -177,7 +177,7 @@ exports.createJob = (req, res) => {
 
 exports.getAllJobs = (req, res) => {
   const queryJC = "SELECT id, jobId, domain, market, month, receiveDate, ecdDate, submissionDate, otp, amdocsQc, internalQc, updated_at FROM job_creation";
-  const queryWU = "SELECT id, job_id AS jobId, domain, state AS market, receive_date AS receiveDate, ecd_date AS ecdDate, submission_date AS submissionDate, amdocs_qc, internal_qc, otp, updated_at FROM work_updates WHERE job_id IS NOT NULL AND job_id != '-' AND job_id != ''";
+  const queryWU = "SELECT id, job_id AS jobId, domain, state AS market, months, receive_date AS receiveDate, ecd_date AS ecdDate, submission_date AS submissionDate, amdocs_qc, internal_qc, otp, updated_at FROM work_updates WHERE job_id IS NOT NULL AND job_id != '-' AND job_id != ''";
 
   db.query(queryJC, (errJC, jcRows) => {
     if (errJC) {
@@ -201,6 +201,16 @@ exports.getAllJobs = (req, res) => {
         const k = keyOf(row.jobId);
         if (isValidKey(k)) workJobKeys.add(k);
       });
+
+      // work_updates.months (JSON / text) se pehla month nikalo
+      const monthFromWork = (val) => {
+        let v = val;
+        if (typeof v === "string") {
+          try { v = JSON.parse(v); } catch { /* plain text month */ }
+        }
+        if (Array.isArray(v)) return v.length > 0 ? v[v.length - 1] : null;
+        return v || null;
+      };
 
       const jobMap = new Map();
 
@@ -229,6 +239,7 @@ exports.getAllJobs = (req, res) => {
 
             domain: row.domain || existing.domain,
             market: row.market || existing.market,
+            month: existing.month || monthFromWork(row.months),
             submissionDate: row.submissionDate || existing.submissionDate,
             receiveDate: row.receiveDate || existing.receiveDate,
             ecdDate: row.ecdDate || existing.ecdDate,
@@ -239,8 +250,10 @@ exports.getAllJobs = (req, res) => {
             workId: row.id,
           });
         } else {
+          const { months: workMonths, ...rowNoMonths } = row;
           jobMap.set(k, {
-            ...row,
+            ...rowNoMonths,
+            month: monthFromWork(workMonths),
             jobId: row.jobId.toString().trim(),
             id: row.id,
             jcId: null,
@@ -395,7 +408,8 @@ exports.updateJob = (req, res) => {
           return res.status(500).json({ success: false, message: upWerr.message });
         }
 
-        if ((!wRows || wRows.length === 0) && (!jRows || jRows.length === 0) && cleanNewJobId && cleanNewJobId !== "-") {
+        // work_updates me row na ho to hamesha banao (job_creation ho ya na ho), taaki Report me job dikhe
+        if ((!wRows || wRows.length === 0) && cleanNewJobId && cleanNewJobId !== "-") {
           const insertWorkSql = `
             INSERT INTO work_updates (job_id, domain, state, amdocs_qc, otp, internal_qc, months, receive_date, ecd_date, submission_date, jobs_delivered, uom)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, '{}')
@@ -505,10 +519,11 @@ exports.submitJob = (req, res) => {
   const cleanJobId = clean(jobId);
   const cleanMonth = cleanSingleMonth(month);
 
+  // month na aaye to job_creation ka purana month rakho (pehle NULL ho jata tha)
   const sql = `
     UPDATE job_creation
     SET submissionDate = ?,
-        month = ?,
+        month = COALESCE(?, month),
         updated_at = CURRENT_TIMESTAMP
     WHERE TRIM(jobId) = TRIM(?)
   `;
@@ -528,18 +543,69 @@ exports.submitJob = (req, res) => {
       });
     }
 
-    const updateWorkSync = `
-      UPDATE work_updates
-      SET submission_date = ?,
-          months = CASE WHEN ? IS NOT NULL THEN JSON_ARRAY(?) ELSE months END,
-          updated_at = CURRENT_TIMESTAMP
-      WHERE TRIM(job_id) = TRIM(?)
-    `;
-    db.query(updateWorkSync, [formattedSubmissionDate, cleanMonth, cleanMonth, cleanJobId], () => {});
+    const done = () =>
+      res.json({
+        success: true,
+        message: "Job Submitted Successfully",
+      });
+    const fail = (e) =>
+      res.status(500).json({
+        success: false,
+        message: e.message,
+      });
 
-    res.json({
-      success: true,
-      message: "Job Submitted Successfully",
-    });
+    // Report (work_updates) me bhi submission date + month jaye.
+    // Pehle ye sync response ke baad chalta tha aur error chhup jata tha.
+    db.query(
+      "SELECT id FROM work_updates WHERE TRIM(job_id) = TRIM(?) LIMIT 1",
+      [cleanJobId],
+      (wErr, wRows) => {
+        if (wErr) return fail(wErr);
+
+        if (wRows && wRows.length > 0) {
+          const updateWorkSync = `
+            UPDATE work_updates
+            SET submission_date = ?,
+                months = CASE WHEN ? IS NOT NULL THEN JSON_ARRAY(?) ELSE months END,
+                updated_at = CURRENT_TIMESTAMP
+            WHERE TRIM(job_id) = TRIM(?)
+          `;
+          return db.query(
+            updateWorkSync,
+            [formattedSubmissionDate, cleanMonth, cleanMonth, cleanJobId],
+            (uErr) => (uErr ? fail(uErr) : done())
+          );
+        }
+
+        // work_updates me row hi nahi thi -> job_creation se bana do
+        db.query(
+          "SELECT domain, market, month, receiveDate, ecdDate, otp, amdocsQc, internalQc FROM job_creation WHERE TRIM(jobId) = TRIM(?) LIMIT 1",
+          [cleanJobId],
+          (jErr, jRows) => {
+            if (jErr) return fail(jErr);
+            const jc = (jRows && jRows[0]) || {};
+            const monthToStore = cleanMonth || cleanSingleMonth(jc.month);
+
+            db.query(
+              `INSERT INTO work_updates (domain, state, job_id, months, receive_date, ecd_date, submission_date, amdocs_qc, internal_qc, otp, jobs_delivered, uom)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, '{}')`,
+              [
+                jc.domain || null,
+                jc.market || null,
+                cleanJobId,
+                JSON.stringify(monthToStore ? [monthToStore] : []),
+                jc.receiveDate || null,
+                jc.ecdDate || null,
+                formattedSubmissionDate,
+                jc.amdocsQc || null,
+                jc.internalQc || null,
+                jc.otp || null,
+              ],
+              (iErr) => (iErr ? fail(iErr) : done())
+            );
+          }
+        );
+      }
+    );
   });
 };
