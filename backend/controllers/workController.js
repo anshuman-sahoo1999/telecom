@@ -38,11 +38,7 @@ const parseExcelDate = (value) => {
   if (!value) return null;
 
   let strVal = value.toString().trim();
-
-  // Agar already MM-DD-YYYY me hai toh wahi return karo
   if (/^\d{2}-\d{2}-\d{4}$/.test(strVal)) return strVal;
-
-  // Agar YYYY-MM-DD format me hai toh usko MM-DD-YYYY me convert karo
   const isoMatch = strVal.match(/^(\d{4})-(\d{2})-(\d{2})/);
   if (isoMatch) {
     const [, year, month, day] = isoMatch;
@@ -123,38 +119,75 @@ const getMonthValue = (row) => {
   return null;
 };
 
+const monthNames = [
+  "Jan", "Feb", "Mar", "Apr", "May", "Jun",
+  "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"
+];
+const monthNameToIndex = monthNames.reduce((acc, m, idx) => {
+  acc[m.toLowerCase()] = idx;
+  return acc;
+}, {});
+const fullMonthNameToIndex = [
+  "january", "february", "march", "april", "may", "june",
+  "july", "august", "september", "october", "november", "december"
+].reduce((acc, m, idx) => {
+  acc[m] = idx;
+  return acc;
+}, {});
+
 const formatMonth = (value) => {
   if (!value) return null;
 
-  const months = [
-    "Jan", "Feb", "Mar", "Apr", "May", "Jun",
-    "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"
-  ];
-
   if (value instanceof Date) {
     if (isNaN(value.getTime())) return null;
-    return `${months[value.getUTCMonth()]},${value.getUTCFullYear()}`;
+    return `${monthNames[value.getUTCMonth()]},${value.getUTCFullYear()}`;
   }
 
   if (typeof value === "number" && value > 20000) {
     const serialDate = new Date(Math.round((value - 25569) * 86400 * 1000));
     if (!isNaN(serialDate.getTime())) {
-      return `${months[serialDate.getUTCMonth()]},${serialDate.getUTCFullYear()}`;
+      return `${monthNames[serialDate.getUTCMonth()]},${serialDate.getUTCFullYear()}`;
     }
   }
 
   let strVal = String(value).trim();
-
+  if (!strVal) return null;
   if (/^[A-Za-z]{3},\d{4}$/.test(strVal)) return strVal;
-
-  strVal = strVal.replace(/-\d{2,4}/g, "").trim();
-
-  let d = new Date(strVal);
-
-  if (!isNaN(d.getTime())) {
-    return `${months[d.getMonth()]},${d.getFullYear()}`;
+  let m = strVal.match(/^(\d{4})-(\d{1,2})(?:-\d{1,2})?$/);
+  if (m) {
+    const year = m[1];
+    const monthIdx = Number(m[2]) - 1;
+    if (monthIdx >= 0 && monthIdx <= 11) {
+      return `${monthNames[monthIdx]},${year}`;
+    }
   }
 
+  // "MM-YYYY" or "MM/YYYY"
+  m = strVal.match(/^(\d{1,2})[-/](\d{4})$/);
+  if (m) {
+    const monthIdx = Number(m[1]) - 1;
+    if (monthIdx >= 0 && monthIdx <= 11) {
+      return `${monthNames[monthIdx]},${m[2]}`;
+    }
+  }
+
+  // "Oct-2024", "October-2024", "Oct/2024", "Oct 2024", "October 2024"
+  m = strVal.match(/^([A-Za-z]+)[\s\-/,]+(\d{4})$/);
+  if (m) {
+    const key = m[1].toLowerCase();
+    const monthIdx = key.length === 3 ? monthNameToIndex[key] : fullMonthNameToIndex[key];
+    if (monthIdx !== undefined) {
+      return `${monthNames[monthIdx]},${m[2]}`;
+    }
+  }
+
+  // Last resort: let the JS Date parser try (e.g. "October 2024", "2024/10/01")
+  const d = new Date(strVal);
+  if (!isNaN(d.getTime())) {
+    return `${monthNames[d.getMonth()]},${d.getFullYear()}`;
+  }
+
+  // Kuch bhi match na ho to raw value hi return karo (khali/gayab hone se behtar)
   return strVal;
 };
 
