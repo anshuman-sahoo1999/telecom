@@ -98,19 +98,7 @@ CREATE TABLE `timesheet_entries` (
   `teamMember` varchar(50) DEFAULT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
---
--- Dumping data for table `timesheet_entries`
---
 
-INSERT INTO `timesheet_entries` (`id`, `task`, `startTime`, `endTime`, `hours`, `created_at`, `jobId`, `employeeName`, `tlStatus`, `adminStatus`, `tlRevisedReason`, `adminRevisedReason`, `teamMember`) VALUES
-(39, 'To day I work on Telecome Projest...........', '14:00:00', '22:00:00', 8.00, '2026-07-04 09:18:36', '345672', 'Sunita Behera', 'Verified', 'Revised', NULL, '\n• n csnbzc msdz csdzschds', 'QA'),
-(40, 'vsxvsmbxsM', '13:18:00', '16:18:00', 3.00, '2026-07-09 06:48:40', '345672', 'Sunita Behera', 'Pending', 'Verified', NULL, NULL, 'QC');
-
--- --------------------------------------------------------
-
---
--- Table structure for table `users`
---
 
 CREATE TABLE `users` (
   `id` int(11) NOT NULL,
