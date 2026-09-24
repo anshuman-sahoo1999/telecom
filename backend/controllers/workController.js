@@ -54,17 +54,22 @@ const parseMonthsInput = (months) => {
 
 // Sirf wahi job_creation rows hatao jinki work_updates me ab koi row nahi bachi.
 // (Agar same Job ID ki doosri work row abhi bhi hai to job_creation ko mat chhuo.)
+// Note: dono tables ko SQL me aapas me compare nahi karte (collation mismatch ka
+// khatra), balki Job IDs parameter ke roop me bhej kar Node me match karte hain.
 const removeOrphanJobCreation = async (jobIds) => {
   const ids = [...new Set((jobIds || []).map(clean).filter(isRealJobId))];
   if (ids.length === 0) return;
-  await query(
-    `DELETE FROM job_creation
-     WHERE TRIM(jobId) IN (?)
-       AND NOT EXISTS (
-         SELECT 1 FROM work_updates w WHERE TRIM(w.job_id) = TRIM(job_creation.jobId)
-       )`,
+
+  const stillUsed = await query(
+    "SELECT job_id FROM work_updates WHERE TRIM(job_id) IN (?)",
     [ids]
   );
+  const usedKeys = new Set((stillUsed || []).map((r) => clean(r.job_id).toLowerCase()));
+
+  const toRemove = ids.filter((id) => !usedKeys.has(id.toLowerCase()));
+  if (toRemove.length === 0) return;
+
+  await query("DELETE FROM job_creation WHERE TRIM(jobId) IN (?)", [toRemove]);
 };
 
 /* ======================================
@@ -1095,38 +1100,42 @@ const mapWorkRow = (row) => {
 };
 
 const getAllWork = async (req, res) => {
-  // Job Creation ki month / dates bhi saath laate hain, taaki agar work_updates me
-  // ye khaali reh gayi ho (job_creation se sync chhoot gaya) to bhi Report me dikhe.
-  const joinSql = `
-    SELECT w.*,
-           jc.jc_month, jc.jc_receive, jc.jc_ecd, jc.jc_submission
-    FROM work_updates w
-    LEFT JOIN (
-      SELECT TRIM(jobId) AS jc_jobId,
-             MAX(month) AS jc_month,
-             MAX(receiveDate) AS jc_receive,
-             MAX(ecdDate) AS jc_ecd,
-             MAX(submissionDate) AS jc_submission
-      FROM job_creation
-      GROUP BY TRIM(jobId)
-    ) jc ON jc.jc_jobId = TRIM(w.job_id)
-    ORDER BY w.id ASC
-  `;
-
-  let rows;
   try {
-    rows = await query(joinSql);
-  } catch (joinErr) {
-    // Join kisi wajah se (jaise collation) fail ho to purana simple query chalao
-    console.error("getAllWork join failed, using simple query:", joinErr.message);
-    try {
-      rows = await query("SELECT *, updated_at FROM work_updates ORDER BY id ASC");
-    } catch (err) {
-      return res.status(500).json(err);
-    }
-  }
+    const workRows = await query("SELECT *, updated_at FROM work_updates ORDER BY id ASC");
 
-  return res.json((rows || []).map(mapWorkRow));
+    // Job Creation ki month / dates alag query se laate hain aur Node me jodte hain
+    // (SQL join nahi, taaki collation ki wajah se query kabhi fail na ho).
+    // Ye Job Creation data sirf fallback hai: agar work_updates me month/date khaali
+    // reh gayi ho to Report me wahi dikhe jo Job History me dikhta hai.
+    const jcMap = new Map();
+    try {
+      const jcRows = await query(
+        "SELECT jobId, month, receiveDate, ecdDate, submissionDate FROM job_creation"
+      );
+      (jcRows || []).forEach((r) => {
+        const k = clean(r.jobId).toLowerCase();
+        if (!isRealJobId(k)) return;
+        const prev = jcMap.get(k) || {};
+        jcMap.set(k, {
+          jc_month: !isBlank(prev.jc_month) ? prev.jc_month : r.month,
+          jc_receive: !isBlank(prev.jc_receive) ? prev.jc_receive : r.receiveDate,
+          jc_ecd: !isBlank(prev.jc_ecd) ? prev.jc_ecd : r.ecdDate,
+          jc_submission: !isBlank(prev.jc_submission) ? prev.jc_submission : r.submissionDate
+        });
+      });
+    } catch (jcErr) {
+      console.error("getAllWork: job_creation fallback load failed:", jcErr.message);
+    }
+
+    const data = (workRows || []).map((row) => {
+      const fb = jcMap.get(clean(row.job_id).toLowerCase()) || {};
+      return mapWorkRow({ ...row, ...fb });
+    });
+
+    return res.json(data);
+  } catch (err) {
+    return res.status(500).json(err);
+  }
 };
 
 const getFileData = (req, res) => {
