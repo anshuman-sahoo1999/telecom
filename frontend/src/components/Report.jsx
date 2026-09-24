@@ -399,18 +399,66 @@ export default function Reports({ domain, states }) {
             </table>
 
             {/* ================= SUMMARY ================= */}
-            <div className="summaryWrap" style={{ display: "flex", justifyContent: "flex-end" }}>
-              <div className="summaryBox">
-                <div className="iconBox">📶</div>
+            <div style={{ display: "flex", justifyContent: "flex-end", marginTop: "20px" }}>
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "18px",
+                  background: "#ffffff",
+                  border: "1px solid #e5e7eb",
+                  borderRadius: "16px",
+                  padding: "16px 26px",
+                  boxShadow: "0 4px 14px rgba(15, 23, 42, 0.06)",
+                }}
+              >
+                <div
+                  style={{
+                    width: 50,
+                    height: 50,
+                    minWidth: 50,
+                    borderRadius: "50%",
+                    background: "linear-gradient(135deg, #3b82f6, #06b6d4)",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    fontSize: 22,
+                  }}
+                >
+                  📶
+                </div>
 
-                <div className="summaryText">
-                  <p>Jobs Delivered / Amdocs QC / OTP</p>
-                  <h1>
-                    {totalJobs} / {overallQc !== null ? `${overallQc}%` : "0%"} / {overallOtp !== null ? `${overallOtp}%` : "0%"}
-                  </h1>
-                  <span className="dateText">
+                <div>
+                  <div style={{ display: "flex", alignItems: "center", gap: "16px" }}>
+                    <div style={{ textAlign: "center" }}>
+                      <div style={{ fontSize: 22, fontWeight: 800, color: "#1d4ed8", lineHeight: 1.1 }}>
+                        {totalJobs}
+                      </div>
+                      <div style={{ fontSize: 11, fontWeight: 600, color: "#64748b" }}>Jobs Delivered</div>
+                    </div>
+
+                    <div style={{ width: 1, height: 34, background: "#e2e8f0" }} />
+
+                    <div style={{ textAlign: "center" }}>
+                      <div style={{ fontSize: 22, fontWeight: 800, color: "#16a34a", lineHeight: 1.1 }}>
+                        {overallQc !== null ? `${overallQc}%` : "0%"}
+                      </div>
+                      <div style={{ fontSize: 11, fontWeight: 600, color: "#64748b" }}>Amdocs QC</div>
+                    </div>
+
+                    <div style={{ width: 1, height: 34, background: "#e2e8f0" }} />
+
+                    <div style={{ textAlign: "center" }}>
+                      <div style={{ fontSize: 22, fontWeight: 800, color: "#d97706", lineHeight: 1.1 }}>
+                        {overallOtp !== null ? `${overallOtp}%` : "0%"}
+                      </div>
+                      <div style={{ fontSize: 11, fontWeight: 600, color: "#64748b" }}>OTP</div>
+                    </div>
+                  </div>
+
+                  <div style={{ fontSize: 11, color: "#94a3b8", marginTop: 6, textAlign: "right" }}>
                     As on {formattedLastUpdate}
-                  </span>
+                  </div>
                 </div>
               </div>
             </div>
