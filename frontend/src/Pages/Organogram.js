@@ -11,17 +11,12 @@ import { saveAs } from "file-saver";
 import { jsPDF } from "jspdf";
 import "../style/organogram.css";
 import Swal from "sweetalert2";
-
-// FIX: default collision (rectIntersection) me bade/lambe column (jaha zyada members hote hain)
-// ko drop zone ki tarah pakadna mushkil hota tha, aur user ka apna purana column jeet jata tha.
-// Ab pehle "pointer jis column ke upar hai wahi target" maana jata hai, nahi mila to rectIntersection.
 const collisionDetection = (args) => {
     const pointerCollisions = pointerWithin(args);
     if (pointerCollisions.length > 0) return pointerCollisions;
     return rectIntersection(args);
 };
 
-// "Domain A, Domain B" jaisi comma wali string ko array me todta hai
 const splitDomains = (domain) =>
     (domain || "")
         .split(",")
@@ -394,29 +389,18 @@ const Organogram = () => {
                         memberType: null,
                     });
                 }
-                // FIX: backend ka asli data wapas lao, taaki tree me wahi dikhe jo DB me hai
                 await fetchUsers();
             } catch (err) {
                 showSaveError(err);
             }
             return;
         }
-
-        // ---------- TEAM MEMBER ----------
-        // TeamMember ko TeamLead zone me drop karne par memberType "TeamLead" set ho jata tha
         if (targetType === "TeamLead") return;
-
-        // FIX: sirf QA / QC / Production hi valid target hain
         if (!["QA", "QC", "Production"].includes(targetType)) return;
-
-        // FIX: user pehle se usi domain ke usi column me hai to kuch mat karo
         const alreadyThere =
             draggedUser.memberType === targetType &&
             splitDomains(draggedUser.domain).includes(targetDomain);
         if (alreadyThere) return;
-
-        // FIX: pehle yaha swap hota tha (target column ka pehla banda dragged user ki jagah chala jata tha).
-        // Ab dragged user seedha target column me move hota hai (Production -> QA/QC, QA -> QC/Production, etc.)
         setUsers((prev) =>
             prev.map((u) =>
                 String(u.id) === draggedId
@@ -430,14 +414,14 @@ const Organogram = () => {
                 domain: targetDomain,
                 memberType: targetType,
             });
-            // FIX: backend ka asli data wapas lao, taaki tree me wahi dikhe jo DB me hai
+            
             await fetchUsers();
         } catch (err) {
             showSaveError(err);
         }
     };
 
-    // FIX: ab ref parameter me aata hai, main aur popup dono ke liye alag ref use hota hai
+
     const renderTreeContent = (refToUse) => (
         activeTab === "overall" ? (
             <DndContext
