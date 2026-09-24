@@ -2,17 +2,14 @@ import { API_BASE_URL } from "../config";
 import React, { useEffect, useState } from "react";
 import axios from "axios";
 import "../style/reports.css";
-
 export default function Reports({ domain, states }) {
   const [data, setData] = useState([]);
   const [open, setOpen] = useState(false);
   const [selectedPeriod, setSelectedPeriod] = useState("");
   const [lastUpdateMap, setLastUpdateMap] = useState({});
-
   useEffect(() => {
     setTimeout(() => setOpen(true), 50);
   }, []);
-
   // ================= REGION FUNCTION =================
   const getRegion = (state) => {
     const map = {
@@ -40,7 +37,6 @@ export default function Reports({ domain, states }) {
     }
     return "Unknown";
   };
-
   // FETCH LAST UPDATE MAP[cite: 3]
   useEffect(() => {
     axios
@@ -79,9 +75,6 @@ export default function Reports({ domain, states }) {
     if (dates.length) {
       return new Date(Math.max(...dates.map((d) => d.getTime())));
     }
-
-    // Fallback: if /api/work/domain-last-update gave nothing usable,
-    // try to derive the latest date directly from the job data itself.
     const fallbackDates = data
       .map((item) => item.updatedAt || item.lastUpdate || item.updated_at || item.last_update || item.date || item.createdAt)
       .filter(Boolean)
@@ -93,7 +86,6 @@ export default function Reports({ domain, states }) {
 
   const domainLastUpdate = (() => {
     if (lastUpdateMap[domain]) return lastUpdateMap[domain];
-    // Fallback per-domain: latest date found among that domain's own rows.
     const rows = data.filter((item) => item.domain === domain);
     const fallbackDates = rows
       .map((item) => item.updatedAt || item.lastUpdate || item.updated_at || item.last_update || item.date || item.createdAt)
@@ -116,8 +108,6 @@ export default function Reports({ domain, states }) {
       year: "numeric",
     })
     : "-";
-
-  // ================= FETCH DATA =================
   useEffect(() => {
     axios
       .get(`${API_BASE_URL}/api/work/all`)
@@ -125,8 +115,6 @@ export default function Reports({ domain, states }) {
         setData(res.data || []);
       });
   }, [domain, states]);
-
-  // ================= MONTH-YEAR OPTIONS =================
   const monthOrder = [
     "Jan", "Feb", "Mar", "Apr", "May", "Jun",
     "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"
@@ -350,7 +338,6 @@ export default function Reports({ domain, states }) {
                     </tr>
                   );
                 })}
-
                 {/* TOTAL ROW */}
                 <tr className="totalRow">
                   <td></td>
@@ -361,110 +348,51 @@ export default function Reports({ domain, states }) {
                   <td className="highlight">{overallQc !== null ? `${overallQc}%` : "0%"}</td>
                   <td className="highlight">{overallOtp !== null ? `${overallOtp}%` : "0%"}</td>
                 </tr>
-
               </tbody>
             </table>
-
-            {/* ================= DOMAIN WISE SUMMARY ================= */}
-            <table className="reportTable" style={{ marginTop: "20px" }}>
-              <thead>
-                <tr>
-                  <th>Domain</th>
-                  <th>Total Job Delivered</th>
-                  <th>Amdocs QC</th>
-                  <th>OTP</th>
-                </tr>
-              </thead>
-              <tbody>
-                {domainSummaryRows.map((row) => (
-                  <tr key={row.domain}>
-                    <td className="domain-cell">
-                      <div className="domain-main">{row.domain}</div>
-                    </td>
-                    <td className="job-cell">
-                      <div className="job-main">{row.jobs}</div>
-                      <div className="job-sub">Jobs Delivered</div>
-                    </td>
-                    <td className="job-cell">
-                      <div className="job-main">{row.qc !== null ? `${row.qc}%` : "0%"}</div>
-                      <div className="job-sub">Amdocs QC</div>
-                    </td>
-                    <td className="job-cell">
-                      <div className="job-main">{row.otp !== null ? `${row.otp}%` : "0%"}</div>
-                      <div className="job-sub">OTP</div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-
             {/* ================= SUMMARY ================= */}
             <div style={{ display: "flex", justifyContent: "flex-end", marginTop: "20px" }}>
               <div
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  gap: "18px",
-                  background: "#ffffff",
-                  border: "1px solid #e5e7eb",
-                  borderRadius: "16px",
-                  padding: "16px 26px",
-                  boxShadow: "0 4px 14px rgba(15, 23, 42, 0.06)",
-                }}
+                style={{display: "flex",alignItems: "center",gap: "18px",background: "#ffffff",border: "1px solid #e5e7eb",borderRadius: "16px",
+                  padding: "16px 26px",boxShadow: "0 4px 14px rgba(15, 23, 42, 0.06)",}}
               >
                 <div
-                  style={{
-                    width: 50,
-                    height: 50,
-                    minWidth: 50,
-                    borderRadius: "50%",
-                    background: "linear-gradient(135deg, #3b82f6, #06b6d4)",
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    fontSize: 22,
-                  }}
-                >
+                  style={{width: 64,height: 64,minWidth: 64,borderRadius: "14px", background: "linear-gradient(135deg, #3b82f6, #06b6d4)",
+                  display: "flex",alignItems: "center",justifyContent: "center",fontSize: 28,}} >
                   📶
                 </div>
 
                 <div>
                   <div style={{ display: "flex", alignItems: "center", gap: "16px" }}>
                     <div style={{ textAlign: "center" }}>
-                      <div style={{ fontSize: 22, fontWeight: 800, color: "#1d4ed8", lineHeight: 1.1 }}>
+                      <div style={{ fontSize: 30, fontWeight: 800, color: "#dc2626", lineHeight: 1.1 }}>
                         {totalJobs}
                       </div>
                       <div style={{ fontSize: 11, fontWeight: 600, color: "#64748b" }}>Jobs Delivered</div>
                     </div>
-
                     <div style={{ width: 1, height: 34, background: "#e2e8f0" }} />
-
                     <div style={{ textAlign: "center" }}>
-                      <div style={{ fontSize: 22, fontWeight: 800, color: "#16a34a", lineHeight: 1.1 }}>
+                      <div style={{ fontSize: 30, fontWeight: 800, color: "#dc2626", lineHeight: 1.1 }}>
                         {overallQc !== null ? `${overallQc}%` : "0%"}
                       </div>
                       <div style={{ fontSize: 11, fontWeight: 600, color: "#64748b" }}>Amdocs QC</div>
                     </div>
-
                     <div style={{ width: 1, height: 34, background: "#e2e8f0" }} />
-
                     <div style={{ textAlign: "center" }}>
-                      <div style={{ fontSize: 22, fontWeight: 800, color: "#d97706", lineHeight: 1.1 }}>
+                      <div style={{ fontSize: 30, fontWeight: 800, color: "#dc2626", lineHeight: 1.1 }}>
                         {overallOtp !== null ? `${overallOtp}%` : "0%"}
                       </div>
                       <div style={{ fontSize: 11, fontWeight: 600, color: "#64748b" }}>OTP</div>
                     </div>
                   </div>
-
                   <div style={{ fontSize: 11, color: "#94a3b8", marginTop: 6, textAlign: "right" }}>
-                    As on {formattedLastUpdate}
+                    As on - {formattedLastUpdate}
                   </div>
                 </div>
               </div>
             </div>
           </>
         )}
-
       </div>
     </div>
   );
