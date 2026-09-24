@@ -7,10 +7,29 @@ const stateData = require("../stateCodes");
 const countyData = require("../counties.json");
 
 const clean = (v) => {
-  return v ? v.toString().trim() : "";
+  if (v === null || v === undefined || v === false) return "";
+  return v.toString().trim();
 };
 
 const normalize = (v) => clean(v).toUpperCase();
+
+/* ======================================
+   CELL VALUE UNWRAPPER (formula / rich text / hyperlink)
+====================================== */
+const unwrapCell = (val) => {
+  if (val === null || val === undefined) return val;
+  if (val instanceof Date) return val;
+  if (typeof val === "object") {
+    if (Array.isArray(val.richText)) {
+      return val.richText.map((t) => (t && t.text ? t.text : "")).join("");
+    }
+    if (val.text !== undefined) return unwrapCell(val.text);
+    if (val.result !== undefined) return unwrapCell(val.result);
+    if (val.error) return "";
+    return val;
+  }
+  return val;
+};
 
 /* ======================================
    STRICT MM-DD-YYYY DATE PARSER
@@ -31,19 +50,25 @@ const parseExcelDate = (value) => {
   }
 
   let d;
+  let useUTC = false;
+
   if (value instanceof Date) {
     d = value;
-  } else if (!isNaN(value)) {
+    useUTC = true;
+  } else if (typeof value === "number" || /^\d{5}(\.\d+)?$/.test(strVal)) {
     d = new Date(Math.round((Number(value) - (25567 + 2)) * 86400 * 1000));
+    useUTC = true;
+  } else if (/^\d+(\.\d+)?$/.test(strVal)) {
+    return strVal;
   } else {
     d = new Date(strVal);
   }
 
   if (!d || isNaN(d.getTime())) return strVal;
 
-  const year = d.getFullYear();
-  const month = String(d.getMonth() + 1).padStart(2, '0');
-  const day = String(d.getDate()).padStart(2, '0');
+  const year = useUTC ? d.getUTCFullYear() : d.getFullYear();
+  const month = String((useUTC ? d.getUTCMonth() : d.getMonth()) + 1).padStart(2, '0');
+  const day = String(useUTC ? d.getUTCDate() : d.getDate()).padStart(2, '0');
 
   return `${month}-${day}-${year}`;
 };
@@ -71,12 +96,13 @@ const formatDateToMMDDYYYY = (dateVal) => {
 const formatPercentage = (value) => {
   if (value === null || value === undefined || value === "") return "";
   let str = value.toString().trim();
+  if (str === "") return "";
   if (str.endsWith("%")) return str;
 
   let num = Number(str);
   if (!isNaN(num)) {
     if (num > 0 && num <= 1) {
-      return `${Math.round(num * 100)}%`;
+      return `${Number((num * 100).toFixed(2))}%`;
     } else {
       return `${num}%`;
     }
@@ -105,7 +131,22 @@ const formatMonth = (value) => {
     "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"
   ];
 
+  if (value instanceof Date) {
+    if (isNaN(value.getTime())) return null;
+    return `${months[value.getUTCMonth()]},${value.getUTCFullYear()}`;
+  }
+
+  if (typeof value === "number" && value > 20000) {
+    const serialDate = new Date(Math.round((value - 25569) * 86400 * 1000));
+    if (!isNaN(serialDate.getTime())) {
+      return `${months[serialDate.getUTCMonth()]},${serialDate.getUTCFullYear()}`;
+    }
+  }
+
   let strVal = String(value).trim();
+
+  if (/^[A-Za-z]{3},\d{4}$/.test(strVal)) return strVal;
+
   strVal = strVal.replace(/-\d{2,4}/g, "").trim();
 
   let d = new Date(strVal);
@@ -150,11 +191,8 @@ const extractUOM = (row) => {
     });
 
     if (!isSystemCol) {
-      let value = row[key];
-      if (value && typeof value === 'object' && value.text) {
-        value = value.text;
-      }
-      if (value !== "" && value !== null && value !== undefined && !(value instanceof Date)) {
+      let value = unwrapCell(row[key]);
+      if (value !== "" && value !== null && value !== undefined && !(value instanceof Date) && typeof value !== "object") {
         const cleanKeyName = key
           .toString()
           .toLowerCase()
@@ -181,11 +219,8 @@ const findValueInRow = (row, possibleKeys) => {
     for (const pk of possibleKeys) {
       const compressedPk = pk.toLowerCase().replace(/[^a-z0-9]/g, "");
       if (compressedKey === compressedPk) {
-        let val = row[key];
-        if (val && typeof val === 'object') {
-          if (val.text) val = val.text;
-          else if (val.result) val = val.result;
-        }
+        const val = unwrapCell(row[key]);
+        if (val === null || val === undefined) return "";
         return val;
       }
     }
@@ -249,69 +284,76 @@ const getStateFromCounty = (countyName) => {
    HELPER SYNC TO JOB CREATION
 ====================================== */
 const helperSyncToJobCreation = (data) => {
-  const newJobId = clean(data.cleanJobId);
-  if (!newJobId || newJobId === "-") return;
-  const cleanSingleM = formatMonth(data.month);
+  return new Promise((resolve) => {
+    const newJobId = clean(data.cleanJobId);
+    if (!newJobId || newJobId === "-") return resolve();
+    const cleanSingleM = formatMonth(data.month);
 
-  const checkSql = `
-    SELECT id, jobId FROM job_creation 
-    WHERE TRIM(jobId) = TRIM(?) 
-    LIMIT 1
-  `;
+    const checkSql = `
+      SELECT id, jobId FROM job_creation 
+      WHERE TRIM(jobId) = TRIM(?) 
+      LIMIT 1
+    `;
 
-  db.query(checkSql, [newJobId], (err, rows) => {
-    if (err) return console.error("Error checking job_creation:", err.message);
+    db.query(checkSql, [newJobId], (err, rows) => {
+      if (err) {
+        console.error("Error checking job_creation:", err.message);
+        return resolve();
+      }
 
-    if (rows && rows.length > 0) {
-      const targetId = rows[0].id;
-      const updateSql = `
-        UPDATE job_creation
-        SET domain = COALESCE(NULLIF(?, ''), domain),
-            market = COALESCE(NULLIF(?, ''), market),
-            month = COALESCE(?, month),
-            receiveDate = COALESCE(?, receiveDate),
-            ecdDate = COALESCE(?, ecdDate),
-            submissionDate = COALESCE(?, submissionDate),
-            otp = COALESCE(NULLIF(?, ''), otp),
-            amdocsQc = COALESCE(NULLIF(?, ''), amdocsQc),
-            internalQc = COALESCE(NULLIF(?, ''), internalQc),
-            updated_at = CURRENT_TIMESTAMP
-        WHERE id = ?
-      `;
-      db.query(updateSql, [
-        data.domain,
-        data.market,
-        cleanSingleM,
-        data.receiveDate,
-        data.ecdDate,
-        data.submissionDate,
-        data.otp,
-        data.amdocsQc,
-        data.internalQc,
-        targetId
-      ], (upErr) => {
-        if (upErr) console.error("Error updating job_creation:", upErr.message);
-      });
-    } else {
-      const insertSql = `
-        INSERT INTO job_creation (domain, market, jobId, month, receiveDate, ecdDate, submissionDate, otp, amdocsQc, internalQc)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      `;
-      db.query(insertSql, [
-        data.domain,
-        data.market,
-        newJobId,
-        cleanSingleM,
-        data.receiveDate,
-        data.ecdDate,
-        data.submissionDate,
-        data.otp,
-        data.amdocsQc,
-        data.internalQc
-      ], (inErr) => {
-        if (inErr) console.error("Error inserting job_creation:", inErr.message);
-      });
-    }
+      if (rows && rows.length > 0) {
+        const targetId = rows[0].id;
+        const updateSql = `
+          UPDATE job_creation
+          SET domain = COALESCE(NULLIF(?, ''), domain),
+              market = COALESCE(NULLIF(?, ''), market),
+              month = COALESCE(?, month),
+              receiveDate = COALESCE(?, receiveDate),
+              ecdDate = COALESCE(?, ecdDate),
+              submissionDate = COALESCE(?, submissionDate),
+              otp = COALESCE(NULLIF(?, ''), otp),
+              amdocsQc = COALESCE(NULLIF(?, ''), amdocsQc),
+              internalQc = COALESCE(NULLIF(?, ''), internalQc),
+              updated_at = CURRENT_TIMESTAMP
+          WHERE id = ?
+        `;
+        db.query(updateSql, [
+          data.domain,
+          data.market,
+          cleanSingleM,
+          data.receiveDate,
+          data.ecdDate,
+          data.submissionDate,
+          data.otp,
+          data.amdocsQc,
+          data.internalQc,
+          targetId
+        ], (upErr) => {
+          if (upErr) console.error("Error updating job_creation:", upErr.message);
+          resolve();
+        });
+      } else {
+        const insertSql = `
+          INSERT INTO job_creation (domain, market, jobId, month, receiveDate, ecdDate, submissionDate, otp, amdocsQc, internalQc)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `;
+        db.query(insertSql, [
+          data.domain,
+          data.market,
+          newJobId,
+          cleanSingleM,
+          data.receiveDate,
+          data.ecdDate,
+          data.submissionDate,
+          data.otp,
+          data.amdocsQc,
+          data.internalQc
+        ], (inErr) => {
+          if (inErr) console.error("Error inserting job_creation:", inErr.message);
+          resolve();
+        });
+      }
+    });
   });
 };
 
@@ -340,7 +382,7 @@ const importExcel = async (req, res) => {
       const totalColumns = headerRow.cellCount || worksheet.columnCount;
 
       for (let col = 1; col <= totalColumns; col++) {
-        const cellVal = headerRow.getCell(col).value;
+        const cellVal = unwrapCell(headerRow.getCell(col).value);
         headers[col] = cellVal ? cellVal.toString().trim() : "";
       }
 
@@ -351,12 +393,7 @@ const importExcel = async (req, res) => {
         for (let col = 1; col <= totalColumns; col++) {
           const headerName = headers[col];
           if (headerName) {
-            let cellVal = row.getCell(col).value;
-            if (cellVal && typeof cellVal === 'object') {
-              if (cellVal.text) cellVal = cellVal.text;
-              else if (cellVal.result) cellVal = cellVal.result;
-            }
-            obj[headerName] = cellVal;
+            obj[headerName] = unwrapCell(row.getCell(col).value);
           }
         }
 
@@ -434,6 +471,66 @@ const importExcel = async (req, res) => {
             const month = formatMonth(getMonthValue(row));
             const uom = extractUOM(row);
 
+            const insertNewRow = () => {
+              const insertSql = `
+                INSERT INTO work_updates
+                (file_name, months, domain, sow, job_type, region, state, county, uom, otp, current_status, production_engineers, qc_engineers, amdocs_qc, internal_qc, jobs_delivered, job_id, receive_date, ecd_date, submission_date)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?)
+              `;
+
+              db.query(
+                insertSql,
+                [
+                  req.file.originalname,
+                  JSON.stringify(month ? [month] : []),
+                  domain,
+                  sow,
+                  jobType,
+                  region,
+                  state,
+                  county,
+                  JSON.stringify(uom),
+                  otpVal,
+                  currentStatusVal,
+                  productionEngineersVal,
+                  qcEngineersVal,
+                  amdocsQcVal,
+                  internalQcVal,
+                  jobIdVal || null,
+                  receiveDateVal,
+                  ecdDateVal,
+                  submissionDateVal
+                ],
+                (err3) => {
+                  if (err3) {
+                    failed++;
+                    return resolve();
+                  }
+
+                  if (jobIdVal && jobIdVal !== "-") {
+                    helperSyncToJobCreation({
+                      domain,
+                      market: state || region,
+                      cleanJobId: jobIdVal,
+                      month,
+                      otp: otpVal,
+                      amdocsQc: amdocsQcVal,
+                      internalQc: internalQcVal,
+                      receiveDate: receiveDateVal,
+                      ecdDate: ecdDateVal,
+                      submissionDate: submissionDateVal
+                    }).then(() => {
+                      success++;
+                      resolve();
+                    });
+                  } else {
+                    success++;
+                    resolve();
+                  }
+                }
+              );
+            };
+
             if (jobIdVal && jobIdVal !== "-") {
               const checkSql = `SELECT id, months, uom, jobs_delivered FROM work_updates WHERE TRIM(job_id) = TRIM(?) LIMIT 1`;
               
@@ -483,67 +580,11 @@ const importExcel = async (req, res) => {
                       existing.id
                     ],
                     (err2) => {
-                      if (!err2) {
-                        helperSyncToJobCreation({
-                          domain,
-                          market: state || region,
-                          cleanJobId: jobIdVal,
-                          month,
-                          otp: otpVal,
-                          amdocsQc: amdocsQcVal,
-                          internalQc: internalQcVal,
-                          receiveDate: receiveDateVal,
-                          ecdDate: ecdDateVal,
-                          submissionDate: submissionDateVal
-                        });
-                        success++;
-                      } else {
+                      if (err2) {
                         failed++;
+                        return resolve();
                       }
-                      resolve();
-                    }
-                  );
-                } else {
-                  insertNewRow();
-                }
-              });
-            } else {
-              insertNewRow();
-            }
 
-            function insertNewRow() {
-              const insertSql = `
-                INSERT INTO work_updates
-                (file_name, months, domain, sow, job_type, region, state, county, uom, otp, current_status, production_engineers, qc_engineers, amdocs_qc, internal_qc, jobs_delivered, job_id, receive_date, ecd_date, submission_date)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?)
-              `;
-
-              db.query(
-                insertSql,
-                [
-                  req.file.originalname,
-                  JSON.stringify(month ? [month] : []),
-                  domain,
-                  sow,
-                  jobType,
-                  region,
-                  state,
-                  county,
-                  JSON.stringify(uom),
-                  otpVal,
-                  currentStatusVal,
-                  productionEngineersVal,
-                  qcEngineersVal,
-                  amdocsQcVal,
-                  internalQcVal,
-                  jobIdVal || null,
-                  receiveDateVal,
-                  ecdDateVal,
-                  submissionDateVal
-                ],
-                (err3) => {
-                  if (!err3) {
-                    if (jobIdVal && jobIdVal !== "-") {
                       helperSyncToJobCreation({
                         domain,
                         market: state || region,
@@ -555,15 +596,18 @@ const importExcel = async (req, res) => {
                         receiveDate: receiveDateVal,
                         ecdDate: ecdDateVal,
                         submissionDate: submissionDateVal
+                      }).then(() => {
+                        success++;
+                        resolve();
                       });
                     }
-                    success++;
-                  } else {
-                    failed++;
-                  }
-                  resolve();
+                  );
+                } else {
+                  insertNewRow();
                 }
-              );
+              });
+            } else {
+              insertNewRow();
             }
 
           } catch (e) {
@@ -661,8 +705,8 @@ const createWork = (req, res) => {
     }
   };
 
-  const syncToJobCreation = (workId) => {
-    helperSyncToJobCreation({
+  const syncToJobCreation = async (workId) => {
+    await helperSyncToJobCreation({
       domain: fixedDomain,
       market: state || region,
       cleanJobId,
@@ -796,7 +840,7 @@ const updateWork = (req, res) => {
       formattedSubmissionDate,
       id
     ],
-    (err, result) => {
+    async (err, result) => {
       if (err) {
         return res.status(500).json({
           message: "Update failed",
@@ -805,7 +849,7 @@ const updateWork = (req, res) => {
       }
 
       if (cleanJobId && cleanJobId !== "-") {
-        helperSyncToJobCreation({
+        await helperSyncToJobCreation({
           domain: fixedDomain,
           market: state || region,
           cleanJobId,
