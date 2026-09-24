@@ -12,25 +12,12 @@ import { jsPDF } from "jspdf";
 import "../style/organogram.css";
 import Swal from "sweetalert2";
 
-// Drop kitna "easy" ho: pointer se kitni door tak nearest column ko target maana jaye (px me)
 const SNAP_DISTANCE = 80;
-
-// FIX: pehle default collision (rectIntersection) tha, jo bade/lambe column me drop karna mushkil bana deta tha.
-// Ab:
-//  1) pointer jis column ke andar hai wahi target,
-//  2) agar kisi column ke andar nahi hai to SNAP_DISTANCE ke andar wala sabse paas ka column,
-//  3) TeamMember ke liye nearest wale step me TeamLead zone shamil nahi (galti se TL zone me na gire).
 const collisionDetection = (args) => {
     const { droppableContainers, droppableRects, pointerCoordinates, active } = args;
-
-    // 1) pointer jis zone ke andar hai
     const pointerHits = pointerWithin(args);
     if (pointerHits.length > 0) return pointerHits;
-
-    // keyboard drag jaisi condition (pointer nahi) me purana tareeka
     if (!pointerCoordinates) return rectIntersection(args);
-
-    // 2) nearest zone (pointer se rect tak ki doori)
     const draggedRole = active?.data?.current?.role;
     const candidates = droppableContainers.filter(
         (c) => draggedRole === "TeamLead" || !String(c.id).endsWith("|TeamLead")
@@ -67,9 +54,6 @@ const splitDomains = (domain) =>
 
 const DomainDropZone = ({ dropId, children }) => {
     const { setNodeRef, isOver, active } = useDroppable({ id: dropId });
-
-    // Drag ke time jis zone me chhodoge wo highlight hoga, taaki pehle se dikhe ki kaha girega.
-    // TeamMember ke liye TeamLead zone valid target nahi hai, isliye wahan highlight nahi hota.
     const draggedRole = active?.data?.current?.role;
     const isTLZone = String(dropId).endsWith("|TeamLead");
     const isValidTarget = draggedRole === "TeamLead" || !isTLZone;
@@ -119,7 +103,6 @@ const Organogram = () => {
     const [users, setUsers] = useState([]);
     const [domains, setDomains] = useState([]);
     const treeRef = useRef(null);
-    // FIX: popup ke liye alag ref, taaki popup band hone par main tree ka ref null na ho jaye
     const popupTreeRef = useRef(null);
     const [hiddenRoles, setHiddenRoles] = useState([]);
     const hoverTimerRef = useRef(null);
@@ -198,7 +181,6 @@ const Organogram = () => {
         return `${year}-${month}-${day} at ${hours}.${minutes}.${seconds} ${ampm}`;
     };
 
-    // FIX: export ke liye sahi element (popup khula ho to popup ka, warna main ka)
     const getExportElement = () => {
         return isFullScreen && popupTreeRef.current ? popupTreeRef.current : treeRef.current;
     };
@@ -210,7 +192,6 @@ const Organogram = () => {
 
     const totalEmployeesCount = teamLeads.length + teamMembers.length;
 
-    // FIX: agar sirf 1 admin ho to bhi MIS dikhe (pehle index === 1 hone se hide ho jata tha)
     const misAdminIndex = admins.length > 1 ? 1 : 0;
 
     const handleDelete = (id) => {
@@ -470,7 +451,7 @@ const Organogram = () => {
                         memberType: null,
                     });
                 }
-                // FIX: backend ka asli data wapas lao, taaki tree me wahi dikhe jo DB me hai
+    
                 await fetchUsers();
             } catch (err) {
                 showSaveError(err);
@@ -478,21 +459,13 @@ const Organogram = () => {
             return;
         }
 
-        // ---------- TEAM MEMBER ----------
-        // TeamMember ko TeamLead zone me drop karne par memberType "TeamLead" set ho jata tha
         if (targetType === "TeamLead") return;
 
-        // FIX: sirf QA / QC / Production hi valid target hain
         if (!["QA", "QC", "Production"].includes(targetType)) return;
-
-        // FIX: user pehle se usi domain ke usi column me hai to kuch mat karo
         const alreadyThere =
             draggedUser.memberType === targetType &&
             splitDomains(draggedUser.domain).includes(targetDomain);
         if (alreadyThere) return;
-
-        // FIX: pehle yaha swap hota tha (target column ka pehla banda dragged user ki jagah chala jata tha).
-        // Ab dragged user seedha target column me move hota hai (Production -> QA/QC, QA -> QC/Production, etc.)
         setUsers((prev) =>
             prev.map((u) =>
                 String(u.id) === draggedId
