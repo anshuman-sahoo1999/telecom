@@ -390,11 +390,11 @@ export default function TelecomMap() {
           logo.style.top = "-90px";
         }
       }
-      const Legend = clone.querySelector(".mapLegend");
-      if (Legend) {
-        Legend.style.fontSize = "16px";
-        Legend.style.fontWeight = "700";
-        Legend.style.marginLeft = "90px";
+      const mapLegendEl = clone.querySelector(".mapLegend");
+      if (mapLegendEl) {
+        mapLegendEl.style.fontSize = "16px";
+        mapLegendEl.style.fontWeight = "700";
+        mapLegendEl.style.marginLeft = "90px";
       }
       const compass = clone.querySelector(".resized-image");
       if (compass) {
@@ -540,7 +540,7 @@ export default function TelecomMap() {
   const allYears = [...new Set(monthlyJobsSorted.flatMap(item => Object.keys(item).filter(key => key !== "name" && !key.startsWith("qc_") && !key.startsWith("otp_"))))].sort();
   const getDomainJobs = (domain) => currentFilterData.filter((x) => normalize(x.domain) === normalize(domain)).reduce((sum, x) => sum + Number(x.jobsDelivered || x.jobs_delivered || 0), 0);
 
-  // Amdocs QC (%) and OTP (plain count, never %) for a domain's KPI card
+  // Amdocs QC (%) and OTP (%) for a domain's KPI card
   const getDomainQcAvg = (domain) => {
     const rows = currentFilterData.filter((x) => normalize(x.domain) === normalize(domain));
     const vals = rows.map((x) => parsePercent(x.amdocsQc || x.amdocs_qc)).filter((v) => v !== null);
@@ -567,7 +567,7 @@ export default function TelecomMap() {
     return `${year}-${month}-${day} at ${String(hours).padStart(2, "0")}.${minutes}.${seconds} ${ampm}`;
   };
 
-  // Short, compact bar-chart tooltip: Job + QC% + OTP (OTP never shown as %)
+  // Short, compact bar-chart tooltip: Job + QC% + OTP%
   const BarChartTooltip = ({ active, payload, label }) => {
     if (!active || !payload || !payload.length) return null;
     const row = payload[0].payload;
@@ -596,7 +596,7 @@ export default function TelecomMap() {
     );
   };
 
-  // Short, compact pie-chart tooltip: Job% + QC% + OTP (OTP never shown as %)
+  // Short, compact pie-chart tooltip: Job% + QC% + OTP%
   const PieChartTooltip = ({ active, payload }) => {
     if (!active || !payload || !payload.length) return null;
     const d = payload[0].payload;
@@ -614,7 +614,9 @@ export default function TelecomMap() {
     <div className="page">
       <div className={`topMenu ${menuOpen ? "expanded" : "collapsed"}`}>
         <button className={`menuBtn ${activePage === "dashboard" ? "active" : ""}`} onClick={() => { setActivePage("dashboard"); if (window.innerWidth <= 1100) setMenuOpen(false); }}><FaTachometerAlt className="menuIcon" />{menuOpen && "Dashboard"}</button>
-        // <button className={`menuBtn ${activePage === "workupdate" ? "active" : ""}`} onClick={() => { setActivePage("workupdate"); if (window.innerWidth <= 1100) setMenuOpen(false); }}><FaUpload className="menuIcon" />{menuOpen && "Data Upload"}</button>
+        {/* Data Upload button — commented out (hidden from sidebar). Uncomment to show it again.
+        <button className={`menuBtn ${activePage === "workupdate" ? "active" : ""}`} onClick={() => { setActivePage("workupdate"); if (window.innerWidth <= 1100) setMenuOpen(false); }}><FaUpload className="menuIcon" />{menuOpen && "Data Upload"}</button>
+        */}
         <button className={`menuBtn ${activePage === "report" ? "active" : ""}`} onClick={() => { setActivePage("report"); if (window.innerWidth <= 1100) setMenuOpen(false); }}><FaChartBar className="menuIcon" />{menuOpen && "Report"}</button>
         {role === "Admin" && <button className={`menuBtn ${activePage === "user-management" ? "active" : ""}`} onClick={() => { setActivePage("user-management"); if (window.innerWidth <= 1100) setMenuOpen(false); }}><FaUsers className="menuIcon" />{menuOpen && "User Management"}</button>}
         {(role === "Admin" || role === "TeamLead") && <button className={`menuBtn ${activePage === "organogram" ? "active" : ""}`} onClick={() => { setActivePage("organogram"); if (window.innerWidth <= 1100) setMenuOpen(false); }}><FaSitemap className="menuIcon" />{menuOpen && "Organogram"}</button>}
@@ -810,7 +812,7 @@ export default function TelecomMap() {
                 <div className="panelCard">
                   <h4 className="panelCard1">Select Month & Year</h4>
                   <div className="dropdown-group">
-                    <select className="dropdown" value={`${selectedMonth?.month || ""}-${selectedMonth?.year || ""}`} onChange={(e) => { if (e.target.value) { const [month, year] = e.target.value.split("-"); setSelectedMonth({ month, year: Number(year) }); } else { setSelectedMonth(null); } }}>
+                    <select className="dropdown" value={selectedMonth ? `${selectedMonth.month}-${selectedMonth.year}` : ""} onChange={(e) => { if (e.target.value) { const [month, year] = e.target.value.split("-"); setSelectedMonth({ month, year: Number(year) }); } else { setSelectedMonth(null); } }}>
                       <option value="">All Months</option>
                       {monthsList.map((m) => <option key={m} value={`${m}-${currentYear}`}>{m} - {currentYear}</option>)}
                     </select>
@@ -852,7 +854,6 @@ export default function TelecomMap() {
                       strokeWidth={2}
                       startAngle={90}
                       endAngle={-270}
-                      clockwise={true}
                       isAnimationActive={true}
                       animationBegin={0}
                       animationDuration={1000}
