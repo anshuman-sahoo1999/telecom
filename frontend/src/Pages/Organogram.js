@@ -11,12 +11,54 @@ import { saveAs } from "file-saver";
 import { jsPDF } from "jspdf";
 import "../style/organogram.css";
 import Swal from "sweetalert2";
+
+// Drop kitna "easy" ho: pointer se kitni door tak nearest column ko target maana jaye (px me)
+const SNAP_DISTANCE = 80;
+
+// FIX: pehle default collision (rectIntersection) tha, jo bade/lambe column me drop karna mushkil bana deta tha.
+// Ab:
+//  1) pointer jis column ke andar hai wahi target,
+//  2) agar kisi column ke andar nahi hai to SNAP_DISTANCE ke andar wala sabse paas ka column,
+//  3) TeamMember ke liye nearest wale step me TeamLead zone shamil nahi (galti se TL zone me na gire).
 const collisionDetection = (args) => {
-    const pointerCollisions = pointerWithin(args);
-    if (pointerCollisions.length > 0) return pointerCollisions;
-    return rectIntersection(args);
+    const { droppableContainers, droppableRects, pointerCoordinates, active } = args;
+
+    // 1) pointer jis zone ke andar hai
+    const pointerHits = pointerWithin(args);
+    if (pointerHits.length > 0) return pointerHits;
+
+    // keyboard drag jaisi condition (pointer nahi) me purana tareeka
+    if (!pointerCoordinates) return rectIntersection(args);
+
+    // 2) nearest zone (pointer se rect tak ki doori)
+    const draggedRole = active?.data?.current?.role;
+    const candidates = droppableContainers.filter(
+        (c) => draggedRole === "TeamLead" || !String(c.id).endsWith("|TeamLead")
+    );
+
+    let best = null;
+    let bestDistance = Infinity;
+
+    candidates.forEach((container) => {
+        const rect = droppableRects.get(container.id);
+        if (!rect) return;
+        const dx = Math.max(rect.left - pointerCoordinates.x, 0, pointerCoordinates.x - rect.right);
+        const dy = Math.max(rect.top - pointerCoordinates.y, 0, pointerCoordinates.y - rect.bottom);
+        const distance = Math.hypot(dx, dy);
+        if (distance < bestDistance) {
+            bestDistance = distance;
+            best = container;
+        }
+    });
+
+    if (best && bestDistance <= SNAP_DISTANCE) {
+        return [{ id: best.id, data: { droppableContainer: best, value: bestDistance } }];
+    }
+
+    return [];
 };
 
+// "Domain A, Domain B" jaisi comma wali string ko array me todta hai
 const splitDomains = (domain) =>
     (domain || "")
         .split(",")
@@ -24,8 +66,33 @@ const splitDomains = (domain) =>
         .filter(Boolean);
 
 const DomainDropZone = ({ dropId, children }) => {
-    const { setNodeRef } = useDroppable({ id: dropId });
-    return <div ref={setNodeRef} className="domain-drop-container">{children}</div>;
+    const { setNodeRef, isOver, active } = useDroppable({ id: dropId });
+
+    // Drag ke time jis zone me chhodoge wo highlight hoga, taaki pehle se dikhe ki kaha girega.
+    // TeamMember ke liye TeamLead zone valid target nahi hai, isliye wahan highlight nahi hota.
+    const draggedRole = active?.data?.current?.role;
+    const isTLZone = String(dropId).endsWith("|TeamLead");
+    const isValidTarget = draggedRole === "TeamLead" || !isTLZone;
+    const highlight = isOver && isValidTarget;
+
+    return (
+        <div
+            ref={setNodeRef}
+            className="domain-drop-container"
+            style={
+                highlight
+                    ? {
+                          outline: "2px dashed #1976d2",
+                          outlineOffset: "3px",
+                          borderRadius: "8px",
+                          backgroundColor: "rgba(25, 118, 210, 0.10)",
+                      }
+                    : undefined
+            }
+        >
+            {children}
+        </div>
+    );
 };
 
 const ExportHeader = () => {
@@ -346,14 +413,28 @@ const Organogram = () => {
         // FIX: API fail ho to UI ko purani state par wapas laane ke liye snapshot
         const previousUsers = users;
 
-        const showSaveError = (err) => {
-            console.log(err);
+        const showSaveError = async (err) => {
+            const status = err?.response?.status;
+            const data = err?.response?.data;
+            console.error("update-position failed:", status, data || err);
+
+            // UI ko pehle purani state par lao, phir DB se asli data le aao
+            // (agar backend ne save kar liya tha par response me error aaya, to bhi tree sahi dikhega)
             setUsers(previousUsers);
-            Swal.fire(
-                "Error!",
-                err?.response?.data?.message || "Position update failed ❌",
-                "error"
-            );
+            await fetchUsers();
+
+            const serverMsg =
+                data?.message ||
+                data?.error ||
+                (typeof data === "string" ? data.slice(0, 200) : "") ||
+                err?.message ||
+                "Unknown error";
+
+            Swal.fire({
+                icon: "error",
+                title: "Position update failed",
+                text: `${status ? `Status ${status}: ` : ""}${serverMsg}`,
+            });
         };
 
         // ---------- TEAM LEAD ----------
@@ -389,18 +470,29 @@ const Organogram = () => {
                         memberType: null,
                     });
                 }
+                // FIX: backend ka asli data wapas lao, taaki tree me wahi dikhe jo DB me hai
                 await fetchUsers();
             } catch (err) {
                 showSaveError(err);
             }
             return;
         }
+
+        // ---------- TEAM MEMBER ----------
+        // TeamMember ko TeamLead zone me drop karne par memberType "TeamLead" set ho jata tha
         if (targetType === "TeamLead") return;
+
+        // FIX: sirf QA / QC / Production hi valid target hain
         if (!["QA", "QC", "Production"].includes(targetType)) return;
+
+        // FIX: user pehle se usi domain ke usi column me hai to kuch mat karo
         const alreadyThere =
             draggedUser.memberType === targetType &&
             splitDomains(draggedUser.domain).includes(targetDomain);
         if (alreadyThere) return;
+
+        // FIX: pehle yaha swap hota tha (target column ka pehla banda dragged user ki jagah chala jata tha).
+        // Ab dragged user seedha target column me move hota hai (Production -> QA/QC, QA -> QC/Production, etc.)
         setUsers((prev) =>
             prev.map((u) =>
                 String(u.id) === draggedId
@@ -414,14 +506,14 @@ const Organogram = () => {
                 domain: targetDomain,
                 memberType: targetType,
             });
-            
+            // FIX: backend ka asli data wapas lao, taaki tree me wahi dikhe jo DB me hai
             await fetchUsers();
         } catch (err) {
             showSaveError(err);
         }
     };
 
-
+    // FIX: ab ref parameter me aata hai, main aur popup dono ke liye alag ref use hota hai
     const renderTreeContent = (refToUse) => (
         activeTab === "overall" ? (
             <DndContext
