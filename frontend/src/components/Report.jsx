@@ -60,10 +60,19 @@ export default function Reports({ domain, states }) {
       });
   }, []);
 
+  const overallLastUpdate = (() => {
+    const dates = Object.values(lastUpdateMap)
+      .filter(Boolean)
+      .map((d) => new Date(d))
+      .filter((d) => !isNaN(d.getTime()));
+    if (!dates.length) return null;
+    return new Date(Math.max(...dates.map((d) => d.getTime())));
+  })();
+
   const currentLastUpdate =
     domain && domain !== "All"
       ? lastUpdateMap[domain]
-      : null;
+      : overallLastUpdate;
 
   const formattedLastUpdate = currentLastUpdate
     ? new Date(currentLastUpdate).toLocaleDateString("en-IN", {
@@ -355,29 +364,121 @@ export default function Reports({ domain, states }) {
             </table>
 
             {/* ================= SUMMARY ================= */}
-            <div className="summaryWrap">
-              <div className="summaryBox">
-                <div className="iconBox">📶</div>
-
-                <div className="summaryText">
-                  <div style={{ display: "flex", gap: "28px", flexWrap: "wrap" }}>
-                    <div>
-                      <p>Jobs Delivered</p>
-                      <h1>{totalJobs}</h1>
+            <div
+              style={{
+                marginTop: "24px",
+                background: "linear-gradient(135deg, #eff6ff 0%, #f0fdf4 50%, #fffbeb 100%)",
+                border: "1px solid #e2e8f0",
+                borderRadius: "18px",
+                padding: "22px 26px",
+                boxShadow: "0 6px 20px rgba(15, 23, 42, 0.08)",
+              }}
+            >
+              <div
+                style={{
+                  display: "flex",
+                  flexWrap: "wrap",
+                  gap: "24px",
+                  justifyContent: "space-between",
+                }}
+              >
+                {/* Jobs Delivered */}
+                <div style={{ display: "flex", alignItems: "center", gap: "14px", flex: "1 1 180px" }}>
+                  <div
+                    style={{
+                      width: 52,
+                      height: 52,
+                      minWidth: 52,
+                      borderRadius: "50%",
+                      background: "#dbeafe",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      fontSize: 24,
+                      boxShadow: "0 2px 6px rgba(37, 99, 235, 0.25)",
+                    }}
+                  >
+                    📶
+                  </div>
+                  <div>
+                    <div style={{ fontSize: 12, fontWeight: 700, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.06em" }}>
+                      Jobs Delivered
                     </div>
-                    <div>
-                      <p>Amdocs QC</p>
-                      <h1>{overallQc !== null ? `${overallQc}%` : "-"}</h1>
-                    </div>
-                    <div>
-                      <p>OTP</p>
-                      <h1>{overallOtp !== null ? `${overallOtp}%` : "-"}</h1>
+                    <div style={{ fontSize: 30, fontWeight: 800, color: "#1d4ed8", lineHeight: 1.2 }}>
+                      {totalJobs}
                     </div>
                   </div>
-                  <span className="dateText">
-                    As on {formattedLastUpdate}
-                  </span>
                 </div>
+
+                {/* Amdocs QC */}
+                <div style={{ display: "flex", alignItems: "center", gap: "14px", flex: "1 1 180px" }}>
+                  <div
+                    style={{
+                      width: 52,
+                      height: 52,
+                      minWidth: 52,
+                      borderRadius: "50%",
+                      background: "#dcfce7",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      fontSize: 24,
+                      boxShadow: "0 2px 6px rgba(22, 163, 74, 0.25)",
+                    }}
+                  >
+                    ✅
+                  </div>
+                  <div>
+                    <div style={{ fontSize: 12, fontWeight: 700, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.06em" }}>
+                      Amdocs QC
+                    </div>
+                    <div style={{ fontSize: 30, fontWeight: 800, color: "#16a34a", lineHeight: 1.2 }}>
+                      {overallQc !== null ? `${overallQc}%` : "-"}
+                    </div>
+                  </div>
+                </div>
+
+                {/* OTP */}
+                <div style={{ display: "flex", alignItems: "center", gap: "14px", flex: "1 1 180px" }}>
+                  <div
+                    style={{
+                      width: 52,
+                      height: 52,
+                      minWidth: 52,
+                      borderRadius: "50%",
+                      background: "#fef3c7",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      fontSize: 24,
+                      boxShadow: "0 2px 6px rgba(217, 119, 6, 0.25)",
+                    }}
+                  >
+                    ⏱
+                  </div>
+                  <div>
+                    <div style={{ fontSize: 12, fontWeight: 700, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.06em" }}>
+                      OTP
+                    </div>
+                    <div style={{ fontSize: 30, fontWeight: 800, color: "#d97706", lineHeight: 1.2 }}>
+                      {overallOtp !== null ? `${overallOtp}%` : "-"}
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div
+                style={{
+                  marginTop: "18px",
+                  paddingTop: "14px",
+                  borderTop: "1px dashed #cbd5e1",
+                  fontSize: 13,
+                  fontWeight: 600,
+                  color: "#64748b",
+                  textAlign: "right",
+                }}
+              >
+                As on {formattedLastUpdate}
               </div>
             </div>
           </>
