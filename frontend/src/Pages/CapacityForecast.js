@@ -34,6 +34,69 @@ const dateInputToIndex = (dateStr) => {
 
 const getRowId = (row) => row.id ?? row._id;
 
+/* ---------- On-screen message (toast) styles ---------- */
+const toastBaseStyle = {
+  position: "fixed",
+  top: "20px",
+  right: "20px",
+  zIndex: 99999,
+  minWidth: "260px",
+  maxWidth: "420px",
+  padding: "12px 16px",
+  borderRadius: "8px",
+  color: "#ffffff",
+  fontSize: "14px",
+  fontWeight: 600,
+  boxShadow: "0 6px 18px rgba(0,0,0,0.25)",
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "space-between",
+  gap: "12px"
+};
+
+const toastColors = {
+  success: "#16a34a",
+  error: "#dc2626",
+  warning: "#d97706"
+};
+
+const toastIcons = {
+  success: "✅",
+  error: "❌",
+  warning: "⚠️"
+};
+
+const overlayStyle = {
+  position: "fixed",
+  inset: 0,
+  background: "rgba(0,0,0,0.45)",
+  zIndex: 99998,
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center"
+};
+
+const modalStyle = {
+  background: "#ffffff",
+  borderRadius: "10px",
+  padding: "22px 24px",
+  width: "90%",
+  maxWidth: "380px",
+  boxShadow: "0 10px 30px rgba(0,0,0,0.3)",
+  textAlign: "center",
+  fontFamily: "Arial, sans-serif"
+};
+
+const modalBtnBase = {
+  border: "none",
+  borderRadius: "6px",
+  padding: "8px 18px",
+  fontSize: "14px",
+  fontWeight: 600,
+  cursor: "pointer",
+  color: "#ffffff"
+};
+
 export default function CapacityForecast() {
   const [domains, setDomains] = useState([]);
   const [allWorkData, setAllWorkData] = useState([]);
@@ -46,6 +109,11 @@ export default function CapacityForecast() {
 
   const [fromDate, setFromDate] = useState("");
   const [toDate, setToDate] = useState("");
+
+  // Screen par dikhne wala message + delete confirm
+  const [toast, setToast] = useState(null); // { type: "success" | "error" | "warning", text: string }
+  const [deleteId, setDeleteId] = useState(null);
+  const toastTimerRef = useRef(null);
 
   const componentRefs = useRef({});
 
@@ -60,6 +128,18 @@ export default function CapacityForecast() {
     inflow: "",
     uomValues: {}
   });
+
+  const showToast = useCallback((type, text) => {
+    if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
+    setToast({ type, text });
+    toastTimerRef.current = setTimeout(() => setToast(null), 3500);
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
+    };
+  }, []);
 
   useEffect(() => {
     const handleClickOutside = (event) => {
@@ -95,8 +175,9 @@ export default function CapacityForecast() {
       }
     } catch (err) {
       console.error("Error fetching work/master data:", err);
+      showToast("error", "Domain data load nahi ho paya!");
     }
-  }, []);
+  }, [showToast]);
 
   const fetchCapacityRecords = useCallback(async () => {
     try {
@@ -104,8 +185,9 @@ export default function CapacityForecast() {
       setRecords(res.data || []);
     } catch (err) {
       console.error("Error fetching capacity records:", err);
+      showToast("error", "Records load nahi ho paye!");
     }
-  }, []);
+  }, [showToast]);
 
   useEffect(() => {
     fetchAllData();
@@ -181,7 +263,7 @@ export default function CapacityForecast() {
     e.preventDefault();
     // Sirf Month aur Domain mandatory hain.
     if (!formData.month || !formData.domain) {
-      alert("Please select Month and Domain!");
+      showToast("warning", "Please select Month and Domain!");
       return;
     }
 
@@ -201,9 +283,10 @@ export default function CapacityForecast() {
 
     try {
       await axios.post(`${API_BASE_URL}/api/capacity-forecast`, payloadData);
+      showToast("success", "Data submitted successfully!");
       fetchCapacityRecords();
 
-      // Form sirf success par reset hoga (pehle fail hone par bhi data ud jata tha)
+      // Form sirf success par reset hoga
       setFormData({
         month: generatedMonths[0],
         domain: mergedDomains[0] || "",
@@ -214,7 +297,7 @@ export default function CapacityForecast() {
       });
     } catch (err) {
       console.error("API submission error:", err);
-      alert("Failed to save data to backend API!");
+      showToast("error", "Failed to save data to backend API!");
     }
   };
 
@@ -244,7 +327,7 @@ export default function CapacityForecast() {
     const rowId = getRowId(row);
 
     if (!inlineData.month) {
-      alert("Please select Month!");
+      showToast("warning", "Please select Month!");
       return;
     }
 
@@ -266,22 +349,34 @@ export default function CapacityForecast() {
 
     try {
       await axios.put(`${API_BASE_URL}/api/capacity-forecast/${rowId}`, payloadData);
+      showToast("success", "Record updated successfully!");
       setEditingRowId(null);
       fetchCapacityRecords();
     } catch (err) {
       console.error("Error updating record:", err);
-      alert("Failed to update record!");
+      showToast("error", "Failed to update record!");
     }
   };
 
-  const handleDelete = async (id) => {
-    if (!window.confirm("Are you sure you want to delete this record?")) return;
+  // Delete: pehle screen par confirm box dikhega, browser popup nahi
+  const handleDelete = (id) => {
+    if (id === undefined || id === null) {
+      showToast("error", "Record ID nahi mili, delete nahi ho sakta!");
+      return;
+    }
+    setDeleteId(id);
+  };
+
+  const confirmDelete = async () => {
+    const id = deleteId;
+    setDeleteId(null);
     try {
       await axios.delete(`${API_BASE_URL}/api/capacity-forecast/${id}`);
+      showToast("success", "Record deleted successfully!");
       fetchCapacityRecords();
     } catch (err) {
       console.error("Error deleting record:", err);
-      alert("Failed to delete record!");
+      showToast("error", "Failed to delete record!");
     }
   };
 
@@ -427,14 +522,73 @@ export default function CapacityForecast() {
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
+
+      showToast("success", `${extension.toUpperCase()} exported successfully!`);
     } catch (err) {
       console.error("Export error:", err);
-      alert(`Failed to export as ${type.toUpperCase()}!`);
+      showToast("error", `Failed to export as ${type.toUpperCase()}!`);
     }
   };
 
   return (
     <div className="img-style-container">
+      {/* ---------- Screen par success / error message ---------- */}
+      {toast && (
+        <div
+          role="status"
+          style={{ ...toastBaseStyle, background: toastColors[toast.type] || toastColors.success }}
+        >
+          <span>
+            {toastIcons[toast.type]} {toast.text}
+          </span>
+          <button
+            type="button"
+            onClick={() => setToast(null)}
+            style={{
+              background: "transparent",
+              border: "none",
+              color: "#ffffff",
+              fontSize: "16px",
+              cursor: "pointer",
+              lineHeight: 1
+            }}
+            title="Close"
+          >
+            ✕
+          </button>
+        </div>
+      )}
+
+      {/* ---------- Delete confirm (screen par) ---------- */}
+      {deleteId !== null && (
+        <div style={overlayStyle} onClick={() => setDeleteId(null)}>
+          <div style={modalStyle} onClick={(e) => e.stopPropagation()}>
+            <div style={{ fontSize: "16px", fontWeight: 700, marginBottom: "8px", color: "#111827" }}>
+              Delete Record?
+            </div>
+            <div style={{ fontSize: "14px", color: "#4b5563", marginBottom: "18px" }}>
+              Are you sure you want to delete this record?
+            </div>
+            <div style={{ display: "flex", justifyContent: "center", gap: "12px" }}>
+              <button
+                type="button"
+                style={{ ...modalBtnBase, background: "#dc2626" }}
+                onClick={confirmDelete}
+              >
+                Yes, Delete
+              </button>
+              <button
+                type="button"
+                style={{ ...modalBtnBase, background: "#6b7280" }}
+                onClick={() => setDeleteId(null)}
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <h2 className="img-main-title">Capacity Vs Forecast Vs Inflow</h2>
 
       <form className="img-form-wrapper" onSubmit={handleCustomSubmit}>
