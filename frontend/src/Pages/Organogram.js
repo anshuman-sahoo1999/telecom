@@ -1,8 +1,16 @@
 import { API_BASE_URL } from "../config";
-import React, { useState, useEffect, useRef } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import axios from "axios";
 import { FaSitemap, FaProjectDiagram, FaFileExport, FaExpand, FaCompress } from "react-icons/fa";
-import { DndContext, useDroppable, pointerWithin, rectIntersection } from "@dnd-kit/core";
+import {
+    DndContext,
+    useDroppable,
+    pointerWithin,
+    rectIntersection,
+    PointerSensor,
+    useSensor,
+    useSensors,
+} from "@dnd-kit/core";
 import DraggableUser from "../components/DraggableUser";
 import UserReportModal from "../components/UserReportModal";
 import * as htmlToImage from "html-to-image";
@@ -10,9 +18,10 @@ import * as XLSX from "xlsx-js-style";
 import { saveAs } from "file-saver";
 import { jsPDF } from "jspdf";
 import "../style/organogram.css";
-import Swal from "sweetalert2";
 
 const SNAP_DISTANCE = 80;
+const AUTO_REFRESH_MS = 30000; // har 30 second mein users/domains apne aap refresh honge
+
 const collisionDetection = (args) => {
     const { droppableContainers, droppableRects, pointerCoordinates, active } = args;
     const pointerHits = pointerWithin(args);
@@ -45,12 +54,112 @@ const collisionDetection = (args) => {
     return [];
 };
 
-// "Domain A, Domain B" jaisi comma wali string ko array me todta hai
-const splitDomains = (domain) =>
-    (domain || "")
-        .split(",")
-        .map((x) => x.trim())
-        .filter(Boolean);
+/* =====================================================
+   Helper functions (component ke bahar)
+   ===================================================== */
+
+// String ("A, B") ya array dono ko clean array mein badalta hai
+// (pehle array aane par .split() se crash ho sakta tha)
+const toList = (value) => {
+    if (Array.isArray(value)) {
+        return value.map((x) => String(x).trim()).filter(Boolean);
+    }
+    if (typeof value === "string") {
+        return value.split(",").map((x) => x.trim()).filter(Boolean);
+    }
+    return [];
+};
+
+// Domain naam case-insensitive match (Master mein "Voice", user mein "VOICE" ho to bhi tree mein aa jaye)
+const hasDomain = (userDomain, domainName) => {
+    const target = (domainName || "").toString().trim().toLowerCase();
+    if (!target) return false;
+    return toList(userDomain).some((d) => d.toLowerCase() === target);
+};
+
+const getMemberType = (u) => {
+    const mt = Array.isArray(u?.memberType) ? u.memberType[0] : u?.memberType;
+    return (mt || "").toString().trim();
+};
+
+const sameType = (a, b) => (a || "").toString().toLowerCase() === (b || "").toString().toLowerCase();
+
+const sameId = (a, b) => String(a) === String(b);
+
+const getErrorText = (err, fallback) => {
+    const data = err?.response?.data;
+    const msg =
+        data?.message ||
+        data?.error ||
+        (typeof data === "string" ? data.slice(0, 200) : "") ||
+        err?.message ||
+        fallback;
+    const status = err?.response?.status;
+    return `${status ? `Status ${status}: ` : ""}${msg}`;
+};
+
+/* ---------- On-screen message (toast) + confirm box styles ---------- */
+const toastBaseStyle = {
+    position: "fixed",
+    top: "20px",
+    right: "20px",
+    zIndex: 999999,
+    minWidth: "260px",
+    maxWidth: "420px",
+    padding: "12px 16px",
+    borderRadius: "8px",
+    color: "#ffffff",
+    fontSize: "14px",
+    fontWeight: 600,
+    boxShadow: "0 6px 18px rgba(0,0,0,0.25)",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: "12px",
+};
+
+const toastColors = {
+    success: "#16a34a",
+    error: "#dc2626",
+    warning: "#d97706",
+};
+
+const toastIcons = {
+    success: "✅",
+    error: "❌",
+    warning: "⚠️",
+};
+
+const confirmOverlayStyle = {
+    position: "fixed",
+    inset: 0,
+    background: "rgba(0,0,0,0.45)",
+    zIndex: 999998,
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+};
+
+const confirmModalStyle = {
+    background: "#ffffff",
+    borderRadius: "10px",
+    padding: "22px 24px",
+    width: "90%",
+    maxWidth: "400px",
+    boxShadow: "0 10px 30px rgba(0,0,0,0.3)",
+    textAlign: "center",
+    fontFamily: "Arial, sans-serif",
+};
+
+const confirmBtnBase = {
+    border: "none",
+    borderRadius: "6px",
+    padding: "8px 18px",
+    fontSize: "14px",
+    fontWeight: 600,
+    cursor: "pointer",
+    color: "#ffffff",
+};
 
 const DomainDropZone = ({ dropId, children }) => {
     const { setNodeRef, isOver, active } = useDroppable({ id: dropId });
@@ -110,12 +219,44 @@ const Organogram = () => {
     const [openReport, setOpenReport] = useState(false);
     const [isFullScreen, setIsFullScreen] = useState(false);
 
+    // Screen par message + delete confirm
+    const [toast, setToast] = useState(null); // { type, text }
+    const toastTimerRef = useRef(null);
+    const [deleteTarget, setDeleteTarget] = useState(null); // { id, name, role }
+    const [deleting, setDeleting] = useState(false);
+
+    // Auto refresh ke time drag / export ke beech data na badle
+    const draggingRef = useRef(false);
+    const exportingRef = useRef(false);
+
+    // Click aur drag alag rahein: 6px hilne par hi drag shuru hoga.
+    // (Isse ✕ cross dabane par galti se drag shuru nahi hota)
+    const sensors = useSensors(
+        useSensor(PointerSensor, { activationConstraint: { distance: 6 } })
+    );
+
+    const showToast = useCallback((type, text) => {
+        if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
+        setToast({ type, text });
+        toastTimerRef.current = setTimeout(() => setToast(null), 3500);
+    }, []);
+
+    useEffect(() => {
+        return () => {
+            if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
+        };
+    }, []);
+
+    useEffect(() => {
+        exportingRef.current = isExporting;
+    }, [isExporting]);
+
     const handleHoverUser = (user, event) => {
         clearTimeout(hoverTimerRef.current);
 
         if (user && user !== "LEAVE") {
             const rect = event?.currentTarget?.getBoundingClientRect();
-            
+
             const posX = rect ? rect.right + 10 : (event?.clientX || 100);
             const posY = rect ? rect.top : (event?.clientY || 100);
 
@@ -139,33 +280,118 @@ const Organogram = () => {
         { id: "project", label: "Project", icon: <FaProjectDiagram />, desc: "Project Structure" },
     ];
 
+    /* ---------------- Fetch ---------------- */
+
+    const fetchUsers = useCallback(
+        async (silent = false) => {
+            try {
+                const res = await axios.get(`${API_BASE_URL}/api/auth/all-user-details`);
+                setUsers(res.data?.users || []);
+            } catch (err) {
+                console.log(err);
+                if (!silent) showToast("error", "Users load nahi ho paye!");
+            }
+        },
+        [showToast]
+    );
+
+    // Pehle sirf /api/work/bydomain se domains aate the, isliye Master Domain Creation mein
+    // naya domain add karne par wo tree mein nahi aata tha (jab tak uska work data na ho).
+    // Ab Work + Master dono ke domains merge hote hain.
+    const fetchDomains = useCallback(
+        async (silent = false) => {
+            const [workRes, masterRes] = await Promise.allSettled([
+                axios.get(`${API_BASE_URL}/api/work/bydomain`),
+                axios.get(`${API_BASE_URL}/api/master`),
+            ]);
+
+            if (workRes.status === "rejected" && masterRes.status === "rejected") {
+                console.log(workRes.reason);
+                if (!silent) showToast("error", "Domains load nahi ho paye!");
+                return;
+            }
+
+            let workList = [];
+            if (workRes.status === "fulfilled") {
+                const data = workRes.value.data;
+                const arr = Array.isArray(data) ? data : data?.data || [];
+                workList = arr.map((d) => (typeof d === "string" ? d : d?.domain));
+            }
+
+            let masterList = [];
+            if (masterRes.status === "fulfilled") {
+                const data = masterRes.value.data;
+                if (Array.isArray(data)) {
+                    masterList = data.map((d) =>
+                        typeof d === "string" ? d : d?.domain || d?.name
+                    );
+                } else {
+                    masterList = Object.keys(data || {});
+                }
+            }
+
+            // Case-insensitive unique. Purana order (work wale) pehle, naye Master domains baad mein
+            const seen = new Set();
+            const merged = [];
+            [...workList, ...masterList].forEach((d) => {
+                const clean = (d || "").toString().trim();
+                const key = clean.toLowerCase();
+                if (clean && !seen.has(key)) {
+                    seen.add(key);
+                    merged.push({ domain: clean });
+                }
+            });
+
+            setDomains(merged);
+        },
+        [showToast]
+    );
+
     useEffect(() => {
         fetchUsers();
         fetchDomains();
-    }, []);
+    }, [fetchUsers, fetchDomains]);
 
-    // FIX: unmount par hover timer clear karo
+    // Auto refresh: naya domain / naya TL / naya member apne aap tree mein aa jaye
+    useEffect(() => {
+        const refresh = () => {
+            if (draggingRef.current || exportingRef.current) return;
+            fetchUsers(true);
+            fetchDomains(true);
+        };
+
+        const intervalId = setInterval(() => {
+            if (!document.hidden) refresh();
+        }, AUTO_REFRESH_MS);
+
+        const onFocus = () => refresh();
+        const onVisibility = () => {
+            if (!document.hidden) refresh();
+        };
+        // Master Domain Creation page se domain badalte hi turant refresh
+        const onDomainsUpdated = () => refresh();
+        const onStorage = (e) => {
+            if (e.key === "domains_updated_at") refresh();
+        };
+
+        window.addEventListener("focus", onFocus);
+        document.addEventListener("visibilitychange", onVisibility);
+        window.addEventListener("domains-updated", onDomainsUpdated);
+        window.addEventListener("storage", onStorage);
+
+        return () => {
+            clearInterval(intervalId);
+            window.removeEventListener("focus", onFocus);
+            document.removeEventListener("visibilitychange", onVisibility);
+            window.removeEventListener("domains-updated", onDomainsUpdated);
+            window.removeEventListener("storage", onStorage);
+        };
+    }, [fetchUsers, fetchDomains]);
+
+    // unmount par hover timer clear karo
     useEffect(() => {
         return () => clearTimeout(hoverTimerRef.current);
     }, []);
-
-    const fetchUsers = async () => {
-        try {
-            const res = await axios.get(`${API_BASE_URL}/api/auth/all-user-details`);
-            setUsers(res.data.users || []);
-        } catch (err) {
-            console.log(err);
-        }
-    };
-
-    const fetchDomains = async () => {
-        try {
-            const res = await axios.get(`${API_BASE_URL}/api/work/bydomain`);
-            setDomains(res.data || []);
-        } catch (err) {
-            console.log(err);
-        }
-    };
 
     const getFileNameDateTime = () => {
         const now = new Date();
@@ -194,25 +420,64 @@ const Organogram = () => {
 
     const misAdminIndex = admins.length > 1 ? 1 : 0;
 
-    const handleDelete = (id) => {
-        Swal.fire({
-            title: "Are you sure?",
-            text: "This user will be permanently deleted!",
-            icon: "warning",
-            showCancelButton: true,
-            confirmButtonText: "Yes, Delete it!",
-            cancelButtonText: "Cancel",
-        }).then(async (result) => {
-            if (result.isConfirmed) {
-                try {
-                    await axios.delete(`${API_BASE_URL}/api/auth/delete-user/${id}`);
-                    setUsers((prev) => prev.filter((u) => u.id !== id));
-                    Swal.fire("Deleted!", "User deleted successfully ✔", "success");
-                } catch (error) {
-                    Swal.fire("Error!", "Delete failed ❌", "error");
-                }
-            }
+    // Ek domain ke TL / QA / QC / Production members
+    const getDomainGroups = (domainName) => ({
+        tls: teamLeads.filter((tl) => hasDomain(tl.domain, domainName)),
+        qaMembers: teamMembers.filter(
+            (m) => sameType(getMemberType(m), "QA") && hasDomain(m.domain, domainName)
+        ),
+        qcMembers: teamMembers.filter(
+            (m) => sameType(getMemberType(m), "QC") && hasDomain(m.domain, domainName)
+        ),
+        productionMembers: teamMembers.filter(
+            (m) => sameType(getMemberType(m), "Production") && hasDomain(m.domain, domainName)
+        ),
+    });
+
+    /* ---------------- Delete (✕ cross se) ---------------- */
+
+    // DraggableUser se user object ya sirf id, dono aa sakte hain
+    // Cross dabane par pehle screen par confirm box aayega, seedha delete nahi hoga
+    const handleDelete = (arg) => {
+        const id = arg && typeof arg === "object" ? arg.id : arg;
+        if (id === undefined || id === null) {
+            showToast("error", "User ID nahi mili, delete nahi ho sakta!");
+            return;
+        }
+
+        const found = users.find((u) => sameId(u.id, id));
+
+        // Hover wala report popup band kar do
+        clearTimeout(hoverTimerRef.current);
+        setOpenReport(false);
+        setSelectedUser(null);
+
+        setDeleteTarget({
+            id,
+            name: found?.name || (arg && typeof arg === "object" ? arg.name : "") || "this user",
+            role: found?.role || "",
         });
+    };
+
+    const confirmDelete = async () => {
+        const target = deleteTarget;
+        if (!target || deleting) return;
+
+        setDeleting(true);
+        try {
+            await axios.delete(`${API_BASE_URL}/api/auth/delete-user/${target.id}`);
+            setUsers((prev) => prev.filter((u) => !sameId(u.id, target.id)));
+            setDeleteTarget(null);
+            showToast("success", "User deleted successfully!");
+            // Backend ka asli data wapas lao
+            fetchUsers(true);
+        } catch (err) {
+            console.error(err);
+            setDeleteTarget(null);
+            showToast("error", getErrorText(err, "Delete failed!"));
+        } finally {
+            setDeleting(false);
+        }
     };
 
     const handleLegendClick = (role) => {
@@ -224,6 +489,8 @@ const Organogram = () => {
             prev.includes(role) ? prev.filter((r) => r !== role) : [...prev, role]
         );
     };
+
+    /* ---------------- Export ---------------- */
 
     const exportPNG = async () => {
         setIsExporting(true);
@@ -242,8 +509,10 @@ const Organogram = () => {
             link.download = `Organogram ${getFileNameDateTime()}.png`;
             link.href = dataUrl;
             link.click();
+            showToast("success", "PNG exported successfully!");
         } catch (err) {
             console.log(err);
+            showToast("error", "Failed to export PNG!");
         } finally {
             setIsExporting(false);
             setOpenExport(false);
@@ -266,8 +535,10 @@ const Organogram = () => {
             link.download = `Organogram ${getFileNameDateTime()}.jpg`;
             link.href = dataUrl;
             link.click();
+            showToast("success", "JPG exported successfully!");
         } catch (err) {
             console.log(err);
+            showToast("error", "Failed to export JPG!");
         } finally {
             setIsExporting(false);
             setOpenExport(false);
@@ -302,8 +573,10 @@ const Organogram = () => {
             const y = (pageHeight - renderHeight) / 2;
             pdf.addImage(imgData, "PNG", x, y, renderWidth, renderHeight);
             pdf.save(`Organogram ${getFileNameDateTime()}.pdf`);
+            showToast("success", "PDF exported successfully!");
         } catch (err) {
             console.log(err);
+            showToast("error", "Failed to export PDF!");
         } finally {
             setIsExporting(false);
             setOpenExport(false);
@@ -311,76 +584,93 @@ const Organogram = () => {
     };
 
     const exportExcel = () => {
-        const wb = XLSX.utils.book_new();
-        const roleSheets = {
-            Admin: users.filter((u) => u.role === "Admin"),
-            MIS: users.filter((u) => u.role === "MIS"),
-            TeamLead: users.filter((u) => u.role === "TeamLead"),
-            TeamMember: users.filter((u) => u.role === "TeamMember"),
-        };
+        try {
+            const wb = XLSX.utils.book_new();
+            const roleSheets = {
+                Admin: users.filter((u) => u.role === "Admin"),
+                MIS: users.filter((u) => u.role === "MIS"),
+                TeamLead: users.filter((u) => u.role === "TeamLead"),
+                TeamMember: users.filter((u) => u.role === "TeamMember"),
+            };
 
-        Object.entries(roleSheets).forEach(([sheetName, data]) => {
-            const rows = data.map((u) => {
-                if (sheetName === "Admin" || sheetName === "MIS") {
+            Object.entries(roleSheets).forEach(([sheetName, data]) => {
+                const rows = data.map((u) => {
+                    if (sheetName === "Admin" || sheetName === "MIS") {
+                        return {
+                            Name: u.name || "",
+                            Emp_ID: u.emp_id || "",
+                            Role: u.role || "",
+                            Email: u.email || "",
+                        };
+                    }
                     return {
                         Name: u.name || "",
                         Emp_ID: u.emp_id || "",
                         Role: u.role || "",
+                        // Array ho ya string, dono sahi dikhe
+                        Domain: toList(u.domain).join(", "),
+                        MemberType: toList(u.memberType).join(", "),
+                        Mobile: u.mobileNo || "",
                         Email: u.email || "",
+                        TotalExp: u.totalExperience || "",
+                        TelecomExp: u.telecomExperience || "",
+                        SkillSets: Array.isArray(u.skillSets) ? u.skillSets.join(", ") : u.skillSets || "",
+                        Region: u.region || "",
                     };
-                }
-                return {
-                    Name: u.name || "",
-                    Emp_ID: u.emp_id || "",
-                    Role: u.role || "",
-                    Domain: u.domain || "",
-                    MemberType: u.memberType || "",
-                    Mobile: u.mobileNo || "",
-                    Email: u.email || "",
-                    TotalExp: u.totalExperience || "",
-                    TelecomExp: u.telecomExperience || "",
-                    SkillSets: u.skillSets || "",
-                    Region: u.region || "",
-                };
-            });
-            const ws = XLSX.utils.json_to_sheet(rows);
-            // FIX: khali sheet me ws["!ref"] undefined hota hai, isse crash hota tha
-            if (ws["!ref"]) {
-                const range = XLSX.utils.decode_range(ws["!ref"]);
-                for (let col = range.s.c; col <= range.e.c; col++) {
-                    const cell = XLSX.utils.encode_cell({ r: 0, c: col });
-                    if (ws[cell]) {
-                        ws[cell].s = {
-                            fill: { fgColor: { rgb: "1F4E78" } },
-                            font: { bold: true, color: { rgb: "FFFFFF" } },
-                            alignment: { horizontal: "center", vertical: "center" },
-                        };
+                });
+                const ws = XLSX.utils.json_to_sheet(rows);
+                // khali sheet me ws["!ref"] undefined hota hai, isse crash hota tha
+                if (ws["!ref"]) {
+                    const range = XLSX.utils.decode_range(ws["!ref"]);
+                    for (let col = range.s.c; col <= range.e.c; col++) {
+                        const cell = XLSX.utils.encode_cell({ r: 0, c: col });
+                        if (ws[cell]) {
+                            ws[cell].s = {
+                                fill: { fgColor: { rgb: "1F4E78" } },
+                                font: { bold: true, color: { rgb: "FFFFFF" } },
+                                alignment: { horizontal: "center", vertical: "center" },
+                            };
+                        }
                     }
                 }
-            }
-            XLSX.utils.book_append_sheet(wb, ws, sheetName);
-        });
-        const excelBuffer = XLSX.write(wb, {
-            bookType: "xlsx",
-            type: "array",
-            cellStyles: true,
-        });
-        const file = new Blob([excelBuffer], {
-            type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        });
+                XLSX.utils.book_append_sheet(wb, ws, sheetName);
+            });
+            const excelBuffer = XLSX.write(wb, {
+                bookType: "xlsx",
+                type: "array",
+                cellStyles: true,
+            });
+            const file = new Blob([excelBuffer], {
+                type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            });
 
-        saveAs(file, `Organogram Report ${getFileNameDateTime()}.xlsx`);
-        setOpenExport(false);
+            saveAs(file, `Organogram Report ${getFileNameDateTime()}.xlsx`);
+            showToast("success", "Excel exported successfully!");
+        } catch (err) {
+            console.log(err);
+            showToast("error", "Failed to export Excel!");
+        } finally {
+            setOpenExport(false);
+        }
     };
 
-    // FIX: drag shuru hote hi hover wala report popup band kar do (drag ke beech me aa jata tha)
+    /* ---------------- Drag & Drop ---------------- */
+
+    // drag shuru hote hi hover wala report popup band kar do (drag ke beech me aa jata tha)
     const handleDragStart = () => {
+        draggingRef.current = true;
         clearTimeout(hoverTimerRef.current);
         setOpenReport(false);
         setSelectedUser(null);
     };
 
+    const handleDragCancel = () => {
+        draggingRef.current = false;
+    };
+
     const handleDragEnd = async (event) => {
+        draggingRef.current = false;
+
         const { active, over } = event;
         if (!over) return;
 
@@ -391,51 +681,38 @@ const Organogram = () => {
         const [targetDomain, targetType] = String(over.id).split("|");
         if (!targetDomain || !targetType) return;
 
-        // FIX: API fail ho to UI ko purani state par wapas laane ke liye snapshot
+        // API fail ho to UI ko purani state par wapas laane ke liye snapshot
         const previousUsers = users;
 
         const showSaveError = async (err) => {
-            const status = err?.response?.status;
-            const data = err?.response?.data;
-            console.error("update-position failed:", status, data || err);
+            console.error("update-position failed:", err?.response?.status, err?.response?.data || err);
 
             // UI ko pehle purani state par lao, phir DB se asli data le aao
             // (agar backend ne save kar liya tha par response me error aaya, to bhi tree sahi dikhega)
             setUsers(previousUsers);
-            await fetchUsers();
+            await fetchUsers(true);
 
-            const serverMsg =
-                data?.message ||
-                data?.error ||
-                (typeof data === "string" ? data.slice(0, 200) : "") ||
-                err?.message ||
-                "Unknown error";
-
-            Swal.fire({
-                icon: "error",
-                title: "Position update failed",
-                text: `${status ? `Status ${status}: ` : ""}${serverMsg}`,
-            });
+            showToast("error", `Position update failed! ${getErrorText(err, "Unknown error")}`);
         };
 
         // ---------- TEAM LEAD ----------
         if (draggedUser.role === "TeamLead") {
             const oldDomain = draggedUser.domain;
 
-            // FIX: apne hi domain me drop kiya to kuch mat karo
-            if (splitDomains(oldDomain).includes(targetDomain)) return;
+            // apne hi domain me drop kiya to kuch mat karo
+            if (hasDomain(oldDomain, targetDomain)) return;
 
             const targetTL = users.find(
                 (u) =>
-                    u.id !== draggedUser.id &&
+                    !sameId(u.id, draggedUser.id) &&
                     u.role === "TeamLead" &&
-                    splitDomains(u.domain).includes(targetDomain)
+                    hasDomain(u.domain, targetDomain)
             );
 
             setUsers((prev) =>
                 prev.map((u) => {
-                    if (u.id === draggedUser.id) return { ...u, domain: targetDomain };
-                    if (targetTL && u.id === targetTL.id) return { ...u, domain: oldDomain };
+                    if (sameId(u.id, draggedUser.id)) return { ...u, domain: targetDomain };
+                    if (targetTL && sameId(u.id, targetTL.id)) return { ...u, domain: oldDomain };
                     return u;
                 })
             );
@@ -451,21 +728,27 @@ const Organogram = () => {
                         memberType: null,
                     });
                 }
-    
-                await fetchUsers();
+
+                await fetchUsers(true);
+                showToast("success", "Position updated successfully!");
             } catch (err) {
                 showSaveError(err);
             }
             return;
         }
 
-        if (targetType === "TeamLead") return;
+        if (targetType === "TeamLead") {
+            showToast("warning", "Team Member ko Team Lead ke box mein nahi daal sakte!");
+            return;
+        }
 
         if (!["QA", "QC", "Production"].includes(targetType)) return;
+
         const alreadyThere =
-            draggedUser.memberType === targetType &&
-            splitDomains(draggedUser.domain).includes(targetDomain);
+            sameType(getMemberType(draggedUser), targetType) &&
+            hasDomain(draggedUser.domain, targetDomain);
         if (alreadyThere) return;
+
         setUsers((prev) =>
             prev.map((u) =>
                 String(u.id) === draggedId
@@ -479,20 +762,25 @@ const Organogram = () => {
                 domain: targetDomain,
                 memberType: targetType,
             });
-            // FIX: backend ka asli data wapas lao, taaki tree me wahi dikhe jo DB me hai
-            await fetchUsers();
+            // backend ka asli data wapas lao, taaki tree me wahi dikhe jo DB me hai
+            await fetchUsers(true);
+            showToast("success", "Position updated successfully!");
         } catch (err) {
             showSaveError(err);
         }
     };
 
-    // FIX: ab ref parameter me aata hai, main aur popup dono ke liye alag ref use hota hai
-    const renderTreeContent = (refToUse) => (
+    /* ---------------- Tree render ---------------- */
+
+    // ref parameter me aata hai, main aur popup dono ke liye alag ref use hota hai
+    const renderTreeContent = (refToUse) =>
         activeTab === "overall" ? (
             <DndContext
+                sensors={sensors}
                 collisionDetection={collisionDetection}
                 onDragStart={handleDragStart}
                 onDragEnd={handleDragEnd}
+                onDragCancel={handleDragCancel}
             >
                 <div ref={refToUse} className="export-area">
                     {isExporting && <ExportHeader />}
@@ -523,33 +811,13 @@ const Organogram = () => {
                             <div className="domain-wrapper">
                                 <div className="top-horizontal"></div>
 
-                                {(domains || []).map((d, index) => {
+                                {(domains || []).map((d) => {
                                     const domainName = d.domain;
-
-                                    const tls = teamLeads.filter((tl) =>
-                                        (tl.domain || "").split(",").map((x) => x.trim()).includes(domainName)
-                                    );
-
-                                    const qaMembers = teamMembers.filter(
-                                        (m) =>
-                                            m.memberType === "QA" &&
-                                            (m.domain || "").split(",").map((x) => x.trim()).includes(domainName)
-                                    );
-
-                                    const qcMembers = teamMembers.filter(
-                                        (m) =>
-                                            m.memberType === "QC" &&
-                                            (m.domain || "").split(",").map((x) => x.trim()).includes(domainName)
-                                    );
-
-                                    const productionMembers = teamMembers.filter(
-                                        (m) =>
-                                            m.memberType === "Production" &&
-                                            (m.domain || "").split(",").map((x) => x.trim()).includes(domainName)
-                                    );
+                                    const { tls, qaMembers, qcMembers, productionMembers } =
+                                        getDomainGroups(domainName);
 
                                     return (
-                                        <div className="domain-column" key={index}>
+                                        <div className="domain-column" key={domainName}>
                                             {!hiddenRoles.includes("Domain") && (
                                                 <div className="org-node domain">{domainName}</div>
                                             )}
@@ -689,25 +957,8 @@ const Organogram = () => {
                                 const domainName = d.domain;
                                 const isOpen = selectedDomain === domainName;
                                 const shouldShow = isOpen || isExporting;
-
-                                const tls = teamLeads.filter((tl) =>
-                                    (tl.domain || "").split(",").map((x) => x.trim()).includes(domainName)
-                                );
-                                const qaMembers = teamMembers.filter(
-                                    (m) =>
-                                        m.memberType === "QA" &&
-                                        (m.domain || "").split(",").map((x) => x.trim()).includes(domainName)
-                                );
-                                const qcMembers = teamMembers.filter(
-                                    (m) =>
-                                        m.memberType === "QC" &&
-                                        (m.domain || "").split(",").map((x) => x.trim()).includes(domainName)
-                                );
-                                const productionMembers = teamMembers.filter(
-                                    (m) =>
-                                        m.memberType === "Production" &&
-                                        (m.domain || "").split(",").map((x) => x.trim()).includes(domainName)
-                                );
+                                const { tls, qaMembers, qcMembers, productionMembers } =
+                                    getDomainGroups(domainName);
 
                                 return (
                                     <div key={domainName} className="domain-item">
@@ -726,18 +977,18 @@ const Organogram = () => {
                                                 <div className="tl-wrapper">
                                                     {!hiddenRoles.includes("TeamLead") &&
                                                         (tls.length > 0 ? (
-                                                        tls.map((tl) => (
-                                                            <DraggableUser
-                                                                key={tl.id}
-                                                                user={tl}
-                                                                onDelete={() => {}}
-                                                                onHover={handleHoverUser}
-                                                                disableDrag={true}
-                                                            />
-                                                        ))
-                                                    ) : (
-                                                        <div className="org-node tl">TL</div>
-                                                    ))}
+                                                            tls.map((tl) => (
+                                                                <DraggableUser
+                                                                    key={tl.id}
+                                                                    user={tl}
+                                                                    onDelete={handleDelete}
+                                                                    onHover={handleHoverUser}
+                                                                    disableDrag={true}
+                                                                />
+                                                            ))
+                                                        ) : (
+                                                            <div className="org-node tl">TL</div>
+                                                        ))}
                                                 </div>
 
                                                 <div className="small-line"></div>
@@ -745,52 +996,52 @@ const Organogram = () => {
                                                     <div className="qa-column">
                                                         {!hiddenRoles.includes("QA") &&
                                                             (qaMembers.length > 0 ? (
-                                                            qaMembers.map((qa) => (
-                                                                <DraggableUser
-                                                                    key={qa.id}
-                                                                    user={qa}
-                                                                    onDelete={() => {}}
-                                                                    onHover={handleHoverUser}
-                                                                    disableDrag={true}
-                                                                />
-                                                            ))
-                                                        ) : (
-                                                            <div className="org-node qa1">QA</div>
-                                                        ))}
+                                                                qaMembers.map((qa) => (
+                                                                    <DraggableUser
+                                                                        key={qa.id}
+                                                                        user={qa}
+                                                                        onDelete={handleDelete}
+                                                                        onHover={handleHoverUser}
+                                                                        disableDrag={true}
+                                                                    />
+                                                                ))
+                                                            ) : (
+                                                                <div className="org-node qa1">QA</div>
+                                                            ))}
                                                     </div>
 
                                                     <div className="qc-column">
                                                         {!hiddenRoles.includes("QC") &&
                                                             (qcMembers.length > 0 ? (
-                                                            qcMembers.map((qc) => (
-                                                                <DraggableUser
-                                                                    key={qc.id}
-                                                                    user={qc}
-                                                                    onDelete={() => {}}
-                                                                    onHover={handleHoverUser}
-                                                                    disableDrag={true}
-                                                                />
-                                                            ))
-                                                        ) : (
-                                                            <div className="org-node qc1">QC</div>
-                                                        ))}
+                                                                qcMembers.map((qc) => (
+                                                                    <DraggableUser
+                                                                        key={qc.id}
+                                                                        user={qc}
+                                                                        onDelete={handleDelete}
+                                                                        onHover={handleHoverUser}
+                                                                        disableDrag={true}
+                                                                    />
+                                                                ))
+                                                            ) : (
+                                                                <div className="org-node qc1">QC</div>
+                                                            ))}
                                                     </div>
 
                                                     <div className="production-column">
                                                         {!hiddenRoles.includes("Production") &&
                                                             (productionMembers.length > 0 ? (
-                                                            productionMembers.map((p) => (
-                                                                <DraggableUser
-                                                                    key={p.id}
-                                                                    user={p}
-                                                                    onDelete={() => {}}
-                                                                    onHover={handleHoverUser}
-                                                                    disableDrag={true}
-                                                                />
-                                                            ))
-                                                        ) : (
-                                                            <div className="org-node prod1">PRODUCTION</div>
-                                                        ))}
+                                                                productionMembers.map((p) => (
+                                                                    <DraggableUser
+                                                                        key={p.id}
+                                                                        user={p}
+                                                                        onDelete={handleDelete}
+                                                                        onHover={handleHoverUser}
+                                                                        disableDrag={true}
+                                                                    />
+                                                                ))
+                                                            ) : (
+                                                                <div className="org-node prod1">PRODUCTION</div>
+                                                            ))}
                                                     </div>
                                                 </div>
                                             </>
@@ -814,8 +1065,7 @@ const Organogram = () => {
                                     <span className="legend-color tl-color"></span>Team Lead
                                 </div>
                             )}
-                            {/* FIX: includes("QA","QC","Production") sirf pehla value check karta tha (doosra argument index hota hai).
-                                Ab har role ka legend alag se check hota hai. */}
+                            {/* har role ka legend alag se check hota hai */}
                             {!hiddenRoles.includes("QA") && (
                                 <div className="legend-item" onClick={() => handleLegendClick("QA")}>
                                     <span className="legend-color qa-color"></span>QA
@@ -835,11 +1085,88 @@ const Organogram = () => {
                     </div>
                 </div>
             </div>
-        )
-    );
+        );
 
     return (
         <div className="org-page">
+            {/* ---------- Screen par success / error message ---------- */}
+            {toast && (
+                <div
+                    role="status"
+                    style={{
+                        ...toastBaseStyle,
+                        background: toastColors[toast.type] || toastColors.success,
+                    }}
+                >
+                    <span>
+                        {toastIcons[toast.type]} {toast.text}
+                    </span>
+                    <button
+                        type="button"
+                        onClick={() => setToast(null)}
+                        title="Close"
+                        style={{
+                            background: "transparent",
+                            border: "none",
+                            color: "#ffffff",
+                            fontSize: "16px",
+                            cursor: "pointer",
+                            lineHeight: 1,
+                        }}
+                    >
+                        ✕
+                    </button>
+                </div>
+            )}
+
+            {/* ---------- Delete confirm (screen par) ---------- */}
+            {deleteTarget && (
+                <div
+                    style={confirmOverlayStyle}
+                    onClick={() => !deleting && setDeleteTarget(null)}
+                >
+                    <div style={confirmModalStyle} onClick={(e) => e.stopPropagation()}>
+                        <div
+                            style={{
+                                fontSize: "16px",
+                                fontWeight: 700,
+                                marginBottom: "8px",
+                                color: "#111827",
+                            }}
+                        >
+                            Delete User?
+                        </div>
+                        <div style={{ fontSize: "14px", color: "#4b5563", marginBottom: "18px" }}>
+                            Are you sure you want to delete "{deleteTarget.name}"
+                            {deleteTarget.role ? ` (${deleteTarget.role})` : ""}? This user will be
+                            permanently deleted!
+                        </div>
+                        <div style={{ display: "flex", justifyContent: "center", gap: "12px" }}>
+                            <button
+                                type="button"
+                                style={{
+                                    ...confirmBtnBase,
+                                    background: "#dc2626",
+                                    opacity: deleting ? 0.6 : 1,
+                                }}
+                                onClick={confirmDelete}
+                                disabled={deleting}
+                            >
+                                {deleting ? "Deleting..." : "Yes, Delete"}
+                            </button>
+                            <button
+                                type="button"
+                                style={{ ...confirmBtnBase, background: "#6b7280" }}
+                                onClick={() => setDeleteTarget(null)}
+                                disabled={deleting}
+                            >
+                                Cancel
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
             <UserReportModal open={openReport} user={selectedUser} />
             <div className="org-container">
                 <div className="org-topbar">
@@ -848,7 +1175,11 @@ const Organogram = () => {
                     </div>
 
                     <div className="export-wrapper">
-                        <button className="export-btned" onClick={() => setOpenExport(!openExport)}>
+                        <button
+                            type="button"
+                            className="export-btned"
+                            onClick={() => setOpenExport(!openExport)}
+                        >
                             <FaFileExport /> Export
                         </button>
 
@@ -889,8 +1220,9 @@ const Organogram = () => {
                 </div>
 
                 <div className="org-body-box">
-                    <button 
-                        className="org-view-fullscreen-btn" 
+                    <button
+                        type="button"
+                        className="org-view-fullscreen-btn"
                         onClick={() => setIsFullScreen(true)}
                         title="View"
                     >
@@ -904,7 +1236,11 @@ const Organogram = () => {
                 {isFullScreen && (
                     <div className="org-popup-overlay" onClick={() => setIsFullScreen(false)}>
                         <div className="org-popup-content" onClick={(e) => e.stopPropagation()}>
-                            <button className="org-popup-close-btn" onClick={() => setIsFullScreen(false)}>
+                            <button
+                                type="button"
+                                className="org-popup-close-btn"
+                                onClick={() => setIsFullScreen(false)}
+                            >
                                 <FaCompress /> Close
                             </button>
                             <div className="org-tree-popup-container">
