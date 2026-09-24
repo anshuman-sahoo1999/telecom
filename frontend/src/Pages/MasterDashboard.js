@@ -1,5 +1,5 @@
 import { API_BASE_URL } from "../config";
-import React, { useEffect, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import axios from "axios";
 import { FaUserPlus, FaUsers } from "react-icons/fa";
 import "../style/dashboard.css";
@@ -7,13 +7,88 @@ import Swal from "sweetalert2";
 
 import UpdatePasswordModal from "../components/UpdatePasswordModal";
 
+/* =====================================================
+   Helper functions (component ke bahar)
+   ===================================================== */
+
+const memberTypeOptions = ["QA", "QC", "Production"];
+
+// String ya array, dono ko clean array mein badalta hai
+const toArray = (data) => {
+    if (Array.isArray(data)) {
+        return data.map((m) => String(m).trim()).filter(Boolean);
+    }
+    if (typeof data === "string" && data.trim() !== "") {
+        return data.split(",").map((m) => m.trim()).filter(Boolean);
+    }
+    return [];
+};
+
+const getMemberTypeTagStyle = (mt) => {
+    const cleanMt = String(mt).toLowerCase();
+
+    const tagStyle = {
+        display: "inline-block",
+        fontSize: "11px",
+        fontWeight: "600",
+        padding: "2px 6px",
+        borderRadius: "4px",
+        whiteSpace: "nowrap"
+    };
+
+    if (cleanMt === "qa") {
+        tagStyle.background = "#ffedd5";
+        tagStyle.color = "#ea580c";
+    } else if (cleanMt === "qc") {
+        tagStyle.background = "#dcfce7";
+        tagStyle.color = "#16a34a";
+    } else {
+        tagStyle.background = "#e0f2fe";
+        tagStyle.color = "#0ea5e9";
+    }
+
+    return tagStyle;
+};
+
+/* ---------- On-screen message (toast) styles ---------- */
+const toastBaseStyle = {
+    position: "fixed",
+    top: "20px",
+    right: "20px",
+    zIndex: 999999,
+    minWidth: "260px",
+    maxWidth: "420px",
+    padding: "12px 16px",
+    borderRadius: "8px",
+    color: "#ffffff",
+    fontSize: "14px",
+    fontWeight: 600,
+    boxShadow: "0 6px 18px rgba(0,0,0,0.25)",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: "12px"
+};
+
+const toastColors = {
+    success: "#16a34a",
+    error: "#dc2626",
+    warning: "#d97706"
+};
+
+const toastIcons = {
+    success: "✅",
+    error: "❌",
+    warning: "⚠️"
+};
+
 const MasterDashboard = () => {
     const [activeTab, setActiveTab] = useState("create");
     const [users, setUsers] = useState([]);
-    const [toast, setToast] = useState({
-        message: "",
-        type: ""
-    });
+
+    // Screen par message
+    const [toast, setToast] = useState(null); // { type, text }
+    const toastTimerRef = useRef(null);
 
     const [name, setName] = useState("");
     const [emp_id, setEmpId] = useState("");
@@ -21,7 +96,8 @@ const MasterDashboard = () => {
     const [email, setEmail] = useState("");
     const [password, setPassword] = useState("");
     const [role, setRole] = useState("");
-    
+    const [submitting, setSubmitting] = useState(false);
+
     const [memberType, setMemberType] = useState([]);
     const [openCreateMemberType, setOpenCreateMemberType] = useState(false);
     const [openEditMemberType, setOpenEditMemberType] = useState(false);
@@ -38,82 +114,124 @@ const MasterDashboard = () => {
     const [openEditDomain, setOpenEditDomain] = useState(false);
     const [domains, setDomains] = useState([]);
 
+    // User list ka search aur Update Password modal ka search alag-alag
     const [searchTerm, setSearchTerm] = useState("");
+    const [passSearchTerm, setPassSearchTerm] = useState("");
 
-    const memberTypeOptions = ["QA", "QC", "Production"];
+    const showToast = useCallback((type, text) => {
+        if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
+        setToast({ type, text });
+        toastTimerRef.current = setTimeout(() => setToast(null), 3500);
+    }, []);
 
-    const filteredUsers = users.filter((u) =>
-        `${u.name} ${u.email} ${u.emp_id} ${u.role}`
+    useEffect(() => {
+        return () => {
+            if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
+        };
+    }, []);
+
+    const matchesSearch = (u, term) =>
+        `${u.name ?? ""} ${u.email ?? ""} ${u.emp_id ?? ""} ${u.role ?? ""}`
             .toLowerCase()
-            .includes(searchTerm.toLowerCase())
-    );
+            .includes((term || "").toLowerCase());
 
-    const getUsers = async () => {
+    const filteredUsers = users.filter((u) => matchesSearch(u, searchTerm));
+    const passFilteredUsers = users.filter((u) => matchesSearch(u, passSearchTerm));
+
+    const getUsers = useCallback(async () => {
         try {
             const res = await axios.get(`${API_BASE_URL}/api/auth/users`);
-            setUsers(res.data);
+            const data = Array.isArray(res.data) ? res.data : res.data?.data || [];
+            setUsers(data);
         } catch (err) {
             console.log(err);
+            showToast("error", "Users load nahi ho paye!");
         }
-    };
+    }, [showToast]);
+
+    // Pehle domains do alag effects se load ho rahe the aur ek dusre ko overwrite kar dete the.
+    // Ab ek hi jagah se, dono API ka merged data aata hai.
+    const loadDomains = useCallback(async () => {
+        const [masterRes, workRes] = await Promise.allSettled([
+            axios.get(`${API_BASE_URL}/api/master`),
+            axios.get(`${API_BASE_URL}/api/work/bydomain`)
+        ]);
+
+        const masterDomains =
+            masterRes.status === "fulfilled"
+                ? Object.keys(masterRes.value.data || {})
+                : [];
+
+        const workDomains =
+            workRes.status === "fulfilled" && Array.isArray(workRes.value.data)
+                ? workRes.value.data.map((d) => (typeof d === "string" ? d : d.domain))
+                : [];
+
+        // Case-insensitive duplicate hatao (pehla naam rakha jata hai)
+        const seen = new Set();
+        const unique = [];
+        [...masterDomains, ...workDomains].forEach((d) => {
+            const clean = (d || "").toString().trim();
+            const key = clean.toUpperCase();
+            if (clean && !seen.has(key)) {
+                seen.add(key);
+                unique.push(clean);
+            }
+        });
+
+        setDomains(unique);
+
+        if (masterRes.status === "rejected" && workRes.status === "rejected") {
+            console.log(masterRes.reason);
+            showToast("error", "Domains load nahi ho paye!");
+        }
+    }, [showToast]);
 
     useEffect(() => {
         getUsers();
-        fetchDomains();
-    }, []);
+        loadDomains();
+    }, [getUsers, loadDomains]);
 
+    // Dropdown ke bahar click karne par sab dropdown band ho jayein
     useEffect(() => {
-        const loadDomains = async () => {
-            try {
-                const masterRes = await axios.get(`${API_BASE_URL}/api/master`);
-                const workRes = await axios.get(`${API_BASE_URL}/api/work/bydomain`);
-
-                const masterDomains = Object.keys(masterRes.data || {});
-                const workDomains = (workRes.data || []).map((d) => d.domain);
-                const merged = [...masterDomains, ...workDomains];
-                const unique = [...new Set(merged)];
-
-                setDomains(unique);
-            } catch (err) {
-                console.log(err);
+        const handleClickOutside = (event) => {
+            if (!event.target.closest(".multi-select")) {
+                setOpenCreateMemberType(false);
+                setOpenEditMemberType(false);
+                setOpenCreateDomain(false);
+                setOpenEditDomain(false);
             }
         };
-
-        loadDomains();
+        document.addEventListener("click", handleClickOutside);
+        return () => document.removeEventListener("click", handleClickOutside);
     }, []);
 
-    const fetchDomains = async () => {
-        try {
-            const res = await axios.get(`${API_BASE_URL}/api/work/bydomain`);
-            const data = res.data || [];
-            const cleanDomains = data.map(d =>
-                typeof d === "string" ? d : d.domain
-            );
-            setDomains([...new Set(cleanDomains)]);
-        } catch (err) {
-            console.log(err);
-        }
-    };
+    /* ---------------- Create user ---------------- */
 
     const handleSubmit = async (e) => {
         e.preventDefault();
+        if (submitting) return;
 
+        // Agar user ne poora email (abc@gmail.com) likh diya ho to sirf "@" se pehle wala hissa lo
+        // (pehle "@" hata diya jata tha, jisse abcgmail.com@ecometrix.co.in ban jata tha)
+        const cleanEmail = email.trim().split("@")[0].trim();
+        if (!cleanEmail) {
+            showToast("warning", "Please enter a valid email!");
+            return;
+        }
+        const finalEmail = `${cleanEmail}${emailDomain}`.toLowerCase();
+
+        setSubmitting(true);
         try {
-            let cleanEmail = email.trim().replace(/@/g, "");
-            const finalEmail = `${cleanEmail}${emailDomain}`;
-
-            await axios.post(
-                `${API_BASE_URL}/api/auth/create-user`,
-                {
-                    name,
-                    emp_id,
-                    email: finalEmail,
-                    password,
-                    role,
-                    domain,
-                    memberType
-                }
-            );
+            await axios.post(`${API_BASE_URL}/api/auth/create-user`, {
+                name: name.trim(),
+                emp_id: emp_id.trim(),
+                email: finalEmail,
+                password,
+                role,
+                domain,
+                memberType
+            });
 
             await getUsers();
 
@@ -125,26 +243,18 @@ const MasterDashboard = () => {
             setMemberType([]);
             setDomain([]);
 
-            setToast({
-                message: "User Created Successfully ✔",
-                type: "success"
-            });
-
+            showToast("success", "User Created Successfully!");
         } catch (err) {
-            setToast({
-                message: "User Creation Failed ❌",
-                type: "error"
-            });
+            console.log(err);
+            showToast("error", err.response?.data?.message || "User Creation Failed!");
+        } finally {
+            setSubmitting(false);
         }
-
-        setTimeout(() => {
-            setToast({
-                message: "",
-                type: ""
-            });
-        }, 3000);
     };
 
+    /* ---------------- Delete user ---------------- */
+
+    // Confirm ke liye Swal ka screen dialog; success/error message toast mein aayega
     const deleteUser = (id) => {
         Swal.fire({
             title: "Are you sure?",
@@ -156,94 +266,83 @@ const MasterDashboard = () => {
             confirmButtonText: "Yes, Delete it!",
             cancelButtonText: "Cancel"
         }).then(async (result) => {
-            if (result.isConfirmed) {
-                try {
-                    await axios.delete(
-                        `${API_BASE_URL}/api/auth/delete-user/${id}`
-                    );
+            if (!result.isConfirmed) return;
 
-                    setUsers((prev) =>
-                        prev.filter((u) => (u.id || u._id) !== id)
-                    );
+            try {
+                await axios.delete(`${API_BASE_URL}/api/auth/delete-user/${id}`);
 
-                    Swal.fire(
-                        "Deleted!",
-                        "User has been deleted successfully ✔",
-                        "success"
-                    );
+                setUsers((prev) => prev.filter((u) => (u.id || u._id) !== id));
 
-                } catch (err) {
-                    Swal.fire(
-                        "Error!",
-                        "Delete failed ❌",
-                        "error"
-                    );
+                if (editingRowId === id) {
+                    setEditingRowId(null);
+                    setEditRowData({});
                 }
+
+                showToast("success", "User deleted successfully!");
+            } catch (err) {
+                console.log(err);
+                showToast("error", err.response?.data?.message || "Delete failed!");
             }
         });
     };
 
+    /* ---------------- Edit user ---------------- */
+
     const startEdit = (user) => {
-        let normalizedDomain = [];
-        if (Array.isArray(user.domain)) {
-            normalizedDomain = user.domain;
-        } else if (typeof user.domain === "string") {
-            normalizedDomain = user.domain.split(",").map(d => d.trim());
-        }
-
-        let normalizedMemberType = [];
-        if (Array.isArray(user.memberType)) {
-            normalizedMemberType = user.memberType;
-        } else if (typeof user.memberType === "string" && user.memberType.trim() !== "") {
-            normalizedMemberType = user.memberType.split(",").map(m => m.trim());
-        }
-
         setEditingRowId(user.id || user._id);
         setEditRowData({
             ...user,
-            domain: normalizedDomain,
-            memberType: normalizedMemberType
+            domain: toArray(user.domain),
+            memberType: toArray(user.memberType)
         });
+        setOpenEditMemberType(false);
+        setOpenEditDomain(false);
     };
 
     const cancelEdit = () => {
         setEditingRowId(null);
         setEditRowData({});
+        setOpenEditMemberType(false);
+        setOpenEditDomain(false);
     };
 
     const saveEdit = async (id) => {
-        try {
-            await axios.put(
-                `${API_BASE_URL}/api/auth/update-user/${id}`,
-                editRowData
-            );
-
-            await getUsers();
-
-            setToast({
-                message: "User Updated Successfully ✔",
-                type: "success"
-            });
-
-            cancelEdit();
-
-        } catch (err) {
-            setToast({
-                message: "Update Failed ❌",
-                type: "error"
-            });
+        if (!(editRowData.name || "").trim() || !(editRowData.emp_id || "").toString().trim() || !(editRowData.email || "").trim()) {
+            showToast("warning", "Name, ID and Email are required!");
+            return;
         }
 
-        setTimeout(() => {
-            setToast({ message: "", type: "" });
-        }, 3000);
+        // Pehle poora user object (id, password hash waghera sab) bhej diya jata tha.
+        // Ab sirf edit hone wali fields jayengi.
+        const payload = {
+            name: editRowData.name.trim(),
+            emp_id: editRowData.emp_id,
+            email: editRowData.email.trim(),
+            role: editRowData.role,
+            domain: toArray(editRowData.domain),
+            memberType: editRowData.role === "TeamMember" ? toArray(editRowData.memberType) : []
+        };
+
+        try {
+            await axios.put(`${API_BASE_URL}/api/auth/update-user/${id}`, payload);
+
+            await getUsers();
+            showToast("success", "User Updated Successfully!");
+            cancelEdit();
+        } catch (err) {
+            console.log(err);
+            showToast("error", err.response?.data?.message || "Update Failed!");
+        }
     };
+
+    /* ---------------- Update password ---------------- */
 
     const openPassModal = () => {
         setShowPassModal(true);
         setPassEditId(null);
         setNewPass("");
         setConfirmPass("");
+        setPassSearchTerm("");
     };
 
     const closePassModal = () => {
@@ -251,15 +350,16 @@ const MasterDashboard = () => {
         setPassEditId(null);
         setNewPass("");
         setConfirmPass("");
+        setPassSearchTerm("");
     };
 
     const savePassword = async () => {
         if (!passEditId) {
-            Swal.fire("Error", "Please select a user first!", "error");
+            showToast("warning", "Please select a user first!");
             return;
         }
         if (!newPass || newPass !== confirmPass) {
-            Swal.fire("Error", "Passwords do not match or are empty!", "error");
+            showToast("warning", "Passwords do not match or are empty!");
             return;
         }
 
@@ -268,38 +368,53 @@ const MasterDashboard = () => {
                 password: newPass
             });
 
-            Swal.fire("Success", "Password updated successfully ✔", "success");
+            showToast("success", "Password updated successfully!");
             closePassModal();
         } catch (err) {
             console.error(err);
-            Swal.fire("Error", "Failed to update password ❌", "error");
+            showToast("error", err.response?.data?.message || "Failed to update password!");
         }
-    };
-
-    const getMemberTypesArray = (mtData) => {
-        if (Array.isArray(mtData)) {
-            return mtData.map(m => String(m).trim()).filter(Boolean);
-        }
-        if (typeof mtData === "string" && mtData.trim() !== "") {
-            return mtData.split(",").map(m => m.trim()).filter(Boolean);
-        }
-        return [];
     };
 
     return (
         <div className="dashboard">
-            {toast.message && (
-                <div className={`toast ${toast.type}`}>
-                    {toast.message}
+            {/* ---------- Screen par success / error message ---------- */}
+            {toast && (
+                <div
+                    role="status"
+                    style={{
+                        ...toastBaseStyle,
+                        background: toastColors[toast.type] || toastColors.success
+                    }}
+                >
+                    <span>
+                        {toastIcons[toast.type]} {toast.text}
+                    </span>
+                    <button
+                        type="button"
+                        onClick={() => setToast(null)}
+                        title="Close"
+                        style={{
+                            background: "transparent",
+                            border: "none",
+                            color: "#ffffff",
+                            fontSize: "16px",
+                            cursor: "pointer",
+                            lineHeight: 1
+                        }}
+                    >
+                        ✕
+                    </button>
                 </div>
             )}
+
             <div className="mainContent">
 
                 <h1 className="mainTitle">Control Panel</h1>
                 <p className="mainDesc">Manage users and system access</p>
 
                 <div className="buttonContainer">
-                    <button className="updatePasswordBtn" onClick={openPassModal}>
+                    <button type="button" className="updatePasswordBtn" onClick={openPassModal}>
                         Update Password
                     </button>
                 </div>
@@ -391,6 +506,7 @@ const MasterDashboard = () => {
                                     setRole(e.target.value);
                                     if (e.target.value !== "TeamMember") {
                                         setMemberType([]);
+                                        setOpenCreateMemberType(false);
                                     }
                                 }}
                                 required
@@ -412,8 +528,8 @@ const MasterDashboard = () => {
                                             <span className="placeholder">Select Member Type</span>
                                         )}
 
-                                        {memberType.map((item, i) => (
-                                            <span className="tag" key={i}>
+                                        {memberType.map((item) => (
+                                            <span className="tag" key={item}>
                                                 {item}
                                                 <span
                                                     className="remove"
@@ -431,10 +547,10 @@ const MasterDashboard = () => {
                                     </div>
 
                                     {openCreateMemberType && (
-                                        <div className="dropdowned">
-                                            {memberTypeOptions.map((m, i) => (
+                                        <div className="dropdowned dropeddown">
+                                            {memberTypeOptions.map((m) => (
                                                 <div
-                                                    key={i}
+                                                    key={m}
                                                     className="option"
                                                     onClick={() => {
                                                         if (!memberType.includes(m)) {
@@ -460,8 +576,8 @@ const MasterDashboard = () => {
                                         <span className="placeholder">Select Domain</span>
                                     )}
 
-                                    {domain.map((item, i) => (
-                                        <span className="tag" key={i}>
+                                    {domain.map((item) => (
+                                        <span className="tag" key={item}>
                                             {item}
                                             <span
                                                 className="remove"
@@ -479,10 +595,10 @@ const MasterDashboard = () => {
                                 </div>
 
                                 {openCreateDomain && (
-                                    <div className="dropdowned">
-                                        {domains.map((d, i) => (
+                                    <div className="dropdowned dropeddown">
+                                        {domains.map((d) => (
                                             <div
-                                                key={i}
+                                                key={d}
                                                 className="option"
                                                 onClick={() => {
                                                     if (!domain.includes(d)) {
@@ -506,7 +622,9 @@ const MasterDashboard = () => {
                                 onChange={(e) => setPassword(e.target.value)}
                                 required
                             />
-                            <button type="submit">Create User</button>
+                            <button type="submit" disabled={submitting}>
+                                {submitting ? "Creating..." : "Create User"}
+                            </button>
                         </form>
                     </div>
                 )}
@@ -543,13 +661,23 @@ const MasterDashboard = () => {
                                 </thead>
 
                                 <tbody>
+                                    {filteredUsers.length === 0 && (
+                                        <tr>
+                                            <td colSpan="7" style={{ textAlign: "center", padding: "20px" }}>
+                                                No Users Found
+                                            </td>
+                                        </tr>
+                                    )}
+
                                     {filteredUsers.map((u, index) => {
                                         const id = u.id || u._id;
                                         const isEditing = editingRowId === id;
-                                        const memberTypesList = getMemberTypesArray(u.memberType);
+                                        const memberTypesList = toArray(u.memberType);
+                                        const editMemberTypes = toArray(editRowData.memberType);
+                                        const editDomains = toArray(editRowData.domain);
 
                                         return (
-                                            <tr key={id}>
+                                            <tr key={id ?? index}>
                                                 <td>{index + 1}</td>
 
                                                 <td>
@@ -566,35 +694,11 @@ const MasterDashboard = () => {
                                                     ) : (
                                                         <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: "4px" }}>
                                                             <span>{u.name}</span>
-                                                            {memberTypesList.map((mt, idx) => {
-                                                                const cleanMt = mt.toLowerCase();
-                                                                
-                                                                let tagStyle = {
-                                                                    display: "inline-block",
-                                                                    fontSize: "11px",
-                                                                    fontWeight: "600",
-                                                                    padding: "2px 6px",
-                                                                    borderRadius: "4px",
-                                                                    whiteSpace: "nowrap"
-                                                                };
-
-                                                                if (cleanMt === "qa") {
-                                                                    tagStyle.background = "#ffedd5";
-                                                                    tagStyle.color = "#ea580c";
-                                                                } else if (cleanMt === "qc") {
-                                                                    tagStyle.background = "#dcfce7";
-                                                                    tagStyle.color = "#16a34a";
-                                                                } else {
-                                                                    tagStyle.background = "#e0f2fe";
-                                                                    tagStyle.color = "#0ea5e9";
-                                                                }
-
-                                                                return (
-                                                                    <span key={idx} style={tagStyle}>
-                                                                        ({mt})
-                                                                    </span>
-                                                                );
-                                                            })}
+                                                            {memberTypesList.map((mt) => (
+                                                                <span key={mt} style={getMemberTypeTagStyle(mt)}>
+                                                                    ({mt})
+                                                                </span>
+                                                            ))}
                                                         </div>
                                                     )}
                                                 </td>
@@ -641,7 +745,7 @@ const MasterDashboard = () => {
                                                                     setEditRowData({
                                                                         ...editRowData,
                                                                         role: val,
-                                                                        memberType: val === "TeamMember" ? editRowData.memberType : []
+                                                                        memberType: val === "TeamMember" ? editMemberTypes : []
                                                                     });
                                                                 }}
                                                             >
@@ -657,21 +761,20 @@ const MasterDashboard = () => {
                                                                         className="multi-select-box"
                                                                         onClick={() => setOpenEditMemberType(!openEditMemberType)}
                                                                     >
-                                                                        {(!editRowData.memberType || getMemberTypesArray(editRowData.memberType).length === 0) && (
+                                                                        {editMemberTypes.length === 0 && (
                                                                             <span className="placeholder">Select Member Type</span>
                                                                         )}
 
-                                                                        {getMemberTypesArray(editRowData.memberType).map((item, i) => (
-                                                                            <span className="tag" key={i}>
+                                                                        {editMemberTypes.map((item) => (
+                                                                            <span className="tag" key={item}>
                                                                                 {item}
                                                                                 <span
                                                                                     className="remove"
                                                                                     onClick={(e) => {
                                                                                         e.stopPropagation();
-                                                                                        const currentArr = getMemberTypesArray(editRowData.memberType);
                                                                                         setEditRowData({
                                                                                             ...editRowData,
-                                                                                            memberType: currentArr.filter(m => m !== item)
+                                                                                            memberType: editMemberTypes.filter((m) => m !== item)
                                                                                         });
                                                                                     }}
                                                                                 >
@@ -683,17 +786,16 @@ const MasterDashboard = () => {
                                                                     </div>
 
                                                                     {openEditMemberType && (
-                                                                        <div className="dropeddown">
-                                                                            {memberTypeOptions.map((m, i) => (
+                                                                        <div className="dropdowned dropeddown">
+                                                                            {memberTypeOptions.map((m) => (
                                                                                 <div
-                                                                                    key={i}
+                                                                                    key={m}
                                                                                     className="option"
                                                                                     onClick={() => {
-                                                                                        const currentTypes = getMemberTypesArray(editRowData.memberType);
-                                                                                        if (!currentTypes.includes(m)) {
+                                                                                        if (!editMemberTypes.includes(m)) {
                                                                                             setEditRowData({
                                                                                                 ...editRowData,
-                                                                                                memberType: [...currentTypes, m]
+                                                                                                memberType: [...editMemberTypes, m]
                                                                                             });
                                                                                         }
                                                                                         setOpenEditMemberType(false);
@@ -719,44 +821,42 @@ const MasterDashboard = () => {
                                                                 className="multi-select-box"
                                                                 onClick={() => setOpenEditDomain(!openEditDomain)}
                                                             >
-                                                                {(!editRowData.domain || editRowData.domain.length === 0) && (
+                                                                {editDomains.length === 0 && (
                                                                     <span className="placeholder">Select Domain</span>
                                                                 )}
 
-                                                                {Array.isArray(editRowData.domain) &&
-                                                                    editRowData.domain.map((item, i) => (
-                                                                        <span className="tag" key={i}>
-                                                                            {item}
-                                                                            <span
-                                                                                className="remove"
-                                                                                onClick={(e) => {
-                                                                                    e.stopPropagation();
-                                                                                    setEditRowData({
-                                                                                        ...editRowData,
-                                                                                        domain: editRowData.domain.filter(d => d !== item)
-                                                                                    });
-                                                                                }}
-                                                                            >
-                                                                                ✖
-                                                                            </span>
+                                                                {editDomains.map((item) => (
+                                                                    <span className="tag" key={item}>
+                                                                        {item}
+                                                                        <span
+                                                                            className="remove"
+                                                                            onClick={(e) => {
+                                                                                e.stopPropagation();
+                                                                                setEditRowData({
+                                                                                    ...editRowData,
+                                                                                    domain: editDomains.filter((d) => d !== item)
+                                                                                });
+                                                                            }}
+                                                                        >
+                                                                            ✖
                                                                         </span>
-                                                                    ))
-                                                                }
+                                                                    </span>
+                                                                ))}
 
                                                                 <span className="arrow">▼</span>
                                                             </div>
 
                                                             {openEditDomain && (
-                                                                <div className="dropeddown">
-                                                                    {domains.map((d, i) => (
+                                                                <div className="dropdowned dropeddown">
+                                                                    {domains.map((d) => (
                                                                         <div
-                                                                            key={i}
+                                                                            key={d}
                                                                             className="option"
                                                                             onClick={() => {
-                                                                                if (!(editRowData.domain || []).includes(d)) {
+                                                                                if (!editDomains.includes(d)) {
                                                                                     setEditRowData({
                                                                                         ...editRowData,
-                                                                                        domain: [...(editRowData.domain || []), d]
+                                                                                        domain: [...editDomains, d]
                                                                                     });
                                                                                 }
                                                                                 setOpenEditDomain(false);
@@ -769,24 +869,22 @@ const MasterDashboard = () => {
                                                             )}
                                                         </div>
                                                     ) : (
-                                                        Array.isArray(u.domain)
-                                                            ? u.domain.join(", ")
-                                                            : typeof u.domain === "string"
-                                                                ? u.domain
-                                                                : "-"
+                                                        toArray(u.domain).length > 0
+                                                            ? toArray(u.domain).join(", ")
+                                                            : "-"
                                                     )}
                                                 </td>
 
                                                 <td className="action-td">
                                                     {isEditing ? (
                                                         <div className="action-btn-group">
-                                                            <button onClick={() => saveEdit(id)}>Save</button>
-                                                            <button onClick={cancelEdit}>Cancel</button>
+                                                            <button type="button" onClick={() => saveEdit(id)}>Save</button>
+                                                            <button type="button" onClick={cancelEdit}>Cancel</button>
                                                         </div>
                                                     ) : (
                                                         <div className="action-btn-group">
-                                                            <button onClick={() => startEdit(u)}>✎</button>
-                                                            <button onClick={() => deleteUser(id)}>✕</button>
+                                                            <button type="button" onClick={() => startEdit(u)}>✎</button>
+                                                            <button type="button" onClick={() => deleteUser(id)}>✕</button>
                                                         </div>
                                                     )}
                                                 </td>
@@ -802,9 +900,9 @@ const MasterDashboard = () => {
                 <UpdatePasswordModal
                     showPassModal={showPassModal}
                     closePassModal={closePassModal}
-                    filteredUsers={filteredUsers}
-                    searchTerm={searchTerm}
-                    setSearchTerm={setSearchTerm}
+                    filteredUsers={passFilteredUsers}
+                    searchTerm={passSearchTerm}
+                    setSearchTerm={setPassSearchTerm}
                     passEditId={passEditId}
                     setPassEditId={setPassEditId}
                     newPass={newPass}
