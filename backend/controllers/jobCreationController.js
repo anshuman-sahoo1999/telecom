@@ -3,6 +3,53 @@ const db = require("../config/db");
 const clean = (v) => (v !== undefined && v !== null ? v.toString().trim() : "");
 const normalize = (v) => clean(v).toUpperCase();
 
+// Region nikalne ke liye (workController jaisa hi stateCodes use hota hai)
+let stateData = {};
+try {
+  stateData = require("../stateCodes") || {};
+} catch (e) {
+  stateData = {};
+}
+
+const regionFromMarket = (market) => {
+  const raw = clean(market).toUpperCase();
+  if (!raw) return "";
+  for (const name of Object.keys(stateData)) {
+    const info = stateData[name] || {};
+    if (name.toUpperCase() === raw || clean(info.code).toUpperCase() === raw) {
+      return info.region || "";
+    }
+  }
+  return "";
+};
+
+// months column ke liye JSON text. SQL ke JSON_ARRAY() par nirbhar nahi
+// (text aur JSON dono type ke column me chalta hai). Month na ho to null (purana rahe).
+const monthsParam = (m) => (m ? JSON.stringify([m]) : null);
+
+// work_updates me nayi row: Report ke saare columns saath me (khaali text '' ke saath),
+// taaki koi NOT NULL column insert ko fail na kare aur Report me Region bhi aaye.
+const WORK_INSERT_SQL = `
+  INSERT INTO work_updates
+  (domain, state, region, job_id, months, receive_date, ecd_date, submission_date,
+   amdocs_qc, internal_qc, otp, sow, job_type, county, current_status,
+   production_engineers, qc_engineers, jobs_delivered, uom)
+  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '', '', '', '', '', '', 1, '{}')
+`;
+const workInsertParams = ({ domain, state, jobId, month, receiveDate, ecdDate, submissionDate, amdocsQc, internalQc, otp }) => [
+  domain || null,
+  state || null,
+  regionFromMarket(state) || "",
+  jobId,
+  JSON.stringify(month ? [month] : []),
+  receiveDate || null,
+  ecdDate || null,
+  submissionDate || null,
+  amdocsQc || null,
+  internalQc || null,
+  otp || null,
+];
+
 const monthNames = [
   "Jan", "Feb", "Mar", "Apr", "May", "Jun",
   "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"
@@ -135,7 +182,8 @@ exports.createJob = (req, res) => {
           UPDATE work_updates
           SET domain = COALESCE(NULLIF(?, ''), domain),
               state = COALESCE(NULLIF(?, ''), state),
-              months = CASE WHEN ? IS NOT NULL THEN JSON_ARRAY(?) ELSE months END,
+              region = COALESCE(NULLIF(region, ''), NULLIF(?, '')),
+              months = COALESCE(?, months),
               receive_date = COALESCE(?, receive_date),
               ecd_date = COALESCE(?, ecd_date),
               submission_date = COALESCE(?, submission_date),
@@ -145,7 +193,7 @@ exports.createJob = (req, res) => {
               updated_at = CURRENT_TIMESTAMP
           WHERE TRIM(job_id) = TRIM(?)
         `;
-        db.query(updateWorkSql, [cleanDomain, cleanMarket, cleanMonth, cleanMonth, finalReceiveDate, formattedEcdDate, formattedSubmissionDate, finalAmdocsQc, finalInternalQc, finalOtp, cleanJobId], (uwErr) => {
+        db.query(updateWorkSql, [cleanDomain, cleanMarket, regionFromMarket(cleanMarket), monthsParam(cleanMonth), finalReceiveDate, formattedEcdDate, formattedSubmissionDate, finalAmdocsQc, finalInternalQc, finalOtp, cleanJobId], (uwErr) => {
           if (uwErr) return res.status(500).json({ success: false, message: uwErr.message });
           return res.json({
             success: true,
@@ -154,11 +202,11 @@ exports.createJob = (req, res) => {
           });
         });
       } else {
-        const insertWorkSql = `
-          INSERT INTO work_updates (domain, state, job_id, months, receive_date, ecd_date, submission_date, amdocs_qc, internal_qc, otp, jobs_delivered, uom)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, '{}')
-        `;
-        db.query(insertWorkSql, [cleanDomain, cleanMarket, cleanJobId, JSON.stringify(cleanMonth ? [cleanMonth] : []), finalReceiveDate, formattedEcdDate, formattedSubmissionDate, finalAmdocsQc, finalInternalQc, finalOtp], (iwErr) => {
+        db.query(WORK_INSERT_SQL, workInsertParams({
+          domain: cleanDomain, state: cleanMarket, jobId: cleanJobId, month: cleanMonth,
+          receiveDate: finalReceiveDate, ecdDate: formattedEcdDate, submissionDate: formattedSubmissionDate,
+          amdocsQc: finalAmdocsQc, internalQc: finalInternalQc, otp: finalOtp
+        }), (iwErr) => {
           // Work insert fail ho to job_creation me akeli row (orphan) na bache
           if (iwErr) {
             if (newId) db.query("DELETE FROM job_creation WHERE id = ?", [newId], () => {});
@@ -324,7 +372,8 @@ exports.updateJob = (req, res) => {
             internal_qc = COALESCE(NULLIF(?, ''), internal_qc),
             domain = COALESCE(NULLIF(?, ''), domain),
             state = COALESCE(NULLIF(?, ''), state),
-            months = CASE WHEN ? IS NOT NULL THEN JSON_ARRAY(?) ELSE months END,
+            region = COALESCE(NULLIF(region, ''), NULLIF(?, '')),
+            months = COALESCE(?, months),
             receive_date = COALESCE(?, receive_date),
             ecd_date = COALESCE(?, ecd_date),
             submission_date = COALESCE(?, submission_date),
@@ -337,7 +386,8 @@ exports.updateJob = (req, res) => {
         [
           finalAmdocsQc, finalOtp, finalInternalQc,
           domain || null, market || null,
-          cleanMonth, cleanMonth,
+          regionFromMarket(market),
+          monthsParam(cleanMonth),
           finalReceiveDate, finalEcdDate, finalSubmissionDate,
           cleanNewJobId,
           wRows[0].id
@@ -410,18 +460,13 @@ exports.updateJob = (req, res) => {
 
         // work_updates me row na ho to hamesha banao (job_creation ho ya na ho), taaki Report me job dikhe
         if ((!wRows || wRows.length === 0) && cleanNewJobId && cleanNewJobId !== "-") {
-          const insertWorkSql = `
-            INSERT INTO work_updates (job_id, domain, state, amdocs_qc, otp, internal_qc, months, receive_date, ecd_date, submission_date, jobs_delivered, uom)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, '{}')
-          `;
           db.query(
-            insertWorkSql,
-            [
-              cleanNewJobId, domain || null, market || null,
-              finalAmdocsQc, finalOtp, finalInternalQc,
-              JSON.stringify(cleanMonth ? [cleanMonth] : []),
-              finalReceiveDate, finalEcdDate, finalSubmissionDate
-            ],
+            WORK_INSERT_SQL,
+            workInsertParams({
+              domain, state: market, jobId: cleanNewJobId, month: cleanMonth,
+              receiveDate: finalReceiveDate, ecdDate: finalEcdDate, submissionDate: finalSubmissionDate,
+              amdocsQc: finalAmdocsQc, internalQc: finalInternalQc, otp: finalOtp
+            }),
             (inErr) => {
               if (inErr) {
                 return res.status(500).json({ success: false, message: inErr.message });
@@ -566,13 +611,13 @@ exports.submitJob = (req, res) => {
           const updateWorkSync = `
             UPDATE work_updates
             SET submission_date = ?,
-                months = CASE WHEN ? IS NOT NULL THEN JSON_ARRAY(?) ELSE months END,
+                months = COALESCE(?, months),
                 updated_at = CURRENT_TIMESTAMP
             WHERE TRIM(job_id) = TRIM(?)
           `;
           return db.query(
             updateWorkSync,
-            [formattedSubmissionDate, cleanMonth, cleanMonth, cleanJobId],
+            [formattedSubmissionDate, monthsParam(cleanMonth), cleanJobId],
             (uErr) => (uErr ? fail(uErr) : done())
           );
         }
@@ -587,20 +632,12 @@ exports.submitJob = (req, res) => {
             const monthToStore = cleanMonth || cleanSingleMonth(jc.month);
 
             db.query(
-              `INSERT INTO work_updates (domain, state, job_id, months, receive_date, ecd_date, submission_date, amdocs_qc, internal_qc, otp, jobs_delivered, uom)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, '{}')`,
-              [
-                jc.domain || null,
-                jc.market || null,
-                cleanJobId,
-                JSON.stringify(monthToStore ? [monthToStore] : []),
-                jc.receiveDate || null,
-                jc.ecdDate || null,
-                formattedSubmissionDate,
-                jc.amdocsQc || null,
-                jc.internalQc || null,
-                jc.otp || null,
-              ],
+              WORK_INSERT_SQL,
+              workInsertParams({
+                domain: jc.domain, state: jc.market, jobId: cleanJobId, month: monthToStore,
+                receiveDate: jc.receiveDate, ecdDate: jc.ecdDate, submissionDate: formattedSubmissionDate,
+                amdocsQc: jc.amdocsQc, internalQc: jc.internalQc, otp: jc.otp
+              }),
               (iErr) => (iErr ? fail(iErr) : done())
             );
           }
