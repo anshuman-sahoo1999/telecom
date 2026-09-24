@@ -145,7 +145,8 @@ exports.createJob = (req, res) => {
               updated_at = CURRENT_TIMESTAMP
           WHERE TRIM(job_id) = TRIM(?)
         `;
-        db.query(updateWorkSql, [cleanDomain, cleanMarket, cleanMonth, cleanMonth, finalReceiveDate, formattedEcdDate, formattedSubmissionDate, finalAmdocsQc, finalInternalQc, finalOtp, cleanJobId], () => {
+        db.query(updateWorkSql, [cleanDomain, cleanMarket, cleanMonth, cleanMonth, finalReceiveDate, formattedEcdDate, formattedSubmissionDate, finalAmdocsQc, finalInternalQc, finalOtp, cleanJobId], (uwErr) => {
+          if (uwErr) return res.status(500).json({ success: false, message: uwErr.message });
           return res.json({
             success: true,
             message: "Job synced successfully with correct QC, OTP & month",
@@ -157,7 +158,12 @@ exports.createJob = (req, res) => {
           INSERT INTO work_updates (domain, state, job_id, months, receive_date, ecd_date, submission_date, amdocs_qc, internal_qc, otp, jobs_delivered, uom)
           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, '{}')
         `;
-        db.query(insertWorkSql, [cleanDomain, cleanMarket, cleanJobId, JSON.stringify(cleanMonth ? [cleanMonth] : []), finalReceiveDate, formattedEcdDate, formattedSubmissionDate, finalAmdocsQc, finalInternalQc, finalOtp], () => {
+        db.query(insertWorkSql, [cleanDomain, cleanMarket, cleanJobId, JSON.stringify(cleanMonth ? [cleanMonth] : []), finalReceiveDate, formattedEcdDate, formattedSubmissionDate, finalAmdocsQc, finalInternalQc, finalOtp], (iwErr) => {
+          // Work insert fail ho to job_creation me akeli row (orphan) na bache
+          if (iwErr) {
+            if (newId) db.query("DELETE FROM job_creation WHERE id = ?", [newId], () => {});
+            return res.status(500).json({ success: false, message: iwErr.message });
+          }
           return res.json({
             success: true,
             message: "Job inserted successfully into Work Controller with QC & OTP",
@@ -182,13 +188,30 @@ exports.getAllJobs = (req, res) => {
         return res.status(500).json({ success: false, message: errWU.message });
       }
 
+      // Job ID ko trim + lowercase karke compare karte hain (MySQL TRIM/=
+      // bhi case-insensitive hai), taaki "abc1" aur "ABC1" alag na ginein.
+      const keyOf = (v) => (v ? v.toString().trim().toLowerCase() : "");
+      const isValidKey = (k) => k !== "" && k !== "-";
+
+      // work_updates hi Report ka source hai. Jo job_creation row ki
+      // work_updates me koi row nahi hai (Report/upload se delete ho chuki),
+      // wo "orphan" hai -> Job History me nahi dikhni chahiye.
+      const workJobKeys = new Set();
+      wuRows.forEach((row) => {
+        const k = keyOf(row.jobId);
+        if (isValidKey(k)) workJobKeys.add(k);
+      });
+
       const jobMap = new Map();
 
       jcRows.forEach((row) => {
-        const jId = row.jobId ? row.jobId.toString().trim() : "";
-        if (!jId || jId === "-") return;
-        jobMap.set(jId, {
+        const k = keyOf(row.jobId);
+        if (!isValidKey(k)) return;
+        if (!workJobKeys.has(k)) return; // orphan row skip
+
+        jobMap.set(k, {
           ...row,
+          jobId: row.jobId.toString().trim(),
           id: row.id,
           jcId: row.id,
           workId: null,
@@ -196,12 +219,12 @@ exports.getAllJobs = (req, res) => {
       });
 
       wuRows.forEach((row) => {
-        const jId = row.jobId ? row.jobId.toString().trim() : "";
-        if (!jId || jId === "-") return;
+        const k = keyOf(row.jobId);
+        if (!isValidKey(k)) return;
 
-        if (jobMap.has(jId)) {
-          const existing = jobMap.get(jId);
-          jobMap.set(jId, {
+        if (jobMap.has(k)) {
+          const existing = jobMap.get(k);
+          jobMap.set(k, {
             ...existing,
 
             domain: row.domain || existing.domain,
@@ -216,8 +239,9 @@ exports.getAllJobs = (req, res) => {
             workId: row.id,
           });
         } else {
-          jobMap.set(jId, {
+          jobMap.set(k, {
             ...row,
+            jobId: row.jobId.toString().trim(),
             id: row.id,
             jcId: null,
             workId: row.id,
