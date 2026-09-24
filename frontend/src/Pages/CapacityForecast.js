@@ -147,8 +147,9 @@ export default function CapacityForecast() {
 
   const handleCustomSubmit = async (e) => {
     e.preventDefault();
-    if (!formData.capacity || !formData.forecast || !formData.inflow) {
-      alert("Please fill out capacity, forecast, and inflow fields!");
+    // Only Month and Domain are mandatory. Capacity, Forecast, Inflow and UOM fields are optional.
+    if (!formData.month || !formData.domain) {
+      alert("Please select Month and Domain!");
       return;
     }
 
@@ -160,9 +161,9 @@ export default function CapacityForecast() {
     const payloadData = {
       month: formData.month,
       domain: formData.domain,
-      capacity: Number(formData.capacity),
-      forecast: Number(formData.forecast),
-      inflow: Number(formData.inflow),
+      capacity: Number(formData.capacity || 0),
+      forecast: Number(formData.forecast || 0),
+      inflow: Number(formData.inflow || 0),
       uom: formattedUom
     };
 
@@ -223,12 +224,17 @@ export default function CapacityForecast() {
       });
     }
 
+    if (!inlineData.month) {
+      alert("Please select Month!");
+      return;
+    }
+
     const payloadData = {
       month: inlineData.month,
       domain: row.domain,
-      capacity: Number(inlineData.capacity),
-      forecast: Number(inlineData.forecast),
-      inflow: Number(inlineData.inflow),
+      capacity: Number(inlineData.capacity || 0),
+      forecast: Number(inlineData.forecast || 0),
+      inflow: Number(inlineData.inflow || 0),
       uom: formattedUom
     };
 
@@ -405,14 +411,14 @@ export default function CapacityForecast() {
 
       <form className="img-form-wrapper" onSubmit={handleCustomSubmit}>
         <div className="img-field-group">
-          <label>Choose Month & Year</label>
-          <select name="month" value={formData.month} onChange={handleCustomChange}>
+          <label>Choose Month & Year <span style={{ color: "red" }}>*</span></label>
+          <select name="month" value={formData.month} onChange={handleCustomChange} required>
             {generatedMonths.map(m => <option key={m} value={m}>{m}</option>)}
           </select>
         </div>
 
         <div className="img-field-group">
-          <label>Choose Domain</label>
+          <label>Choose Domain <span style={{ color: "red" }}>*</span></label>
           <select name="domain" value={formData.domain} onChange={handleCustomChange} required>
             <option value="">Select Domain</option>
             {mergedDomains.map((d) => (
