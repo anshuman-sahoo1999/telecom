@@ -2,11 +2,51 @@ const db = require("../config/db");
 
 const clean = (v) => (v !== undefined && v !== null ? v.toString().trim() : "");
 const normalize = (v) => clean(v).toUpperCase();
+const monthNames = [
+  "Jan", "Feb", "Mar", "Apr", "May", "Jun",
+  "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"
+];
+const monthNameToIndex = monthNames.reduce((acc, m, idx) => {
+  acc[m.toLowerCase()] = idx;
+  return acc;
+}, {});
+const fullMonthNameToIndex = [
+  "january", "february", "march", "april", "may", "june",
+  "july", "august", "september", "october", "november", "december"
+].reduce((acc, m, idx) => {
+  acc[m] = idx;
+  return acc;
+}, {});
 
 const cleanSingleMonth = (m) => {
-  const str = clean(m);
-  if (!str) return null;
-  return str; 
+  let strVal = clean(m);
+  if (!strVal) return null;
+
+  if (/^[A-Za-z]{3},\d{4}$/.test(strVal)) return strVal;
+
+  let match = strVal.match(/^(\d{4})-(\d{1,2})(?:-\d{1,2})?$/);
+  if (match) {
+    const monthIdx = Number(match[2]) - 1;
+    if (monthIdx >= 0 && monthIdx <= 11) return `${monthNames[monthIdx]},${match[1]}`;
+  }
+
+  match = strVal.match(/^(\d{1,2})[-/](\d{4})$/);
+  if (match) {
+    const monthIdx = Number(match[1]) - 1;
+    if (monthIdx >= 0 && monthIdx <= 11) return `${monthNames[monthIdx]},${match[2]}`;
+  }
+
+  match = strVal.match(/^([A-Za-z]+)[\s\-/,]+(\d{4})$/);
+  if (match) {
+    const key = match[1].toLowerCase();
+    const monthIdx = key.length === 3 ? monthNameToIndex[key] : fullMonthNameToIndex[key];
+    if (monthIdx !== undefined) return `${monthNames[monthIdx]},${match[2]}`;
+  }
+
+  const d = new Date(strVal);
+  if (!isNaN(d.getTime())) return `${monthNames[d.getMonth()]},${d.getFullYear()}`;
+
+  return strVal;
 };
 
 // ============================
@@ -58,19 +98,22 @@ exports.createJob = (req, res) => {
             receiveDate = COALESCE(?, receiveDate), 
             ecdDate = COALESCE(?, ecdDate), 
             submissionDate = COALESCE(?, submissionDate),
+            otp = COALESCE(NULLIF(?, ''), otp),
+            amdocsQc = COALESCE(NULLIF(?, ''), amdocsQc),
+            internalQc = COALESCE(NULLIF(?, ''), internalQc),
             updated_at = CURRENT_TIMESTAMP
         WHERE TRIM(jobId) = TRIM(?)
       `;
-      db.query(updateSql, [cleanDomain, market, cleanMonth, finalReceiveDate, formattedEcdDate, formattedSubmissionDate, cleanJobId], (upErr) => {
+      db.query(updateSql, [cleanDomain, market, cleanMonth, finalReceiveDate, formattedEcdDate, formattedSubmissionDate, finalOtp, finalAmdocsQc, finalInternalQc, cleanJobId], (upErr) => {
         if (upErr) return res.status(500).json({ success: false, message: upErr.message });
         syncToWorkController();
       });
     } else {
       const insertSql = `
-        INSERT INTO job_creation (domain, market, jobId, month, receiveDate, ecdDate, submissionDate)
-        VALUES (?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO job_creation (domain, market, jobId, month, receiveDate, ecdDate, submissionDate, otp, amdocsQc, internalQc)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `;
-      db.query(insertSql, [cleanDomain, market, cleanJobId, cleanMonth, finalReceiveDate, formattedEcdDate, formattedSubmissionDate], (inErr, inResult) => {
+      db.query(insertSql, [cleanDomain, market, cleanJobId, cleanMonth, finalReceiveDate, formattedEcdDate, formattedSubmissionDate, finalOtp, finalAmdocsQc, finalInternalQc], (inErr, inResult) => {
         if (inErr) return res.status(500).json({ success: false, message: inErr.message });
         syncToWorkController(inResult.insertId);
       });
@@ -131,7 +174,7 @@ exports.createJob = (req, res) => {
 // GET ALL JOBS
 // ============================
 exports.getAllJobs = (req, res) => {
-  const queryJC = "SELECT id, jobId, domain, market, month, receiveDate, ecdDate, submissionDate, updated_at FROM job_creation";
+  const queryJC = "SELECT id, jobId, domain, market, month, receiveDate, ecdDate, submissionDate, otp, amdocsQc, internalQc, updated_at FROM job_creation";
   const queryWU = "SELECT id, job_id AS jobId, domain, state AS market, receive_date AS receiveDate, ecd_date AS ecdDate, submission_date AS submissionDate, amdocs_qc, internal_qc, otp, updated_at FROM work_updates WHERE job_id IS NOT NULL AND job_id != '-' AND job_id != ''";
 
   db.query(queryJC, (errJC, jcRows) => {
@@ -145,24 +188,43 @@ exports.getAllJobs = (req, res) => {
 
       const jobMap = new Map();
 
-      [...jcRows, ...wuRows].forEach(row => {
+      jcRows.forEach((row) => {
         const jId = row.jobId ? row.jobId.toString().trim() : "";
-        if (jId && jId !== "-") {
-          if (jobMap.has(jId)) {
-            const existing = jobMap.get(jId);
-            jobMap.set(jId, {
-              ...existing,
-              ...row,
-              domain: row.domain || existing.domain,
-              submissionDate: row.submissionDate || existing.submissionDate,
-              receiveDate: row.receiveDate || existing.receiveDate,
-              amdocs_qc: row.amdocs_qc || existing.amdocs_qc,
-              internal_qc: row.internal_qc || existing.internal_qc,
-              otp: row.otp || existing.otp
-            });
-          } else {
-            jobMap.set(jId, row);
-          }
+        if (!jId || jId === "-") return;
+        jobMap.set(jId, {
+          ...row,
+          id: row.id,
+          jcId: row.id,
+          workId: null,
+        });
+      });
+
+      wuRows.forEach((row) => {
+        const jId = row.jobId ? row.jobId.toString().trim() : "";
+        if (!jId || jId === "-") return;
+
+        if (jobMap.has(jId)) {
+          const existing = jobMap.get(jId);
+          jobMap.set(jId, {
+            ...existing,
+            domain: row.domain || existing.domain,
+            market: row.market || existing.market,
+            submissionDate: row.submissionDate || existing.submissionDate,
+            receiveDate: row.receiveDate || existing.receiveDate,
+            ecdDate: row.ecdDate || existing.ecdDate,
+            amdocs_qc: row.amdocs_qc || existing.amdocs_qc,
+            internal_qc: row.internal_qc || existing.internal_qc,
+            otp: row.otp || existing.otp,
+            updated_at: row.updated_at || existing.updated_at,
+            workId: row.id, 
+          });
+        } else {
+          jobMap.set(jId, {
+            ...row,
+            id: row.id,
+            jcId: null,
+            workId: row.id,
+          });
         }
       });
 
@@ -174,87 +236,180 @@ exports.getAllJobs = (req, res) => {
 // ============================
 // UPDATE JOB
 // ============================
+
 exports.updateJob = (req, res) => {
-  const { 
-    internalQc, internal_qc, 
-    amdocsQc, amdocs_qc, 
-    otp, internalOtp, 
-    domain, 
-    market, 
-    receiveDate, receive_date, 
-    ecdDate, ecd_date, 
-    submissionDate, submission_date, 
+  const {
+    internalQc, internal_qc,
+    amdocsQc, amdocs_qc,
+    otp, internalOtp,
+    domain,
+    market,
+    receiveDate, receive_date,
+    ecdDate, ecd_date,
+    submissionDate, submission_date,
     month,
-    jobId 
+    jobId,
+    newJobId,
+    jcId,
+    workId
   } = req.body;
-  
-  const paramId = clean(req.params.id); 
-  const requestedJobId = clean(jobId);
+
+  const paramId = clean(req.params.id);
+  const requestedJobId = clean(jobId) || paramId;
+  const cleanNewJobId = clean(newJobId) || requestedJobId;
 
   const finalInternalQc = internalQc !== undefined ? internalQc : (internal_qc || null);
   const finalAmdocsQc = amdocsQc !== undefined ? amdocsQc : (amdocs_qc || null);
   const finalOtp = otp || internalOtp || null;
   const cleanMonth = cleanSingleMonth(month);
+  const finalReceiveDate = (receiveDate || receive_date) || null;
+  const finalEcdDate = (ecdDate || ecd_date) || null;
+  const finalSubmissionDate = (submissionDate || submission_date) || null;
 
-  if (!paramId && !requestedJobId) {
+  const cleanJcId = clean(jcId);
+  const cleanWorkId = clean(workId);
+
+  if (!paramId && !requestedJobId && !cleanJcId && !cleanWorkId) {
     return res.status(400).json({ success: false, message: "A row ID or Job ID is required for updating." });
   }
 
-  db.query(`SELECT id, job_id FROM work_updates WHERE id = ? OR TRIM(job_id) = TRIM(?) LIMIT 1`, [paramId, requestedJobId], (wErr, wRows) => {
+  const findWorkSql = cleanWorkId
+    ? `SELECT id, job_id FROM work_updates WHERE id = ? LIMIT 1`
+    : `SELECT id, job_id FROM work_updates WHERE TRIM(job_id) = TRIM(?) LIMIT 1`;
+  const findWorkParam = cleanWorkId || requestedJobId;
+
+  db.query(findWorkSql, [findWorkParam], (wErr, wRows) => {
     if (wErr) {
       return res.status(500).json({ success: false, message: wErr.message });
     }
 
-    if (wRows && wRows.length > 0) {
+    const updateWorkIfExists = (cb) => {
+      if (!wRows || wRows.length === 0) return cb();
       const updateWorkSql = `
         UPDATE work_updates
         SET amdocs_qc = COALESCE(NULLIF(?, ''), amdocs_qc),
             otp = COALESCE(NULLIF(?, ''), otp),
             internal_qc = COALESCE(NULLIF(?, ''), internal_qc),
+            domain = COALESCE(NULLIF(?, ''), domain),
+            state = COALESCE(NULLIF(?, ''), state),
+            months = CASE WHEN ? IS NOT NULL THEN JSON_ARRAY(?) ELSE months END,
+            receive_date = COALESCE(?, receive_date),
+            ecd_date = COALESCE(?, ecd_date),
+            submission_date = COALESCE(?, submission_date),
             job_id = COALESCE(NULLIF(?, ''), job_id),
             updated_at = CURRENT_TIMESTAMP
         WHERE id = ?
       `;
-      db.query(updateWorkSql, [finalAmdocsQc, finalOtp, finalInternalQc, requestedJobId, wRows[0].id], (upWerr) => {
-        if (upWerr) {
-          return res.status(500).json({ success: false, message: upWerr.message });
-        }
-        return res.json({ success: true, message: "Work updates table updated successfully with QC and OTP." });
-      });
-    } else {
-      db.query(`SELECT id FROM job_creation WHERE id = ? LIMIT 1`, [paramId], (jErr, jRows) => {
-        if (jErr) {
-          return res.status(500).json({ success: false, message: jErr.message });
-        }
+      db.query(
+        updateWorkSql,
+        [
+          finalAmdocsQc, finalOtp, finalInternalQc,
+          domain || null, market || null,
+          cleanMonth, cleanMonth,
+          finalReceiveDate, finalEcdDate, finalSubmissionDate,
+          cleanNewJobId,
+          wRows[0].id
+        ],
+        (upWerr) => cb(upWerr)
+      );
+    };
 
+    // Step 2: job_creation ko strictly jcId (agar mila) ya jobId se dhoondo
+    const findJcSql = cleanJcId
+      ? `SELECT id FROM job_creation WHERE id = ? LIMIT 1`
+      : `SELECT id FROM job_creation WHERE TRIM(jobId) = TRIM(?) LIMIT 1`;
+    const findJcParam = cleanJcId || requestedJobId;
+
+    db.query(findJcSql, [findJcParam], (jErr, jRows) => {
+      if (jErr) {
+        return res.status(500).json({ success: false, message: jErr.message });
+      }
+
+      const upsertJc = (cb) => {
         if (jRows && jRows.length > 0) {
           const updateJcSql = `
             UPDATE job_creation
             SET jobId = COALESCE(NULLIF(?, ''), jobId),
+                domain = COALESCE(NULLIF(?, ''), domain),
+                market = COALESCE(NULLIF(?, ''), market),
                 month = COALESCE(?, month),
+                receiveDate = COALESCE(?, receiveDate),
+                ecdDate = COALESCE(?, ecdDate),
+                submissionDate = COALESCE(?, submissionDate),
+                otp = COALESCE(NULLIF(?, ''), otp),
+                amdocsQc = COALESCE(NULLIF(?, ''), amdocsQc),
+                internalQc = COALESCE(NULLIF(?, ''), internalQc),
                 updated_at = CURRENT_TIMESTAMP
             WHERE id = ?
           `;
-          db.query(updateJcSql, [requestedJobId, cleanMonth, paramId], (upJerr) => {
-            if (upJerr) {
-              return res.status(500).json({ success: false, message: upJerr.message });
-            }
-            return res.json({ success: true, message: "Job creation updated successfully." });
-          });
-        } else {
-          const insertWorkSql = `
-            INSERT INTO work_updates (job_id, amdocs_qc, otp, internal_qc, jobs_delivered, uom)
-            VALUES (?, ?, ?, ?, 1, '{}')
+          db.query(
+            updateJcSql,
+            [
+              cleanNewJobId, domain || null, market || null, cleanMonth,
+              finalReceiveDate, finalEcdDate, finalSubmissionDate,
+              finalOtp, finalAmdocsQc, finalInternalQc,
+              jRows[0].id
+            ],
+            (upJerr) => cb(upJerr)
+          );
+        } else if (cleanNewJobId && cleanNewJobId !== "-") {
+          const insertJcSql = `
+            INSERT INTO job_creation (domain, market, jobId, month, receiveDate, ecdDate, submissionDate, otp, amdocsQc, internalQc)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
           `;
-          db.query(insertWorkSql, [requestedJobId || "UNKNOWN", finalAmdocsQc, finalOtp, finalInternalQc], (inErr) => {
-            if (inErr) {
-              return res.status(500).json({ success: false, message: inErr.message });
-            }
-            return res.json({ success: true, message: "Record created and updated successfully with QC & OTP." });
-          });
+          db.query(
+            insertJcSql,
+            [
+              domain || null, market || null, cleanNewJobId, cleanMonth,
+              finalReceiveDate, finalEcdDate, finalSubmissionDate,
+              finalOtp, finalAmdocsQc, finalInternalQc
+            ],
+            (inJerr) => cb(inJerr)
+          );
+        } else {
+          cb(null);
         }
+      };
+
+      updateWorkIfExists((upWerr) => {
+        if (upWerr) {
+          return res.status(500).json({ success: false, message: upWerr.message });
+        }
+
+        if ((!wRows || wRows.length === 0) && (!jRows || jRows.length === 0) && cleanNewJobId && cleanNewJobId !== "-") {
+          const insertWorkSql = `
+            INSERT INTO work_updates (job_id, domain, state, amdocs_qc, otp, internal_qc, months, receive_date, ecd_date, submission_date, jobs_delivered, uom)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, '{}')
+          `;
+          db.query(
+            insertWorkSql,
+            [
+              cleanNewJobId, domain || null, market || null,
+              finalAmdocsQc, finalOtp, finalInternalQc,
+              JSON.stringify(cleanMonth ? [cleanMonth] : []),
+              finalReceiveDate, finalEcdDate, finalSubmissionDate
+            ],
+            (inErr) => {
+              if (inErr) {
+                return res.status(500).json({ success: false, message: inErr.message });
+              }
+              upsertJc((upJerr) => {
+                if (upJerr) return res.status(500).json({ success: false, message: upJerr.message });
+                return res.json({ success: true, message: "Record created and synced successfully." });
+              });
+            }
+          );
+          return;
+        }
+
+        upsertJc((upJerr) => {
+          if (upJerr) {
+            return res.status(500).json({ success: false, message: upJerr.message });
+          }
+          return res.json({ success: true, message: "Job updated and synced successfully in both Job History and Report." });
+        });
       });
-    }
+    });
   });
 };
 
@@ -262,31 +417,66 @@ exports.updateJob = (req, res) => {
 // DELETE JOB
 // ============================
 exports.deleteJob = (req, res) => {
-  const rowId = req.params.id;
+  const rowId = clean(req.params.id);
   const requestedJobId = clean(req.query.jobId);
+  const jcId = clean(req.query.jcId);
+  const workId = clean(req.query.workId);
 
-  const findJobSql = `
-    SELECT jobId as jcJobId, NULL as workJobId FROM job_creation WHERE id = ?
-    UNION
-    SELECT NULL as jcJobId, job_id as workJobId FROM work_updates WHERE id = ?
-  `;
+  const findJcSql = jcId
+    ? `SELECT jobId FROM job_creation WHERE id = ? LIMIT 1`
+    : `SELECT jobId FROM job_creation WHERE TRIM(jobId) = TRIM(?) LIMIT 1`;
+  const findJcParam = jcId || requestedJobId || rowId;
 
-  db.query(findJobSql, [rowId, rowId], (err, rows) => {
-    let targetJobId = requestedJobId;
-    
-    if (!err && rows && rows.length > 0) {
-      targetJobId = rows[0].jcJobId || rows[0].workJobId || requestedJobId;
-    }
+  const findWorkSql = workId
+    ? `SELECT job_id FROM work_updates WHERE id = ? LIMIT 1`
+    : `SELECT job_id FROM work_updates WHERE TRIM(job_id) = TRIM(?) LIMIT 1`;
+  const findWorkParam = workId || requestedJobId || rowId;
 
-    db.query("DELETE FROM job_creation WHERE id = ? OR (TRIM(jobId) = TRIM(?))", [rowId, targetJobId || ""], () => {
-      db.query("DELETE FROM work_updates WHERE id = ? OR (TRIM(job_id) = TRIM(?))", [rowId, targetJobId || ""], (err2) => {
-        if (err2) {
-          return res.status(500).json({ success: false, message: err2.message });
+  db.query(findJcSql, [findJcParam], (jcErr, jcRows) => {
+    db.query(findWorkSql, [findWorkParam], (wErr, wRows) => {
+      const jcJobId = (!jcErr && jcRows && jcRows[0]) ? jcRows[0].jobId : "";
+      const workJobId = (!wErr && wRows && wRows[0]) ? wRows[0].job_id : "";
+      // final jobId: jo bhi mile use lo, taaki dusri table se bhi matching row mit jaaye
+      const targetJobId = requestedJobId || jcJobId || workJobId || "";
+
+      const deleteFromJc = (cb) => {
+        if (jcId) {
+          db.query("DELETE FROM job_creation WHERE id = ?", [jcId], cb);
+        } else if (targetJobId) {
+          db.query("DELETE FROM job_creation WHERE TRIM(jobId) = TRIM(?)", [targetJobId], cb);
+        } else if (rowId) {
+          // Backward-compat: purane frontend calls jo sirf plain rowId bhejte hain
+          db.query("DELETE FROM job_creation WHERE id = ?", [rowId], cb);
+        } else {
+          cb(null);
         }
+      };
 
-        return res.json({
-          success: true,
-          message: "Row and related data deleted successfully from both tables",
+      const deleteFromWork = (cb) => {
+        if (workId) {
+          db.query("DELETE FROM work_updates WHERE id = ?", [workId], cb);
+        } else if (targetJobId) {
+          db.query("DELETE FROM work_updates WHERE TRIM(job_id) = TRIM(?)", [targetJobId], cb);
+        } else if (rowId) {
+          db.query("DELETE FROM work_updates WHERE id = ?", [rowId], cb);
+        } else {
+          cb(null);
+        }
+      };
+
+      deleteFromJc((err1) => {
+        if (err1) {
+          return res.status(500).json({ success: false, message: err1.message });
+        }
+        deleteFromWork((err2) => {
+          if (err2) {
+            return res.status(500).json({ success: false, message: err2.message });
+          }
+
+          return res.json({
+            success: true,
+            message: "Row and related data deleted successfully from both tables",
+          });
         });
       });
     });
