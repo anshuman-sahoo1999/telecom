@@ -1,5 +1,5 @@
 import { API_BASE_URL } from "../config";
-import React, { useEffect, useState, useRef } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import axios from "axios";
 import jsPDF from "jspdf";
 import html2canvas from "html2canvas";
@@ -9,7 +9,190 @@ import "../style/report.css";
 import { ComposableMap, Geographies, Geography } from "react-simple-maps";
 import geoData from "../us-states.json";
 import { geoCentroid } from "d3-geo";
-       
+
+/* =====================================================
+   Helper functions / constants (component ke bahar)
+   ===================================================== */
+
+const pad2 = (n) => String(n).padStart(2, "0");
+
+// Date ko "YYYY-MM-DD" (date input wale format) mein badalta hai.
+// - Already "YYYY-MM-DD" ho to seedha wahi (timezone ka jhanjhat nahi)
+// - Warna local timezone se nikalta hai
+// (Pehle yahan "YYYY-DD-MM" ban raha tha, jo galat tha)
+const toDateKey = (value) => {
+  if (!value) return "";
+  if (typeof value === "string" && /^\d{4}-\d{2}-\d{2}$/.test(value.trim())) {
+    return value.trim();
+  }
+  const d = new Date(value);
+  if (isNaN(d.getTime())) return "";
+  return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
+};
+
+const parseDate = (d) => {
+  if (!d) return null;
+  if (d instanceof Date && !isNaN(d.getTime())) return d;
+
+  try {
+    const parsed = new Date(d);
+    return isNaN(parsed.getTime()) ? null : parsed;
+  } catch {
+    return null;
+  }
+};
+
+const formatDateOnly = (date) => {
+  const d = parseDate(date);
+  if (!d) return "-";
+
+  try {
+    return d.toLocaleDateString("en-IN", {
+      timeZone: "Asia/Kolkata",
+      day: "2-digit",
+      month: "short",
+      year: "numeric",
+    });
+  } catch {
+    return "-";
+  }
+};
+
+const formatArrayOrString = (val) => {
+  if (!val) return "-";
+  if (Array.isArray(val)) {
+    return val.length > 0 ? val.join(" | ") : "-";
+  }
+  return val;
+};
+
+const formatUOM = (uom) => {
+  if (!uom) return "-";
+  if (typeof uom === "string") {
+    return uom;
+  }
+  if (typeof uom === "object") {
+    const entries = Object.entries(uom);
+    if (entries.length === 0) return "-";
+
+    return entries
+      .map(([key, value]) => `${key}: ${value || 0}`)
+      .join(" | ");
+  }
+  return "-";
+};
+
+// Table mein dikhne wale placeholder ("-", "N/A") ko edit box mein khaali dikhao,
+// warna save karne par "-" / "N/A" database mein chala jata tha
+const fromDisplay = (v) => {
+  if (v === undefined || v === null) return "";
+  if (v === "-" || v === "N/A") return "";
+  return v;
+};
+
+// Edit box ka text wapas list mein badalta hai (agar original data list tha)
+const toPayloadList = (text, wasArray) => {
+  const t = (text || "").toString().trim();
+  if (!wasArray) return t;
+  return t.split(/\s*[|,]\s*/).filter(Boolean);
+};
+
+const normKey = (s) => (s || "").toString().trim().toLowerCase();
+
+const shortNames = {
+  Alabama: "AL", Alaska: "AK", Arizona: "AZ", Arkansas: "AR",
+  California: "CA", Colorado: "CO", Connecticut: "CT", Delaware: "DE",
+  Florida: "FL", Georgia: "GA", Hawaii: "HI", Idaho: "ID",
+  Illinois: "IL", Indiana: "IN", Iowa: "IA", Kansas: "KS",
+  Kentucky: "KY", Louisiana: "LA", Maine: "ME", Maryland: "MD",
+  Massachusetts: "MA", Michigan: "MI", Minnesota: "MN", Mississippi: "MS",
+  Missouri: "MO", Montana: "MT", Nebraska: "NE", Nevada: "NV",
+  "New Hampshire": "NH", "New Jersey": "NJ", "New Mexico": "NM", "New York": "NY",
+  "North Carolina": "NC", "North Dakota": "ND", Ohio: "OH", Oklahoma: "OK",
+  Oregon: "OR", Pennsylvania: "PA", "Rhode Island": "RI", "South Carolina": "SC",
+  "South Dakota": "SD", Tennessee: "TN", Texas: "TX", Utah: "UT",
+  Vermont: "VT", Virginia: "VA", Washington: "WA", "West Virginia": "WV",
+  Wisconsin: "WI", Wyoming: "WY", "District of Columbia": "DC"
+};
+
+const mapColors = [
+  "#738F52", "#9ACD32", "#78BE21", "#32CD32",
+  "#90EE90", "#00FF00", "#66FF00", "#008000", "#006400"
+];
+
+const allStates = [...new Set(geoData.features.map((f) => f.properties.name))];
+
+const getStoredUser = () => {
+  try {
+    return JSON.parse(localStorage.getItem("user")) || {};
+  } catch {
+    return {};
+  }
+};
+
+/* ---------- On-screen message (toast) + confirm box styles ---------- */
+const toastBaseStyle = {
+  position: "fixed",
+  top: "20px",
+  right: "20px",
+  zIndex: 999999,
+  minWidth: "260px",
+  maxWidth: "420px",
+  padding: "12px 16px",
+  borderRadius: "8px",
+  color: "#ffffff",
+  fontSize: "14px",
+  fontWeight: 600,
+  boxShadow: "0 6px 18px rgba(0,0,0,0.25)",
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "space-between",
+  gap: "12px",
+};
+
+const toastColors = {
+  success: "#16a34a",
+  error: "#dc2626",
+  warning: "#d97706",
+};
+
+const toastIcons = {
+  success: "✅",
+  error: "❌",
+  warning: "⚠️",
+};
+
+const confirmOverlayStyle = {
+  position: "fixed",
+  inset: 0,
+  background: "rgba(0,0,0,0.45)",
+  zIndex: 999998,
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
+};
+
+const confirmModalStyle = {
+  background: "#ffffff",
+  borderRadius: "10px",
+  padding: "22px 24px",
+  width: "90%",
+  maxWidth: "380px",
+  boxShadow: "0 10px 30px rgba(0,0,0,0.3)",
+  textAlign: "center",
+  fontFamily: "Arial, sans-serif",
+};
+
+const confirmBtnBase = {
+  border: "none",
+  borderRadius: "6px",
+  padding: "8px 18px",
+  fontSize: "14px",
+  fontWeight: 600,
+  cursor: "pointer",
+  color: "#ffffff",
+};
+
 export default function Report() {
   const [jumpPage, setJumpPage] = useState("");
   const [data, setData] = useState([]);
@@ -25,100 +208,38 @@ export default function Report() {
   const [isGeneratingPDF, setIsGeneratingPDF] = useState(false);
   const [editingRowId, setEditingRowId] = useState(null);
   const [editForm, setEditForm] = useState({});
-  const user = JSON.parse(localStorage.getItem("user")) || {};
+  const user = getStoredUser();
 
+  // Screen par message + confirm box
+  const [toast, setToast] = useState(null); // { type, text }
+  const [confirmAction, setConfirmAction] = useState(null); // { type: "save" | "delete", id? }
+  const toastTimerRef = useRef(null);
 
-const handleSave = async () => {
-    const confirmSave = window.confirm(
-      "Are you sure you want to save changes?"
-    );
+  const showToast = useCallback((type, text) => {
+    if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
+    setToast({ type, text });
+    toastTimerRef.current = setTimeout(() => setToast(null), 3500);
+  }, []);
 
-    if (!confirmSave) {
-      return;
-    }
+  useEffect(() => {
+    return () => {
+      if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
+    };
+  }, []);
 
-    try {
-      const parsedUOM = editForm.uom || {};
+  /* ---------------- Fetch ---------------- */
 
-      const currentMonthVal = editForm.month ? `${editForm.month}-${String(editForm.year).slice(-2)}` : null;
-
-      const payload = {
-        months: currentMonthVal ? [currentMonthVal] : undefined,
-        month: editForm.month,
-        domain: editForm.domain,
-        sow: editForm.sow,
-        job_type: editForm.jobType,
-        region: editForm.region,
-        state: editForm.state,
-        county: editForm.county,
-        uom: parsedUOM,
-        job_id: editForm.job_id,
-        jobId: editForm.job_id, 
-        current_status: editForm.current_status,
-        production_engineers: editForm.production_engineers,
-        qc_engineers: editForm.qc_engineers,
-        otp: editForm.otp,
-        internal_qc: editForm.internal_qc,
-        amdocs_qc: editForm.amdocs_qc,
-        internalQc: editForm.internal_qc,
-        amdocsQc: editForm.amdocs_qc,
-        internalOtp: editForm.otp,
-        jobs_delivered: Number(editForm.jobsDelivered || 0),
-        receive_date: editForm.receive_date || null,
-        ecd_date: editForm.ecd_date || null,
-        submission_date: editForm.submission_date || null,
-      };
-
-      const res = await axios.put(
-        `${API_BASE_URL}/api/work/update/${editForm.id}`,
-        payload
-      );
-
-      if (res.status === 200) {
-        alert("✅ Record updated successfully");
-        setEditingRowId(null);
-        await fetchData();
-      }
-    } catch (err) {
-      console.log(err);
-      alert("❌ Update failed");
-    }
-};
-
-  const handleDelete = async (id) => {
-    const confirmDelete = window.confirm(
-      "Are you sure you want to delete this record?"
-    );
-
-    if (!confirmDelete) {
-      return;
-    }
-
-    try {
-      const res = await axios.delete(
-        `${API_BASE_URL}/api/work/delete/${id}`
-      );
-
-      if (res.status === 200) {
-        alert("✅ Record deleted successfully");
-        await fetchData();
-      }
-    } catch (err) {
-      console.error(err);
-      alert("❌ Delete failed");
-    }
-  };
-
-  const fetchData = async () => {
+  const fetchData = useCallback(async () => {
     try {
       const res = await axios.get(`${API_BASE_URL}/api/work/all`);
-      console.log("res",res);
-      
-      setData(res.data);
+      // Response array na ho to bhi page crash na kare
+      const list = Array.isArray(res.data) ? res.data : res.data?.data || [];
+      setData(list);
     } catch (err) {
       console.error("Error fetching work data:", err);
+      showToast("error", "Work data load nahi ho paya!");
     }
-  };
+  }, [showToast]);
 
   useEffect(() => {
     fetchData();
@@ -131,77 +252,13 @@ const handleSave = async () => {
 
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, []);
+  }, [fetchData]);
 
   useEffect(() => {
     setCurrentPage(1);
   }, [selectedMonthYear, selectedDomain, selectedState, fromDate, toDate]);
 
-  const parseDate = (d) => {
-    if (!d) return null;
-    if (d instanceof Date && !isNaN(d.getTime())) return d;
-
-    try {
-      const parsed = new Date(d);
-      return isNaN(parsed.getTime()) ? null : parsed;
-    } catch {
-      return null;
-    }
-  };
-
-  const formatDateOnly = (date) => {
-    const d = parseDate(date);
-    if (!d) return "-";
-
-    try {
-      return d.toLocaleDateString("en-IN", {
-        timeZone: "Asia/Kolkata",
-        day: "2-digit",
-        month: "short",
-        year: "numeric",
-      });
-    } catch {
-      return "-";
-    }
-  };
-
-  // Fixed formatLocalDateString to show exact database date without timezone shift
-  const formatLocalDateString = (dateStr) => {
-    if (!dateStr) return "";
-
-    const d = new Date(dateStr);
-    if (isNaN(d.getTime())) return "";
-
-    const year = d.getFullYear();
-    const month = String(d.getMonth() + 1).padStart(2, "0");
-    const day = String(d.getDate()).padStart(2, "0");
-    
-    return `${year}-${day}-${month}`;
-  };
-
-  const formatArrayOrString = (val) => {
-    if (!val) return "-";
-    if (Array.isArray(val)) {
-      return val.join(" | ");
-    }
-    return val;
-  };
-
-  const formatUOM = (uom) => {
-    if (!uom) return "-";
-    if (typeof uom === "string") {
-      return uom;
-    }
-    if (typeof uom === "object") {
-      const entries = Object.entries(uom);
-      if (entries.length === 0) return "-";
-
-      return entries
-        .map(([key, value]) => `${key}: ${value || 0}`)
-        .join(" | ");
-    }
-    return "-";
-  };
+  /* ---------------- Rows banana ---------------- */
 
   let rows = [];
 
@@ -227,14 +284,16 @@ const handleSave = async () => {
       }
     }
 
-    if ((year === "-" || !year) / dateObj) {
+    // Pehle yahan "/" likha tha (division), isliye ye fallback kabhi chalta hi nahi tha
+    if ((year === "-" || !year) && dateObj) {
       const fallbackDate = parseDate(dateObj);
       if (fallbackDate) {
         year = fallbackDate.getFullYear().toString();
       }
     }
 
-    const monthYear = `${month !== "-" ? month : ""} ${year !== "-" ? year : ""}`.trim() || "-";
+    const monthYear =
+      `${month !== "-" ? month : ""} ${year !== "-" ? year : ""}`.trim() || "-";
 
     rows.push({
       id: item.id || item._id,
@@ -244,6 +303,12 @@ const handleSave = async () => {
       domain: item.domain || "-",
       sow: formatArrayOrString(item.sow),
       jobType: formatArrayOrString(item.job_type || item.jobType),
+
+      // Edit ke time original data list tha ya text, ye yaad rakhna zaroori hai
+      sowIsArray: Array.isArray(item.sow),
+      jobTypeIsArray: Array.isArray(item.job_type || item.jobType),
+      prodIsArray: Array.isArray(item.production_engineers),
+      qcIsArray: Array.isArray(item.qc_engineers),
 
       region:
         item.region &&
@@ -275,11 +340,11 @@ const handleSave = async () => {
       otp: item.otp || item.internalOtp || "-",
       internal_qc: item.internal_qc || item.internalQc || "-",
       amdocs_qc: item.amdocs_qc || item.amdocsQc || "-",
-      receive_date: item.receive_date ? formatLocalDateString(item.receive_date) : "",
-      ecd_date: item.ecd_date ? formatLocalDateString(item.ecd_date) : "",
-      submission_date: item.submission_date ? formatLocalDateString(item.submission_date) : "",
+      receive_date: toDateKey(item.receive_date),
+      ecd_date: toDateKey(item.ecd_date),
+      submission_date: toDateKey(item.submission_date),
 
-      createdAt: parseDate(item.created_at), 
+      createdAt: parseDate(item.created_at),
       lastUpdate: parseDate(dateObj),
       formattedDate: formatDateOnly(dateObj),
     });
@@ -291,24 +356,20 @@ const handleSave = async () => {
     return timeA - timeB;
   });
 
-  const uniqueMonthYear = [...new Set(rows.map((r) => `${r.month} ${r.year}`))];
+  const uniqueMonthYear = [
+    ...new Set(rows.map((r) => `${r.month} ${r.year}`)),
+  ].filter((m) => m !== "- -");
   const uniqueDomains = [...new Set(rows.map((r) => r.domain).filter(Boolean))];
 
+  const isOtherState = (r) =>
+    r.region === "N/A" ||
+    !r.state ||
+    r.state === "Unknown" ||
+    r.state === "Unknown State" ||
+    r.state === "N/A";
+
   const uniqueStates = [
-    ...new Set(
-      rows.map((r) => {
-        if (
-          r.region === "N/A" ||
-          !r.state ||
-          r.state === "Unknown" ||
-          r.state === "Unknown State" ||
-          r.state === "N/A"
-        ) {
-          return "Other";
-        }
-        return r.state;
-      })
-    ),
+    ...new Set(rows.map((r) => (isOtherState(r) ? "Other" : r.state))),
   ].sort((a, b) => {
     if (a === "Other") return 1;
     if (b === "Other") return -1;
@@ -321,13 +382,7 @@ const handleSave = async () => {
     if (selectedDomain && r.domain !== selectedDomain) return false;
     if (selectedState) {
       if (selectedState === "Other") {
-        const isOther =
-          r.region === "N/A" ||
-          !r.state ||
-          r.state === "Unknown" ||
-          r.state === "Unknown State" ||
-          r.state === "N/A";
-        if (!isOther) return false;
+        if (!isOtherState(r)) return false;
       } else if (r.state !== selectedState) {
         return false;
       }
@@ -354,9 +409,7 @@ const handleSave = async () => {
   const latestUpdated = filteredRows.length
     ? filteredRows.reduce((latest, row) => {
         if (!row.lastUpdate) return latest;
-        return !latest || row.lastUpdate > latest
-          ? row.lastUpdate
-          : latest;
+        return !latest || row.lastUpdate > latest ? row.lastUpdate : latest;
       }, null)
     : null;
 
@@ -378,43 +431,109 @@ const handleSave = async () => {
     return sum + Number(r.jobsDelivered || 0);
   }, 0);
 
+  /* ---------------- Pagination ---------------- */
+
   const totalPages = Math.max(1, Math.ceil(filteredRows.length / rowsPerPage));
+
+  // Delete ke baad page limit se bahar chala jaye to last page par wapas
+  useEffect(() => {
+    if (currentPage > totalPages) {
+      setCurrentPage(totalPages);
+    }
+  }, [currentPage, totalPages]);
+
   const indexOfLast = currentPage * rowsPerPage;
-  const currentRows = filteredRows.slice(
-    indexOfLast - rowsPerPage,
-    indexOfLast
-  );
+  const currentRows = filteredRows.slice(indexOfLast - rowsPerPage, indexOfLast);
+
+  /* ---------------- Map data (ek baar calculate) ---------------- */
+
+  // Pehle har state ke liye poora data dobara loop hota tha (bahut slow).
+  // Ab ek hi baar mein sab state ke totals nikal liye jate hain.
+  const stateTotals = {};
+  const coveredStates = new Set();
+  filteredRows.forEach((r) => {
+    const k = normKey(r.state);
+    if (!k || k === "n/a") return;
+    coveredStates.add(k);
+    stateTotals[k] = (stateTotals[k] || 0) + Number(r.jobsDelivered || 0);
+  });
+  const maxStateJobs = Math.max(1, ...Object.values(stateTotals));
+
+  const hasDataForState = (stateName) => coveredStates.has(normKey(stateName));
+
+  const getStateColor = (stateName) => {
+    const total = stateTotals[normKey(stateName)] || 0;
+    if (total === 0) return "#FFC491";
+
+    const ratio = total / maxStateJobs;
+    const index = Math.min(
+      mapColors.length - 1,
+      Math.floor(ratio * mapColors.length)
+    );
+    return mapColors[index];
+  };
+
+  const getLabelBgColor = (stateName) => {
+    if (hasDataForState(stateName)) return "#14532d";
+    return "#991b1b";
+  };
+
+  const getLabelTextColor = () => "#ffffff";
+
+  const coveredCount = allStates.filter((s) => hasDataForState(s)).length;
+
+  /* ---------------- Export ---------------- */
 
   const getFileTimestamp = () => {
     const now = new Date();
     const date = now.toLocaleDateString("en-CA");
-    const time = now.toLocaleTimeString("en-US", {
-      hour: "2-digit",
-      minute: "2-digit",
-      second: "2-digit",
-      hour12: true,
-    })
+    const time = now
+      .toLocaleTimeString("en-US", {
+        hour: "2-digit",
+        minute: "2-digit",
+        second: "2-digit",
+        hour12: true,
+      })
       .replace(/:/g, ".")
       .replace(/\s/g, "_");
     return `${date}_at_${time}`;
   };
 
+  const getMarketText = (r) =>
+    r.state === "N/A"
+      ? "N/A"
+      : r.county && r.county !== "-"
+        ? `${r.state} (${r.county})`
+        : r.state;
+
   const downloadPDF = async () => {
+    if (isGeneratingPDF) return;
+    setOpenExport(false);
     setIsGeneratingPDF(true);
+
     try {
+      // Map screen par render hone ka wait (warna map blank aa sakta tha)
+      await new Promise((resolve) => setTimeout(resolve, 400));
+
       const pdf = new jsPDF("l", "mm", "a4");
       const pageWidth = pdf.internal.pageSize.getWidth();
       const pageHeight = pdf.internal.pageSize.getHeight();
 
+      // Logo load na ho to bhi PDF ban jaye (pehle poora PDF fail ho jata tha)
       const img = new Image();
       img.src = "/Image/img1.png";
-
-      await new Promise((resolve, reject) => {
-        img.onload = resolve;
-        img.onerror = reject;
+      let logoLoaded = false;
+      await new Promise((resolve) => {
+        img.onload = () => {
+          logoLoaded = true;
+          resolve();
+        };
+        img.onerror = resolve;
       });
 
-      pdf.addImage(img, "PNG", 10, 8, 28, 28);
+      if (logoLoaded) {
+        pdf.addImage(img, "PNG", 10, 8, 28, 28);
+      }
       pdf.setFontSize(24);
       pdf.setFont("helvetica", "bold");
       pdf.setTextColor(0, 38, 77);
@@ -458,9 +577,10 @@ const handleSave = async () => {
       }, {});
 
       const summaryData = Object.entries(summaryMap).map(([domain, value]) => {
-        const subText = Object.entries(value.subMap)
-          .map(([k, v]) => `${k}: ${v}`)
-          .join(", ") || "-";
+        const subText =
+          Object.entries(value.subMap)
+            .map(([k, v]) => `${k}: ${v}`)
+            .join(", ") || "-";
         return [domain, subText, `${value.total}`];
       });
 
@@ -480,7 +600,7 @@ const handleSave = async () => {
       pdf.setTextColor(20);
       pdf.text("DETAIL OVERVIEW", pageWidth / 2, finalY, { align: "center" });
 
-      const tableData = filteredRows.map((r, i) => ([
+      const tableData = filteredRows.map((r, i) => [
         i + 1,
         r.month,
         r.year,
@@ -488,7 +608,7 @@ const handleSave = async () => {
         r.sow,
         r.jobType,
         r.region,
-        r.state === "N/A" ? "N/A" : r.county && r.county !== "-" ? `${r.state} (${r.county})` : r.state,
+        getMarketText(r),
         r.job_id,
         r.current_status,
         r.production_engineers,
@@ -501,12 +621,16 @@ const handleSave = async () => {
         r.receive_date || "-",
         r.ecd_date || "-",
         r.submission_date || "-",
-      ]));
+      ]);
 
       autoTable(pdf, {
         startY: finalY + 8,
         theme: "grid",
-        head: [["Sl", "Month", "Year", "Domain", "SOW", "Job Type", "Region", "Market", "Job ID", "Status", "Prod Eng", "QC Eng", "Jobs", "UOM", "OTP", "Int QC", "QC", "Receive Date", "ECD Date", "Submission Date"]],
+        head: [[
+          "Sl", "Month", "Year", "Domain", "SOW", "Job Type", "Region", "Market",
+          "Job ID", "Status", "Prod Eng", "QC Eng", "Jobs", "UOM", "OTP",
+          "Int QC", "Amdocs QC", "Receive Date", "ECD Date", "Submission Date"
+        ]],
         body: tableData,
         styles: { fontSize: 4.5, cellPadding: 1.5, overflow: "linebreak", valign: "middle", halign: "center" },
         headStyles: { fillColor: [22, 78, 99], textColor: 255, fontStyle: "bold" },
@@ -519,178 +643,180 @@ const handleSave = async () => {
         }
       });
 
+      // Map fail ho jaye to bhi table wala PDF save ho jaye
+      let mapFailed = false;
       const mapElement = document.querySelector(".pdf-map");
       if (mapElement) {
-        const mapCanvas = await html2canvas(mapElement, { scale: 2, backgroundColor: "#ffffff" });
-        const mapImg = mapCanvas.toDataURL("image/png");
+        try {
+          const mapCanvas = await html2canvas(mapElement, { scale: 2, backgroundColor: "#ffffff" });
+          const mapImg = mapCanvas.toDataURL("image/png");
 
-        pdf.addPage();
-        pdf.addImage(img, "PNG", 10, 8, 28, 28);
-        pdf.setFontSize(20);
-        pdf.setTextColor(20);
-        pdf.text("STATES COVERAGE MAP", pageWidth / 2, 18, { align: "center" });
-        pdf.setFontSize(10);
-        pdf.setTextColor(80);
-        pdf.text(`Report Date : ${new Date().toLocaleString("en-IN")}`, pageWidth - 12, 25, { align: "right" });
+          pdf.addPage();
+          if (logoLoaded) {
+            pdf.addImage(img, "PNG", 10, 8, 28, 28);
+          }
+          pdf.setFontSize(20);
+          pdf.setTextColor(20);
+          pdf.text("STATES COVERAGE MAP", pageWidth / 2, 18, { align: "center" });
+          pdf.setFontSize(10);
+          pdf.setTextColor(80);
+          pdf.text(`Report Date : ${new Date().toLocaleString("en-IN")}`, pageWidth - 12, 25, { align: "right" });
 
-        pdf.setDrawColor(180);
-        pdf.setLineWidth(0.8);
-        pdf.line(10, 38, pageWidth - 10, 38);
-        pdf.addImage(mapImg, "PNG", 15, 45, pageWidth - 30, 145);
+          pdf.setDrawColor(180);
+          pdf.setLineWidth(0.8);
+          pdf.line(10, 38, pageWidth - 10, 38);
+          pdf.addImage(mapImg, "PNG", 15, 45, pageWidth - 30, 145);
+        } catch (mapErr) {
+          console.error("Map capture error:", mapErr);
+          mapFailed = true;
+        }
       }
 
       pdf.save(`Work_Report_${getFileTimestamp()}.pdf`);
+
+      if (mapFailed) {
+        showToast("warning", "PDF exported, lekin map add nahi ho paya.");
+      } else {
+        showToast("success", "PDF exported successfully!");
+      }
     } catch (err) {
       console.error(err);
+      showToast("error", "Failed to export PDF!");
     } finally {
       setIsGeneratingPDF(false);
     }
   };
 
   const downloadExcel = async () => {
+    setOpenExport(false);
+
     if (!filteredRows.length) {
-      alert("No data to export.");
+      showToast("warning", "No data to export.");
       return;
     }
 
-    const workbook = new ExcelJS.Workbook();
-    const sheet = workbook.addWorksheet("Work Report");
+    try {
+      const workbook = new ExcelJS.Workbook();
+      const sheet = workbook.addWorksheet("Work Report");
 
-    sheet.columns = [
-      { header: "Sl.No", key: "sl", width: 8 },
-      { header: "Month", key: "month", width: 10 },
-      { header: "Year", key: "year", width: 10 },
-      { header: "Domain", key: "domain", width: 20 },
-      { header: "SOW", key: "sow", width: 15 },
-      { header: "Job Type", key: "job_type", width: 15 },
-      { header: "Region", key: "region", width: 15 },
-      { header: "Market", key: "market", width: 25 },
-      { header: "Job ID", key: "job_id", width: 15 },
-      { header: "Status", key: "current_status", width: 15 },
-      { header: "Prod Engineers", key: "production_engineers", width: 20 },
-      { header: "QC Engineers", key: "qc_engineers", width: 20 },
-      { header: "Jobs (Total)", key: "jobs", width: 15 },
-      { header: "UOM", key: "uom", width: 25 },
-      { header: "OTP", key: "otp", width: 15 },
-      { header: "Internal QC", key: "internal_qc", width: 15 },
-      { header: "Amdocs QC", key: "amdocs_qc", width: 15 },
-      { header: "Receive Date", key: "receive_date", width: 15 },
-      { header: "ECD Date", key: "ecd_date", width: 15 },
-      { header: "Submission Date", key: "submission_date", width: 15 },
-    ];
+      sheet.columns = [
+        { header: "Sl.No", key: "sl", width: 8 },
+        { header: "Month", key: "month", width: 10 },
+        { header: "Year", key: "year", width: 10 },
+        { header: "Domain", key: "domain", width: 20 },
+        { header: "SOW", key: "sow", width: 15 },
+        { header: "Job Type", key: "job_type", width: 15 },
+        { header: "Region", key: "region", width: 15 },
+        { header: "Market", key: "market", width: 25 },
+        { header: "Job ID", key: "job_id", width: 15 },
+        { header: "Status", key: "current_status", width: 15 },
+        { header: "Prod Engineers", key: "production_engineers", width: 20 },
+        { header: "QC Engineers", key: "qc_engineers", width: 20 },
+        { header: "Jobs (Total)", key: "jobs", width: 15 },
+        { header: "UOM", key: "uom", width: 25 },
+        { header: "OTP", key: "otp", width: 15 },
+        { header: "Internal QC", key: "internal_qc", width: 15 },
+        { header: "Amdocs QC", key: "amdocs_qc", width: 15 },
+        { header: "Receive Date", key: "receive_date", width: 15 },
+        { header: "ECD Date", key: "ecd_date", width: 15 },
+        { header: "Submission Date", key: "submission_date", width: 15 },
+      ];
 
-    filteredRows.forEach((r, i) => {
-      sheet.addRow({
-        sl: i + 1,
-        month: r.month,
-        year: r.year,
-        domain: r.domain,
-        sow: r.sow,
-        job_type: r.jobType,
-        region: r.region,
-        market: r.state === "N/A" ? "N/A" : r.county && r.county !== "-" ? `${r.state} (${r.county})` : r.state,
-        job_id: r.job_id,
-        current_status: r.current_status,
-        production_engineers: r.production_engineers,
-        qc_engineers: r.qc_engineers,
-        jobs: r.jobsDelivered || 0,
-        uom: formatUOM(r.uom),
-        otp: r.otp,
-        internal_qc: r.internal_qc,
-        amdocs_qc: r.amdocs_qc,
-        receive_date: r.receive_date || "",
-        ecd_date: r.ecd_date || "",
-        submission_date: r.submission_date || "",
+      filteredRows.forEach((r, i) => {
+        sheet.addRow({
+          sl: i + 1,
+          month: r.month,
+          year: r.year,
+          domain: r.domain,
+          sow: r.sow,
+          job_type: r.jobType,
+          region: r.region,
+          market: getMarketText(r),
+          job_id: r.job_id,
+          current_status: r.current_status,
+          production_engineers: r.production_engineers,
+          qc_engineers: r.qc_engineers,
+          jobs: r.jobsDelivered || 0,
+          uom: formatUOM(r.uom),
+          otp: r.otp,
+          internal_qc: r.internal_qc,
+          amdocs_qc: r.amdocs_qc,
+          receive_date: r.receive_date || "",
+          ecd_date: r.ecd_date || "",
+          submission_date: r.submission_date || "",
+        });
       });
-    });
 
-    sheet.addRow({ domain: "TOTAL", jobs: totalJobs });
+      sheet.addRow({ domain: "TOTAL", jobs: totalJobs });
 
-    sheet.getRow(1).eachCell((cell) => {
-      cell.font = { bold: true };
-      cell.alignment = { vertical: "middle", horizontal: "center" };
-    });
+      sheet.getRow(1).eachCell((cell) => {
+        cell.font = { bold: true };
+        cell.alignment = { vertical: "middle", horizontal: "center" };
+      });
 
-    const buffer = await workbook.xlsx.writeBuffer();
-    const blob = new Blob([buffer], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
-    const url = window.URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `Work_Report_Detail.xlsx`;
-    a.click();
-    window.URL.revokeObjectURL(url);
+      const buffer = await workbook.xlsx.writeBuffer();
+      const blob = new Blob([buffer], {
+        type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      });
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `Work_Report_Detail.xlsx`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      window.URL.revokeObjectURL(url);
+
+      showToast("success", "Excel exported successfully!");
+    } catch (err) {
+      console.error(err);
+      showToast("error", "Failed to export Excel!");
+    }
   };
 
-  const hasDataForState = (stateName) => {
-    return data.some(item => item.state === stateName);
-  };
-  const currentFilterData = filteredRows;
-
-  const allStates = [...new Set(geoData.features.map((f) => f.properties.name))];
-
-  const getStateColor = (stateName) => {
-    const totalJobs = currentFilterData
-      .filter(item => item.state === stateName)
-      .reduce((sum, item) => sum + Number(item.jobsDelivered || 0), 0);
-
-    if (totalJobs === 0) return "#FFC491";
-
-    const totals = allStates.map(state => {
-      return currentFilterData
-        .filter(item => item.state === state)
-        .reduce((sum, item) => sum + Number(item.jobsDelivered || 0), 0);
-    });
-
-    const maxJobs = Math.max(...totals, 1);
-    const ratio = totalJobs / maxJobs;
-
-    const colors = [
-      "#738F52", "#9ACD32", "#78BE21", "#32CD32",
-      "#90EE90", "#00FF00", "#66FF00", "#008000", "#006400"
-    ];
-
-    const index = Math.min(colors.length - 1, Math.floor(ratio * colors.length));
-    return colors[index];
-  };
-
-  const getLabelBgColor = (stateName) => {
-    if (hasDataForState(stateName)) return "#14532d";
-    return "#991b1b";
-  };
-
-  const getLabelTextColor = () => "#ffffff";
+  /* ---------------- Edit / Save / Delete ---------------- */
 
   const handleEdit = (row) => {
     setEditingRowId(row.id);
     setEditForm({
       id: row.id,
-      domain: row.domain || "",
-      jobType: row.jobType || "",
-      jobsDelivered: row.jobsDelivered || 0,
-      state: row.state || "",
+      domain: fromDisplay(row.domain),
+      // "-" ya "a | b" jaise display text ko edit box ke liye clean karte hain
+      jobType: fromDisplay(row.jobType),
+      jobsDelivered: row.jobsDelivered ?? 0,
+      state: fromDisplay(row.state),
       county: row.county || "",
-      region: row.region || "",
-      sow: row.sow || "",
-      uom: row.uom || {},
-      job_id: row.job_id || "",
-      current_status: row.current_status || "",
-      production_engineers: row.production_engineers || "",
-      qc_engineers: row.qc_engineers || "",
-      otp: row.otp || "",
-      internal_qc: row.internal_qc || "",
-      amdocs_qc: row.amdocs_qc || "",
-      receive_date: row.receive_date ? formatLocalDateString(row.receive_date) : "",
-      ecd_date: row.ecd_date ? formatLocalDateString(row.ecd_date) : "",
-      submission_date: row.submission_date ? formatLocalDateString(row.submission_date) : "",
-      month: row.month || "",
-      year: row.year || "",
+      region: fromDisplay(row.region),
+      sow: fromDisplay(row.sow),
+      uom: { ...(row.uom || {}) },
+      job_id: fromDisplay(row.job_id),
+      current_status: fromDisplay(row.current_status),
+      production_engineers: fromDisplay(row.production_engineers),
+      qc_engineers: fromDisplay(row.qc_engineers),
+      otp: fromDisplay(row.otp),
+      internal_qc: fromDisplay(row.internal_qc),
+      amdocs_qc: fromDisplay(row.amdocs_qc),
+      // Ye pehle se "YYYY-MM-DD" hain (pehle dobara convert hokar galat ho jate the)
+      receive_date: row.receive_date || "",
+      ecd_date: row.ecd_date || "",
+      submission_date: row.submission_date || "",
+      month: fromDisplay(row.month),
+      year: fromDisplay(row.year),
+      listTypes: {
+        sow: row.sowIsArray,
+        jobType: row.jobTypeIsArray,
+        production_engineers: row.prodIsArray,
+        qc_engineers: row.qcIsArray,
+      },
     });
   };
 
+  // Number mein turant convert nahi karte, warna box khaali karna (backspace) mushkil ho jata tha.
+  // Save ke time Number mein badal diya jata hai.
   const handleChange = (field, value) => {
     setEditForm((prev) => ({
       ...prev,
-      [field]: field === "jobsDelivered" ? Number(value) : value,
+      [field]: value,
     }));
   };
 
@@ -699,18 +825,190 @@ const handleSave = async () => {
       ...prev,
       uom: {
         ...prev.uom,
-        [key]: Number(value)
-      }
+        [key]: value,
+      },
     }));
   };
 
+  const requestSave = () => {
+    setConfirmAction({ type: "save" });
+  };
+
+  const requestDelete = (id) => {
+    if (id === undefined || id === null) {
+      showToast("error", "Record ID nahi mili, delete nahi ho sakta!");
+      return;
+    }
+    setConfirmAction({ type: "delete", id });
+  };
+
+  const performSave = async () => {
+    try {
+      const parsedUOM = {};
+      Object.entries(editForm.uom || {}).forEach(([k, v]) => {
+        parsedUOM[k] = Number(v || 0);
+      });
+
+      const yearText = String(editForm.year || "");
+      const currentMonthVal =
+        editForm.month && yearText
+          ? `${editForm.month}-${yearText.slice(-2)}`
+          : null;
+
+      const listTypes = editForm.listTypes || {};
+
+      const payload = {
+        months: currentMonthVal ? [currentMonthVal] : undefined,
+        month: editForm.month,
+        domain: editForm.domain,
+        // Jo data pehle list (array) tha wo list hi rahega, "a | b" text nahi banega
+        sow: toPayloadList(editForm.sow, listTypes.sow),
+        job_type: toPayloadList(editForm.jobType, listTypes.jobType),
+        region: editForm.region,
+        state: editForm.state,
+        county: editForm.county,
+        uom: parsedUOM,
+        job_id: editForm.job_id,
+        jobId: editForm.job_id,
+        current_status: editForm.current_status,
+        production_engineers: toPayloadList(
+          editForm.production_engineers,
+          listTypes.production_engineers
+        ),
+        qc_engineers: toPayloadList(editForm.qc_engineers, listTypes.qc_engineers),
+        otp: editForm.otp,
+        internal_qc: editForm.internal_qc,
+        amdocs_qc: editForm.amdocs_qc,
+        internalQc: editForm.internal_qc,
+        amdocsQc: editForm.amdocs_qc,
+        internalOtp: editForm.otp,
+        jobs_delivered: Number(editForm.jobsDelivered || 0),
+        receive_date: editForm.receive_date || null,
+        ecd_date: editForm.ecd_date || null,
+        submission_date: editForm.submission_date || null,
+      };
+
+      await axios.put(`${API_BASE_URL}/api/work/update/${editForm.id}`, payload);
+
+      showToast("success", "Record updated successfully!");
+      setEditingRowId(null);
+      await fetchData();
+    } catch (err) {
+      console.log(err);
+      showToast("error", err.response?.data?.message || "Update failed!");
+    }
+  };
+
+  const performDelete = async (id) => {
+    try {
+      await axios.delete(`${API_BASE_URL}/api/work/delete/${id}`);
+
+      showToast("success", "Record deleted successfully!");
+      if (editingRowId === id) {
+        setEditingRowId(null);
+      }
+      await fetchData();
+    } catch (err) {
+      console.error(err);
+      showToast("error", err.response?.data?.message || "Delete failed!");
+    }
+  };
+
+  const handleConfirmYes = async () => {
+    const action = confirmAction;
+    setConfirmAction(null);
+    if (!action) return;
+
+    if (action.type === "save") {
+      await performSave();
+    } else if (action.type === "delete") {
+      await performDelete(action.id);
+    }
+  };
+
+  const confirmTitle = confirmAction?.type === "delete" ? "Delete Record?" : "Save Changes?";
+  const confirmText =
+    confirmAction?.type === "delete"
+      ? "Are you sure you want to delete this record?"
+      : "Are you sure you want to save changes?";
+  const confirmYesLabel = confirmAction?.type === "delete" ? "Yes, Delete" : "Yes, Save";
+  const confirmYesColor = confirmAction?.type === "delete" ? "#dc2626" : "#16a34a";
+
   return (
     <div className="report-wrapper">
+      {/* ---------- Screen par success / error message ---------- */}
+      {toast && (
+        <div
+          role="status"
+          style={{
+            ...toastBaseStyle,
+            background: toastColors[toast.type] || toastColors.success,
+          }}
+        >
+          <span>
+            {toastIcons[toast.type]} {toast.text}
+          </span>
+          <button
+            type="button"
+            onClick={() => setToast(null)}
+            title="Close"
+            style={{
+              background: "transparent",
+              border: "none",
+              color: "#ffffff",
+              fontSize: "16px",
+              cursor: "pointer",
+              lineHeight: 1,
+            }}
+          >
+            ✕
+          </button>
+        </div>
+      )}
+
+      {/* ---------- Save / Delete confirm (screen par) ---------- */}
+      {confirmAction && (
+        <div style={confirmOverlayStyle} onClick={() => setConfirmAction(null)}>
+          <div style={confirmModalStyle} onClick={(e) => e.stopPropagation()}>
+            <div
+              style={{
+                fontSize: "16px",
+                fontWeight: 700,
+                marginBottom: "8px",
+                color: "#111827",
+              }}
+            >
+              {confirmTitle}
+            </div>
+            <div style={{ fontSize: "14px", color: "#4b5563", marginBottom: "18px" }}>
+              {confirmText}
+            </div>
+            <div style={{ display: "flex", justifyContent: "center", gap: "12px" }}>
+              <button
+                type="button"
+                style={{ ...confirmBtnBase, background: confirmYesColor }}
+                onClick={handleConfirmYes}
+              >
+                {confirmYesLabel}
+              </button>
+              <button
+                type="button"
+                style={{ ...confirmBtnBase, background: "#6b7280" }}
+                onClick={() => setConfirmAction(null)}
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {!isGeneratingPDF && (
         <div className="report-header">
           <h2 className="title">Work Report</h2>
           <div className="export-box" ref={exportRef}>
             <button
+              type="button"
               className="export-btn"
               onClick={() => setOpenExport(!openExport)}
             >
@@ -719,8 +1017,8 @@ const handleSave = async () => {
 
             {openExport && (
               <div className="export-dropdown">
-                <button onClick={downloadPDF}>Export as PDF</button>
-                <button onClick={downloadExcel}>Export as Excel</button>
+                <button type="button" onClick={downloadPDF}>Export as PDF</button>
+                <button type="button" onClick={downloadExcel}>Export as Excel</button>
               </div>
             )}
           </div>
@@ -732,7 +1030,7 @@ const handleSave = async () => {
         className={`pdf-export-area ${!isGeneratingPDF ? "pdf-hidden" : ""}`}
       >
         <div className="pdf-map">
-          <h3 style={{ textAlign: 'center', marginBottom: '15px', color: '#1f2937' }}>
+          <h3 style={{ textAlign: "center", marginBottom: "15px", color: "#1f2937" }}>
             States Coverage Map
           </h3>
           <ComposableMap projection="geoAlbersUsa" width={1000} height={550}>
@@ -755,22 +1053,6 @@ const handleSave = async () => {
 
                     const [x, y] = coords;
                     const name = geo.properties.name;
-                    const shortNames = {
-                      Alabama: "AL", Alaska: "AK", Arizona: "AZ", Arkansas: "AR",
-                      California: "CA", Colorado: "CO", Connecticut: "CT", Delaware: "DE",
-                      Florida: "FL", Georgia: "GA", Hawaii: "HI", Idaho: "ID",
-                      Illinois: "IL", Indiana: "IN", Iowa: "IA", Kansas: "KS",
-                      Kentucky: "KY", Louisiana: "LA", Maine: "ME", Maryland: "MD",
-                      Massachusetts: "MA", Michigan: "MI", Minnesota: "MN", Mississippi: "MS",
-                      Missouri: "MO", Montana: "MT", Nebraska: "NE", Nevada: "NV",
-                      "New Hampshire": "NH", "New Jersey": "NJ", "New Mexico": "NM", "New York": "NY",
-                      "North Carolina": "NC", "North Dakota": "ND", Ohio: "OH", Oklahoma: "OK",
-                      Oregon: "OR", Pennsylvania: "PA", "Rhode Island": "RI", "South Carolina": "SC",
-                      "South Dakota": "SD", Tennessee: "TN", Texas: "TX", Utah: "UT",
-                      Vermont: "VT", Virginia: "VA", Washington: "WA", "West Virginia": "WV",
-                      Wisconsin: "WI", Wyoming: "WY", "District of Columbia": "DC"
-                    };
-
                     const label = shortNames[name] || "";
 
                     return (
@@ -793,7 +1075,7 @@ const handleSave = async () => {
                             fontSize: "10px",
                             fontWeight: "700",
                             fill: getLabelTextColor(name),
-                            pointerEvents: "none"
+                            pointerEvents: "none",
                           }}
                         >
                           {label}
@@ -808,11 +1090,11 @@ const handleSave = async () => {
           <div className="map-legend">
             <div className="legend-item">
               <span className="legend-selecteddot"></span>
-              <span>Covered-{allStates.filter(s => hasDataForState(s)).length}</span>
+              <span>Covered-{coveredCount}</span>
             </div>
             <div className="legend-item">
               <span className="legend-not-selecteddot"></span>
-              <span>NotCovered-{allStates.length - allStates.filter(s => hasDataForState(s)).length}</span>
+              <span>NotCovered-{allStates.length - coveredCount}</span>
             </div>
           </div>
         </div>
@@ -829,8 +1111,10 @@ const handleSave = async () => {
                   onChange={(e) => setSelectedMonthYear(e.target.value)}
                 >
                   <option value="">All</option>
-                  {uniqueMonthYear.map((m, i) => (
-                    <option key={i}>{m}</option>
+                  {uniqueMonthYear.map((m) => (
+                    <option key={m} value={m}>
+                      {m}
+                    </option>
                   ))}
                 </select>
               </div>
@@ -842,8 +1126,10 @@ const handleSave = async () => {
                   onChange={(e) => setSelectedDomain(e.target.value)}
                 >
                   <option value="">All</option>
-                  {uniqueDomains.map((d, i) => (
-                    <option key={i}>{d}</option>
+                  {uniqueDomains.map((d) => (
+                    <option key={d} value={d}>
+                      {d}
+                    </option>
                   ))}
                 </select>
               </div>
@@ -855,9 +1141,9 @@ const handleSave = async () => {
                   onChange={(e) => setSelectedState(e.target.value)}
                 >
                   <option value="">All</option>
-                  {uniqueStates.map((s, i) => (
+                  {uniqueStates.map((s) => (
                     <option
-                      key={i}
+                      key={s}
                       value={s}
                       style={
                         s === "Other"
@@ -935,13 +1221,20 @@ const handleSave = async () => {
               <tbody>
                 {currentRows.length > 0 ? (
                   currentRows.map((r, i) => {
-                    const isMissingOtpOrAmdocs = !r.otp || r.otp === "-" || !r.amdocs_qc || r.amdocs_qc === "-";
+                    const isMissingOtpOrAmdocs =
+                      !r.otp || r.otp === "-" || !r.amdocs_qc || r.amdocs_qc === "-";
+                    // r.id undefined ho to sab rows ek saath edit mode mein na jayein
+                    const isEditing = r.id !== undefined && editingRowId === r.id;
+
                     return (
-                      <tr key={r.id} className={isMissingOtpOrAmdocs ? "light-orange-row" : ""}>
+                      <tr
+                        key={r.id ?? `row-${i}`}
+                        className={isMissingOtpOrAmdocs ? "light-orange-row" : ""}
+                      >
                         <td>{(currentPage - 1) * rowsPerPage + i + 1}</td>
 
                         <td>
-                          {editingRowId === r.id ? (
+                          {isEditing ? (
                             <input
                               value={editForm.month || ""}
                               onChange={(e) => handleChange("month", e.target.value)}
@@ -953,7 +1246,7 @@ const handleSave = async () => {
                         </td>
 
                         <td>
-                          {editingRowId === r.id ? (
+                          {isEditing ? (
                             <input
                               value={editForm.domain || ""}
                               onChange={(e) => handleChange("domain", e.target.value)}
@@ -964,7 +1257,7 @@ const handleSave = async () => {
                         </td>
 
                         <td>
-                          {editingRowId === r.id ? (
+                          {isEditing ? (
                             <input
                               value={editForm.sow || ""}
                               onChange={(e) => handleChange("sow", e.target.value)}
@@ -975,7 +1268,7 @@ const handleSave = async () => {
                         </td>
 
                         <td>
-                          {editingRowId === r.id ? (
+                          {isEditing ? (
                             <input
                               value={editForm.jobType || ""}
                               onChange={(e) => handleChange("jobType", e.target.value)}
@@ -986,7 +1279,7 @@ const handleSave = async () => {
                         </td>
 
                         <td>
-                          {editingRowId === r.id ? (
+                          {isEditing ? (
                             <input
                               value={editForm.region || ""}
                               onChange={(e) => handleChange("region", e.target.value)}
@@ -997,7 +1290,7 @@ const handleSave = async () => {
                         </td>
 
                         <td>
-                          {editingRowId === r.id ? (
+                          {isEditing ? (
                             <div style={{ display: "flex", flexDirection: "column", gap: "5px" }}>
                               <input
                                 value={editForm.state || ""}
@@ -1015,9 +1308,9 @@ const handleSave = async () => {
                               {r.state === "N/A"
                                 ? "N/A"
                                 : r.county &&
-                                  r.county !== "-" &&
-                                  r.county !== "Unknown" &&
-                                  r.county !== "Unknown County"
+                                    r.county !== "-" &&
+                                    r.county !== "Unknown" &&
+                                    r.county !== "Unknown County"
                                   ? `${r.state} (${r.county})`
                                   : r.state}
                             </>
@@ -1025,7 +1318,7 @@ const handleSave = async () => {
                         </td>
 
                         <td>
-                          {editingRowId === r.id ? (
+                          {isEditing ? (
                             <input
                               value={editForm.job_id || ""}
                               onChange={(e) => handleChange("job_id", e.target.value)}
@@ -1036,7 +1329,7 @@ const handleSave = async () => {
                         </td>
 
                         <td>
-                          {editingRowId === r.id ? (
+                          {isEditing ? (
                             <input
                               value={editForm.current_status || ""}
                               onChange={(e) => handleChange("current_status", e.target.value)}
@@ -1047,7 +1340,7 @@ const handleSave = async () => {
                         </td>
 
                         <td>
-                          {editingRowId === r.id ? (
+                          {isEditing ? (
                             <input
                               value={editForm.production_engineers || ""}
                               onChange={(e) => handleChange("production_engineers", e.target.value)}
@@ -1058,7 +1351,7 @@ const handleSave = async () => {
                         </td>
 
                         <td>
-                          {editingRowId === r.id ? (
+                          {isEditing ? (
                             <input
                               value={editForm.qc_engineers || ""}
                               onChange={(e) => handleChange("qc_engineers", e.target.value)}
@@ -1069,29 +1362,41 @@ const handleSave = async () => {
                         </td>
 
                         <td className="job-cell">
-                          {editingRowId === r.id ? (
+                          {isEditing ? (
                             <input
                               type="number"
-                              value={editForm.jobsDelivered || 0}
+                              value={editForm.jobsDelivered ?? ""}
                               onChange={(e) => handleChange("jobsDelivered", e.target.value)}
                               style={{ width: "60px" }}
                             />
                           ) : (
-                            <div className="job-main">
-                              {r.jobsDelivered || 0}
-                            </div>
+                            <div className="job-main">{r.jobsDelivered || 0}</div>
                           )}
                         </td>
 
                         <td>
-                          {editingRowId === r.id ? (
-                            <div style={{ display: "flex", flexDirection: "column", gap: "5px", minWidth: "140px" }}>
+                          {isEditing ? (
+                            <div
+                              style={{
+                                display: "flex",
+                                flexDirection: "column",
+                                gap: "5px",
+                                minWidth: "140px",
+                              }}
+                            >
                               {Object.entries(editForm.uom || {}).map(([key, value]) => (
-                                <div key={key} style={{ display: "flex", justifyContent: "space-between", gap: "5px" }}>
+                                <div
+                                  key={key}
+                                  style={{
+                                    display: "flex",
+                                    justifyContent: "space-between",
+                                    gap: "5px",
+                                  }}
+                                >
                                   <span style={{ fontSize: "11px" }}>{key}:</span>
                                   <input
                                     type="number"
-                                    value={value || 0}
+                                    value={value ?? ""}
                                     onChange={(e) => handleUOMChange(key, e.target.value)}
                                     style={{ width: "50px" }}
                                   />
@@ -1104,7 +1409,7 @@ const handleSave = async () => {
                         </td>
 
                         <td>
-                          {editingRowId === r.id ? (
+                          {isEditing ? (
                             <input
                               value={editForm.otp || ""}
                               onChange={(e) => handleChange("otp", e.target.value)}
@@ -1116,7 +1421,7 @@ const handleSave = async () => {
                         </td>
 
                         <td>
-                          {editingRowId === r.id ? (
+                          {isEditing ? (
                             <input
                               value={editForm.internal_qc || ""}
                               onChange={(e) => handleChange("internal_qc", e.target.value)}
@@ -1128,7 +1433,7 @@ const handleSave = async () => {
                         </td>
 
                         <td>
-                          {editingRowId === r.id ? (
+                          {isEditing ? (
                             <input
                               value={editForm.amdocs_qc || ""}
                               onChange={(e) => handleChange("amdocs_qc", e.target.value)}
@@ -1140,7 +1445,7 @@ const handleSave = async () => {
                         </td>
 
                         <td>
-                          {editingRowId === r.id ? (
+                          {isEditing ? (
                             <input
                               type="date"
                               value={editForm.receive_date || ""}
@@ -1152,7 +1457,7 @@ const handleSave = async () => {
                         </td>
 
                         <td>
-                          {editingRowId === r.id ? (
+                          {isEditing ? (
                             <input
                               type="date"
                               value={editForm.ecd_date || ""}
@@ -1164,7 +1469,7 @@ const handleSave = async () => {
                         </td>
 
                         <td>
-                          {editingRowId === r.id ? (
+                          {isEditing ? (
                             <input
                               type="date"
                               value={editForm.submission_date || ""}
@@ -1176,29 +1481,32 @@ const handleSave = async () => {
                         </td>
 
                         <td>
-                          {editingRowId === r.id ? (
+                          {isEditing ? (
                             <div className="action-buttons">
                               <button
+                                type="button"
                                 className="cancel-btn"
                                 onClick={() => setEditingRowId(null)}
                               >
                                 ❌
                               </button>
-                              <button className="save-btn" onClick={handleSave}>
+                              <button type="button" className="save-btn" onClick={requestSave}>
                                 ✔️
                               </button>
                             </div>
                           ) : (
                             <div className="action-buttons">
                               <button
+                                type="button"
                                 className="edit-btn"
                                 onClick={() => handleEdit(r)}
                               >
                                 ✏️
                               </button>
                               <button
+                                type="button"
                                 className="delete-btn"
-                                onClick={() => handleDelete(r.id)}
+                                onClick={() => requestDelete(r.id)}
                               >
                                 🗑️
                               </button>
@@ -1210,7 +1518,7 @@ const handleSave = async () => {
                   })
                 ) : (
                   <tr>
-                    <td colSpan="21" className="no-data">
+                    <td colSpan="20" className="no-data">
                       ❌ No data found
                     </td>
                   </tr>
@@ -1226,6 +1534,7 @@ const handleSave = async () => {
 
             <div className="pagination">
               <button
+                type="button"
                 disabled={currentPage === 1}
                 onClick={() => setCurrentPage(currentPage - 1)}
               >
@@ -1253,6 +1562,7 @@ const handleSave = async () => {
               />
 
               <button
+                type="button"
                 disabled={currentPage === totalPages}
                 onClick={() => setCurrentPage(currentPage + 1)}
               >
