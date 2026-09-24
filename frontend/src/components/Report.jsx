@@ -375,7 +375,7 @@ export default function Reports({ domain, states }) {
                       <div style={{ fontSize: 11, fontWeight: 600, color: "#64748b" }}>OTP</div>
                     </div>
                   </div>
-                  <div style={{ fontSize: 11, color: "#94a3b8", marginTop: 6, textAlign: "right" }}>
+                  <div style={{ fontSize: 11, color: "#475569", marginTop: 6, textAlign: "right" }}>
                     As on - {formattedLastUpdate}
                   </div>
                 </div>
