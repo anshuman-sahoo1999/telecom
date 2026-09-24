@@ -243,39 +243,6 @@ export default function Reports({ domain, states }) {
     return Math.round((metCount / filteredData.length) * 100);
   })();
 
-  // ================= DOMAIN WISE SUMMARY (Job / QC / OTP) =================
-  const domainStatsMap = {};
-  filteredData.forEach((item) => {
-    const d = item.domain || "Unknown";
-    if (!domainStatsMap[d]) {
-      domainStatsMap[d] = { jobs: 0, qcSum: 0, qcCount: 0, otpMet: 0 };
-    }
-    domainStatsMap[d].jobs += 1;
-
-    const qcVal = parsePercent(item.amdocsQc || item.amdocs_qc);
-    if (qcVal !== null) {
-      domainStatsMap[d].qcSum += qcVal;
-      domainStatsMap[d].qcCount += 1;
-    }
-
-    if (isOtpMet(item.otp) === true) {
-      domainStatsMap[d].otpMet += 1;
-    }
-  });
-
-  const domainSummaryRows = Object.keys(domainStatsMap)
-    .sort()
-    .map((d) => ({
-      domain: d,
-      jobs: domainStatsMap[d].jobs,
-      qc: domainStatsMap[d].qcCount > 0 ? Math.round(domainStatsMap[d].qcSum / domainStatsMap[d].qcCount) : null,
-      otp: domainStatsMap[d].jobs > 0 ? Math.round((domainStatsMap[d].otpMet / domainStatsMap[d].jobs) * 100) : null,
-    }));
-
-  // Domain-wise summary is only meaningful when more than one domain is
-  // actually present in the filtered data (i.e. "All" domains selected).
-  const showDomainSummary = (!domain || domain === "All") && domainSummaryRows.length > 1;
-
   return (
     <div className={`reports ${open ? "open" : "close"}`}>
 
@@ -373,30 +340,6 @@ export default function Reports({ domain, states }) {
               </tbody>
             </table>
 
-            {/* ================= DOMAIN-WISE SUMMARY (only when viewing all domains) ================= */}
-            {showDomainSummary && (
-              <table className="reportTable" style={{ marginTop: "16px" }}>
-                <thead>
-                  <tr>
-                    <th>Domain</th>
-                    <th>Jobs Delivered</th>
-                    <th>Amdocs QC</th>
-                    <th>OTP</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {domainSummaryRows.map((row, i) => (
-                    <tr key={i}>
-                      <td>{row.domain}</td>
-                      <td>{row.jobs}</td>
-                      <td>{row.qc !== null ? `${row.qc}%` : "0%"}</td>
-                      <td>{row.otp !== null ? `${row.otp}%` : "0%"}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            )}
-
             {/* ================= SUMMARY ================= */}
             <div style={{ display: "flex", justifyContent: "flex-end", marginTop: "20px" }}>
               <div
@@ -405,28 +348,28 @@ export default function Reports({ domain, states }) {
               >
                 <div
                   style={{width: 64,height: 64,minWidth: 64,borderRadius: "14px", background: "linear-gradient(135deg, #3b82f6, #06b6d4)",
-                  display: "flex",alignItems: "center",justifyContent: "center",fontSize: 28,}} >
+                  display: "flex",alignItems: "center",justifyContent: "center",fontSize: 44,lineHeight: 1,}} >
                   📶
                 </div>
 
                 <div>
                   <div style={{ display: "flex", alignItems: "center", gap: "16px" }}>
                     <div style={{ textAlign: "center" }}>
-                      <div style={{ fontSize: 30, fontWeight: 800, color: "#dc2626", lineHeight: 1.1 }}>
+                      <div style={{ fontSize: 30, fontWeight: 800, color: "#991b1b", lineHeight: 1.1 }}>
                         {totalJobs}
                       </div>
                       <div style={{ fontSize: 11, fontWeight: 600, color: "#64748b" }}>Jobs Delivered</div>
                     </div>
                     <div style={{ width: 1, height: 34, background: "#e2e8f0" }} />
                     <div style={{ textAlign: "center" }}>
-                      <div style={{ fontSize: 30, fontWeight: 800, color: "#dc2626", lineHeight: 1.1 }}>
+                      <div style={{ fontSize: 30, fontWeight: 800, color: "#991b1b", lineHeight: 1.1 }}>
                         {overallQc !== null ? `${overallQc}%` : "0%"}
                       </div>
                       <div style={{ fontSize: 11, fontWeight: 600, color: "#64748b" }}>Amdocs QC</div>
                     </div>
                     <div style={{ width: 1, height: 34, background: "#e2e8f0" }} />
                     <div style={{ textAlign: "center" }}>
-                      <div style={{ fontSize: 30, fontWeight: 800, color: "#dc2626", lineHeight: 1.1 }}>
+                      <div style={{ fontSize: 30, fontWeight: 800, color: "#991b1b", lineHeight: 1.1 }}>
                         {overallOtp !== null ? `${overallOtp}%` : "0%"}
                       </div>
                       <div style={{ fontSize: 11, fontWeight: 600, color: "#64748b" }}>OTP</div>
