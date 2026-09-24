@@ -37,6 +37,16 @@ export default function Reports({ domain, states }) {
     }
     return "Unknown";
   };
+
+  // Normalizes the "states" prop so it always works whether the parent
+  // passes a single string, an array of strings, or leaves it empty.
+  const selectedStates = (() => {
+    if (!states) return [];
+    if (Array.isArray(states)) return states.filter(Boolean);
+    if (typeof states === "string") return states === "All" ? [] : [states];
+    return [];
+  })();
+
   // FETCH LAST UPDATE MAP
   useEffect(() => {
     axios
@@ -125,7 +135,10 @@ export default function Reports({ domain, states }) {
       data
         .filter((item) => {
           if (domain && domain !== "All") {
-            return item.domain === domain;
+            if (item.domain !== domain) return false;
+          }
+          if (selectedStates.length && !selectedStates.includes(item.state)) {
+            return false;
           }
           return true;
         })
@@ -186,6 +199,11 @@ export default function Reports({ domain, states }) {
   const filteredData = data.filter((item) => {
     if (domain && domain !== "All") {
       if (item.domain !== domain) return false;
+    }
+
+    // Apply the states/markets filter passed in from the parent.
+    if (selectedStates.length && !selectedStates.includes(item.state)) {
+      return false;
     }
 
     const months = Array.isArray(item.months) ? item.months : [];
@@ -253,6 +271,10 @@ export default function Reports({ domain, states }) {
       qc: domainStatsMap[d].qcCount > 0 ? Math.round(domainStatsMap[d].qcSum / domainStatsMap[d].qcCount) : null,
       otp: domainStatsMap[d].jobs > 0 ? Math.round((domainStatsMap[d].otpMet / domainStatsMap[d].jobs) * 100) : null,
     }));
+
+  // Domain-wise summary is only meaningful when more than one domain is
+  // actually present in the filtered data (i.e. "All" domains selected).
+  const showDomainSummary = (!domain || domain === "All") && domainSummaryRows.length > 1;
 
   return (
     <div className={`reports ${open ? "open" : "close"}`}>
@@ -350,6 +372,31 @@ export default function Reports({ domain, states }) {
                 </tr>
               </tbody>
             </table>
+
+            {/* ================= DOMAIN-WISE SUMMARY (only when viewing all domains) ================= */}
+            {showDomainSummary && (
+              <table className="reportTable" style={{ marginTop: "16px" }}>
+                <thead>
+                  <tr>
+                    <th>Domain</th>
+                    <th>Jobs Delivered</th>
+                    <th>Amdocs QC</th>
+                    <th>OTP</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {domainSummaryRows.map((row, i) => (
+                    <tr key={i}>
+                      <td>{row.domain}</td>
+                      <td>{row.jobs}</td>
+                      <td>{row.qc !== null ? `${row.qc}%` : "0%"}</td>
+                      <td>{row.otp !== null ? `${row.otp}%` : "0%"}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+
             {/* ================= SUMMARY ================= */}
             <div style={{ display: "flex", justifyContent: "flex-end", marginTop: "20px" }}>
               <div
