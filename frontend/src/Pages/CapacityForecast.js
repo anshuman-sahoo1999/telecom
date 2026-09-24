@@ -201,7 +201,6 @@ export default function CapacityForecast() {
 
     try {
       await axios.post(`${API_BASE_URL}/api/capacity-forecast`, payloadData);
-      alert("Data submitted successfully!");
       fetchCapacityRecords();
 
       // Form sirf success par reset hoga (pehle fail hone par bhi data ud jata tha)
@@ -267,7 +266,6 @@ export default function CapacityForecast() {
 
     try {
       await axios.put(`${API_BASE_URL}/api/capacity-forecast/${rowId}`, payloadData);
-      alert("Record updated successfully!");
       setEditingRowId(null);
       fetchCapacityRecords();
     } catch (err) {
@@ -280,7 +278,6 @@ export default function CapacityForecast() {
     if (!window.confirm("Are you sure you want to delete this record?")) return;
     try {
       await axios.delete(`${API_BASE_URL}/api/capacity-forecast/${id}`);
-      alert("Record deleted successfully!");
       fetchCapacityRecords();
     } catch (err) {
       console.error("Error deleting record:", err);
