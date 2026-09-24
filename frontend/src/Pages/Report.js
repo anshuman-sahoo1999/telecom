@@ -10,16 +10,7 @@ import { ComposableMap, Geographies, Geography } from "react-simple-maps";
 import geoData from "../us-states.json";
 import { geoCentroid } from "d3-geo";
 
-/* =====================================================
-   Helper functions / constants (component ke bahar)
-   ===================================================== */
-
 const pad2 = (n) => String(n).padStart(2, "0");
-
-// Date ko "YYYY-MM-DD" (date input wale format) mein badalta hai.
-// - Already "YYYY-MM-DD" ho to seedha wahi (timezone ka jhanjhat nahi)
-// - Warna local timezone se nikalta hai
-// (Pehle yahan "YYYY-DD-MM" ban raha tha, jo galat tha)
 const toDateKey = (value) => {
   if (!value) return "";
   if (typeof value === "string" && /^\d{4}-\d{2}-\d{2}$/.test(value.trim())) {
@@ -130,7 +121,6 @@ const getStoredUser = () => {
   }
 };
 
-/* ---------- On-screen message (toast) + confirm box styles ---------- */
 const toastBaseStyle = {
   position: "fixed",
   top: "20px",
@@ -270,7 +260,12 @@ export default function Report() {
     let year = "-";
 
     if (typeof monthRaw === "string" && monthRaw.trim() !== "") {
-      if (monthRaw.includes("-")) {
+      if (monthRaw.includes(",")) {
+        // Backend (getAllWork) hamesha "Jan,2024" format bhejta hai
+        const parts = monthRaw.split(",");
+        month = parts[0] || "-";
+        year = parts[1] || "-";
+      } else if (monthRaw.includes("-")) {
         const parts = monthRaw.split("-");
         month = parts[0] || "-";
         let rawYear = parts[1] || "-";
@@ -850,9 +845,11 @@ export default function Report() {
       });
 
       const yearText = String(editForm.year || "");
+      // Poora 4-digit year use karo (comma format, jo backend ka standard format hai),
+      // warna 2-digit year truncate hone se save ke baad month/year galat ho jaata tha
       const currentMonthVal =
         editForm.month && yearText
-          ? `${editForm.month}-${yearText.slice(-2)}`
+          ? `${editForm.month},${yearText}`
           : null;
 
       const listTypes = editForm.listTypes || {};
