@@ -12,6 +12,9 @@ const clean = (v) => {
 };
 
 const normalize = (v) => clean(v).toUpperCase();
+
+// db.query ko Promise bana diya, taaki delete/update me har query ka
+// khatam hone ka wait kar sakein (pehle fire-and-forget tha).
 const query = (sql, params = []) =>
   new Promise((resolve, reject) => {
     db.query(sql, params, (err, result) => (err ? reject(err) : resolve(result)));
@@ -20,6 +23,48 @@ const query = (sql, params = []) =>
 const isRealJobId = (v) => {
   const s = clean(v);
   return s !== "" && s !== "-";
+};
+
+// MySQL JSON column ho to driver already parsed object/array deta hai,
+// string ho to JSON.parse karna padta hai. Dono case safe.
+const safeParseJson = (val, fallback) => {
+  if (val === null || val === undefined) return fallback;
+  if (typeof val === "object") return val;
+  if (typeof val === "string") {
+    try { return JSON.parse(val); } catch { return fallback; }
+  }
+  return fallback;
+};
+
+// months input (array / JSON string / plain string) -> clean array
+const parseMonthsInput = (months) => {
+  let arr = [];
+  if (Array.isArray(months)) {
+    arr = months;
+  } else if (typeof months === "string" && months.trim() !== "") {
+    try {
+      const temp = JSON.parse(months);
+      arr = Array.isArray(temp) ? temp : [months.trim()];
+    } catch {
+      arr = [months.trim()];
+    }
+  }
+  return cleanMonthArray(arr);
+};
+
+// Sirf wahi job_creation rows hatao jinki work_updates me ab koi row nahi bachi.
+// (Agar same Job ID ki doosri work row abhi bhi hai to job_creation ko mat chhuo.)
+const removeOrphanJobCreation = async (jobIds) => {
+  const ids = [...new Set((jobIds || []).map(clean).filter(isRealJobId))];
+  if (ids.length === 0) return;
+  await query(
+    `DELETE FROM job_creation
+     WHERE TRIM(jobId) IN (?)
+       AND NOT EXISTS (
+         SELECT 1 FROM work_updates w WHERE TRIM(w.job_id) = TRIM(job_creation.jobId)
+       )`,
+    [ids]
+  );
 };
 
 /* ======================================
@@ -439,7 +484,13 @@ const importExcel = async (req, res) => {
           }
         }
 
-        if (Object.keys(obj).length > 0) {
+        // Poori khaali row (sirf formatting wali) skip karo
+        const hasAnyValue = Object.values(obj).some((v) => {
+          if (v === null || v === undefined) return false;
+          return v.toString().trim() !== "";
+        });
+
+        if (hasAnyValue) {
           rows.push(obj);
         }
       });
@@ -587,8 +638,10 @@ const importExcel = async (req, res) => {
                   let existingMonths = [];
                   let existingUOM = {};
 
-                  try { existingMonths = JSON.parse(existing.months || "[]"); } catch { existingMonths = []; }
-                  try { existingUOM = JSON.parse(existing.uom || "{}"); } catch { existingUOM = {}; }
+                  existingMonths = safeParseJson(existing.months, []);
+                  existingUOM = safeParseJson(existing.uom, {});
+                  if (!Array.isArray(existingMonths)) existingMonths = existingMonths ? [existingMonths] : [];
+                  if (!existingUOM || typeof existingUOM !== "object" || Array.isArray(existingUOM)) existingUOM = {};
 
                   const newMonth = month ? String(month).trim() : null;
                   if (newMonth && !existingMonths.includes(newMonth)) {
@@ -600,7 +653,7 @@ const importExcel = async (req, res) => {
 
                   const updateSql = `
                     UPDATE work_updates
-                    SET months = ?, uom = ?, otp = ?, current_status = ?, production_engineers = ?, qc_engineers = ?, amdocs_qc = ?, internal_qc = ?, jobs_delivered = ?, receive_date = COALESCE(?, receive_date), ecd_date = COALESCE(?, ecd_date), submission_date = COALESCE(?, submission_date), updated_at = CURRENT_TIMESTAMP
+                    SET months = ?, uom = ?, otp = COALESCE(NULLIF(?, ''), otp), current_status = COALESCE(NULLIF(?, ''), current_status), production_engineers = COALESCE(NULLIF(?, ''), production_engineers), qc_engineers = COALESCE(NULLIF(?, ''), qc_engineers), amdocs_qc = COALESCE(NULLIF(?, ''), amdocs_qc), internal_qc = COALESCE(NULLIF(?, ''), internal_qc), jobs_delivered = ?, receive_date = COALESCE(?, receive_date), ecd_date = COALESCE(?, ecd_date), submission_date = COALESCE(?, submission_date), updated_at = CURRENT_TIMESTAMP
                     WHERE id = ?
                   `;
 
@@ -712,13 +765,7 @@ const createWork = (req, res) => {
   const formattedEcdDate = parseExcelDate(ecd_date);
   const formattedSubmissionDate = parseExcelDate(submission_date);
   
-  let parsedMonths = [];
-  if (Array.isArray(months)) {
-    parsedMonths = months;
-  } else if (typeof months === "string" && months.trim() !== "") {
-    try { parsedMonths = JSON.parse(months); } catch { parsedMonths = [months]; }
-  }
-  parsedMonths = cleanMonthArray(parsedMonths);
+  const parsedMonths = parseMonthsInput(months);
   const firstMonth = parsedMonths.length > 0 ? parsedMonths[0] : null;
 
   const checkSql = cleanJobId ? `SELECT id FROM work_updates WHERE TRIM(job_id) = TRIM(?) LIMIT 1` : null;
@@ -818,18 +865,7 @@ const updateWork = async (req, res) => {
   const formattedEcdDate = parseExcelDate(ecd_date);
   const formattedSubmissionDate = parseExcelDate(submission_date);
 
-  let parsedMonths = [];
-  if (Array.isArray(months)) {
-    parsedMonths = months;
-  } else if (typeof months === "string" && months.trim() !== "") {
-    try { 
-      const temp = JSON.parse(months); 
-      parsedMonths = Array.isArray(temp) ? temp : [months];
-    } catch { 
-      parsedMonths = [months.trim()]; 
-    }
-  }
-  parsedMonths = cleanMonthArray(parsedMonths);
+  const parsedMonths = parseMonthsInput(months);
   const latestMonth = parsedMonths.length > 0 ? parsedMonths[parsedMonths.length - 1] : null;
 
   const sql = `
@@ -889,6 +925,10 @@ const updateWork = async (req, res) => {
       id
     ]);
 
+    if (result && result.affectedRows === 0) {
+      return res.status(404).json({ message: "Record not found", error: "No work row with this id" });
+    }
+
     const jobIdChanged =
       isRealJobId(oldJobId) && oldJobId.toLowerCase() !== cleanJobId.toLowerCase();
 
@@ -939,15 +979,6 @@ const updateWork = async (req, res) => {
       error: err
     });
   }
-};
-
-const safeParseJson = (val, fallback) => {
-  if (val === null || val === undefined) return fallback;
-  if (typeof val === "object") return val;
-  if (typeof val === "string") {
-    try { return JSON.parse(val); } catch { return fallback; }
-  }
-  return fallback;
 };
 
 /* ======================================
@@ -1083,9 +1114,8 @@ const deleteWork = async (req, res) => {
     // Pehle response pehle chala jata tha aur frontend turant Job History
     // dobara load kar leta tha, isliye purani row dikh jati thi (aur agar
     // delete fail hota to error bhi chhup jata tha).
-    if (isRealJobId(jobId)) {
-      await query("DELETE FROM job_creation WHERE TRIM(jobId) = TRIM(?)", [jobId]);
-    }
+    // (sirf tab jab us Job ID ki koi aur work row bachi na ho)
+    await removeOrphanJobCreation([jobId]);
 
     return res.json({ message: "Deleted from both Work Controller and Job Creation successfully" });
   } catch (err) {
@@ -1105,9 +1135,7 @@ const deleteFile = async (req, res) => {
 
     await query("DELETE FROM work_updates WHERE file_name = ?", [fileName]);
 
-    if (jobIds.length > 0) {
-      await query("DELETE FROM job_creation WHERE TRIM(jobId) IN (?)", [jobIds]);
-    }
+    await removeOrphanJobCreation(jobIds);
 
     return res.json({ message: "File and related jobs deleted successfully from both places" });
   } catch (err) {
