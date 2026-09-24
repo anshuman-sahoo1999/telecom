@@ -2,6 +2,7 @@ const db = require("../config/db");
 
 const clean = (v) => (v !== undefined && v !== null ? v.toString().trim() : "");
 const normalize = (v) => clean(v).toUpperCase();
+
 const monthNames = [
   "Jan", "Feb", "Mar", "Apr", "May", "Jun",
   "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"
@@ -49,16 +50,13 @@ const cleanSingleMonth = (m) => {
   return strVal;
 };
 
-// ============================
-// CREATE / SYNC JOB
-// ============================
 exports.createJob = (req, res) => {
   let {
     domain,
     market,
     jobId,
     receiveDate,
-    receivedDate, 
+    receivedDate,
     ecdDate,
     submissionDate,
     month,
@@ -73,13 +71,14 @@ exports.createJob = (req, res) => {
   const finalReceiveDate = receiveDate || receivedDate || null;
   const formattedEcdDate = ecdDate && ecdDate !== "" ? ecdDate : null;
   const formattedSubmissionDate = submissionDate && submissionDate !== "" ? submissionDate : null;
-  
+
   const finalAmdocsQc = amdocsQc !== undefined ? amdocsQc : (amdocs_qc || null);
   const finalInternalQc = internalQc !== undefined ? internalQc : (internal_qc || null);
   const finalOtp = otp || internalOtp || null;
 
   const cleanJobId = clean(jobId);
   const cleanDomain = normalize(domain);
+  const cleanMarket = clean(market);
   const cleanMonth = cleanSingleMonth(month);
 
   const checkSql = `SELECT id FROM job_creation WHERE TRIM(jobId) = TRIM(?) LIMIT 1`;
@@ -92,11 +91,11 @@ exports.createJob = (req, res) => {
     if (checkRows && checkRows.length > 0) {
       const updateSql = `
         UPDATE job_creation
-        SET domain = COALESCE(NULLIF(?, ''), domain), 
-            market = COALESCE(NULLIF(?, ''), market), 
-            month = COALESCE(?, month), 
-            receiveDate = COALESCE(?, receiveDate), 
-            ecdDate = COALESCE(?, ecdDate), 
+        SET domain = COALESCE(NULLIF(?, ''), domain),
+            market = COALESCE(NULLIF(?, ''), market),
+            month = COALESCE(?, month),
+            receiveDate = COALESCE(?, receiveDate),
+            ecdDate = COALESCE(?, ecdDate),
             submissionDate = COALESCE(?, submissionDate),
             otp = COALESCE(NULLIF(?, ''), otp),
             amdocsQc = COALESCE(NULLIF(?, ''), amdocsQc),
@@ -104,7 +103,7 @@ exports.createJob = (req, res) => {
             updated_at = CURRENT_TIMESTAMP
         WHERE TRIM(jobId) = TRIM(?)
       `;
-      db.query(updateSql, [cleanDomain, market, cleanMonth, finalReceiveDate, formattedEcdDate, formattedSubmissionDate, finalOtp, finalAmdocsQc, finalInternalQc, cleanJobId], (upErr) => {
+      db.query(updateSql, [cleanDomain, cleanMarket, cleanMonth, finalReceiveDate, formattedEcdDate, formattedSubmissionDate, finalOtp, finalAmdocsQc, finalInternalQc, cleanJobId], (upErr) => {
         if (upErr) return res.status(500).json({ success: false, message: upErr.message });
         syncToWorkController();
       });
@@ -113,7 +112,7 @@ exports.createJob = (req, res) => {
         INSERT INTO job_creation (domain, market, jobId, month, receiveDate, ecdDate, submissionDate, otp, amdocsQc, internalQc)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `;
-      db.query(insertSql, [cleanDomain, market, cleanJobId, cleanMonth, finalReceiveDate, formattedEcdDate, formattedSubmissionDate, finalOtp, finalAmdocsQc, finalInternalQc], (inErr, inResult) => {
+      db.query(insertSql, [cleanDomain, cleanMarket, cleanJobId, cleanMonth, finalReceiveDate, formattedEcdDate, formattedSubmissionDate, finalOtp, finalAmdocsQc, finalInternalQc], (inErr, inResult) => {
         if (inErr) return res.status(500).json({ success: false, message: inErr.message });
         syncToWorkController(inResult.insertId);
       });
@@ -134,11 +133,11 @@ exports.createJob = (req, res) => {
       if (!wErr && wRows && wRows.length > 0) {
         const updateWorkSql = `
           UPDATE work_updates
-          SET domain = COALESCE(NULLIF(?, ''), domain), 
-              state = COALESCE(NULLIF(?, ''), state), 
-              months = CASE WHEN ? IS NOT NULL THEN JSON_ARRAY(?) ELSE months END, 
-              receive_date = COALESCE(?, receive_date), 
-              ecd_date = COALESCE(?, ecd_date), 
+          SET domain = COALESCE(NULLIF(?, ''), domain),
+              state = COALESCE(NULLIF(?, ''), state),
+              months = CASE WHEN ? IS NOT NULL THEN JSON_ARRAY(?) ELSE months END,
+              receive_date = COALESCE(?, receive_date),
+              ecd_date = COALESCE(?, ecd_date),
               submission_date = COALESCE(?, submission_date),
               amdocs_qc = COALESCE(NULLIF(?, ''), amdocs_qc),
               internal_qc = COALESCE(NULLIF(?, ''), internal_qc),
@@ -146,7 +145,7 @@ exports.createJob = (req, res) => {
               updated_at = CURRENT_TIMESTAMP
           WHERE TRIM(job_id) = TRIM(?)
         `;
-        db.query(updateWorkSql, [cleanDomain, market, cleanMonth, cleanMonth, finalReceiveDate, formattedEcdDate, formattedSubmissionDate, finalAmdocsQc, finalInternalQc, finalOtp, cleanJobId], () => {
+        db.query(updateWorkSql, [cleanDomain, cleanMarket, cleanMonth, cleanMonth, finalReceiveDate, formattedEcdDate, formattedSubmissionDate, finalAmdocsQc, finalInternalQc, finalOtp, cleanJobId], () => {
           return res.json({
             success: true,
             message: "Job synced successfully with correct QC, OTP & month",
@@ -158,7 +157,7 @@ exports.createJob = (req, res) => {
           INSERT INTO work_updates (domain, state, job_id, months, receive_date, ecd_date, submission_date, amdocs_qc, internal_qc, otp, jobs_delivered, uom)
           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, '{}')
         `;
-        db.query(insertWorkSql, [cleanDomain, market, cleanJobId, JSON.stringify(cleanMonth ? [cleanMonth] : []), finalReceiveDate, formattedEcdDate, formattedSubmissionDate, finalAmdocsQc, finalInternalQc, finalOtp], () => {
+        db.query(insertWorkSql, [cleanDomain, cleanMarket, cleanJobId, JSON.stringify(cleanMonth ? [cleanMonth] : []), finalReceiveDate, formattedEcdDate, formattedSubmissionDate, finalAmdocsQc, finalInternalQc, finalOtp], () => {
           return res.json({
             success: true,
             message: "Job inserted successfully into Work Controller with QC & OTP",
@@ -170,9 +169,6 @@ exports.createJob = (req, res) => {
   }
 };
 
-// ============================
-// GET ALL JOBS
-// ============================
 exports.getAllJobs = (req, res) => {
   const queryJC = "SELECT id, jobId, domain, market, month, receiveDate, ecdDate, submissionDate, otp, amdocsQc, internalQc, updated_at FROM job_creation";
   const queryWU = "SELECT id, job_id AS jobId, domain, state AS market, receive_date AS receiveDate, ecd_date AS ecdDate, submission_date AS submissionDate, amdocs_qc, internal_qc, otp, updated_at FROM work_updates WHERE job_id IS NOT NULL AND job_id != '-' AND job_id != ''";
@@ -207,6 +203,7 @@ exports.getAllJobs = (req, res) => {
           const existing = jobMap.get(jId);
           jobMap.set(jId, {
             ...existing,
+
             domain: row.domain || existing.domain,
             market: row.market || existing.market,
             submissionDate: row.submissionDate || existing.submissionDate,
@@ -216,7 +213,7 @@ exports.getAllJobs = (req, res) => {
             internal_qc: row.internal_qc || existing.internal_qc,
             otp: row.otp || existing.otp,
             updated_at: row.updated_at || existing.updated_at,
-            workId: row.id, 
+            workId: row.id,
           });
         } else {
           jobMap.set(jId, {
@@ -232,10 +229,6 @@ exports.getAllJobs = (req, res) => {
     });
   });
 };
-
-// ============================
-// UPDATE JOB
-// ============================
 
 exports.updateJob = (req, res) => {
   const {
@@ -255,7 +248,9 @@ exports.updateJob = (req, res) => {
   } = req.body;
 
   const paramId = clean(req.params.id);
+
   const requestedJobId = clean(jobId) || paramId;
+
   const cleanNewJobId = clean(newJobId) || requestedJobId;
 
   const finalInternalQc = internalQc !== undefined ? internalQc : (internal_qc || null);
@@ -314,7 +309,6 @@ exports.updateJob = (req, res) => {
       );
     };
 
-    // Step 2: job_creation ko strictly jcId (agar mila) ya jobId se dhoondo
     const findJcSql = cleanJcId
       ? `SELECT id FROM job_creation WHERE id = ? LIMIT 1`
       : `SELECT id FROM job_creation WHERE TRIM(jobId) = TRIM(?) LIMIT 1`;
@@ -353,6 +347,7 @@ exports.updateJob = (req, res) => {
             (upJerr) => cb(upJerr)
           );
         } else if (cleanNewJobId && cleanNewJobId !== "-") {
+
           const insertJcSql = `
             INSERT INTO job_creation (domain, market, jobId, month, receiveDate, ecdDate, submissionDate, otp, amdocsQc, internalQc)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -413,9 +408,6 @@ exports.updateJob = (req, res) => {
   });
 };
 
-// ============================
-// DELETE JOB
-// ============================
 exports.deleteJob = (req, res) => {
   const rowId = clean(req.params.id);
   const requestedJobId = clean(req.query.jobId);
@@ -436,7 +428,7 @@ exports.deleteJob = (req, res) => {
     db.query(findWorkSql, [findWorkParam], (wErr, wRows) => {
       const jcJobId = (!jcErr && jcRows && jcRows[0]) ? jcRows[0].jobId : "";
       const workJobId = (!wErr && wRows && wRows[0]) ? wRows[0].job_id : "";
-      // final jobId: jo bhi mile use lo, taaki dusri table se bhi matching row mit jaaye
+
       const targetJobId = requestedJobId || jcJobId || workJobId || "";
 
       const deleteFromJc = (cb) => {
@@ -445,7 +437,7 @@ exports.deleteJob = (req, res) => {
         } else if (targetJobId) {
           db.query("DELETE FROM job_creation WHERE TRIM(jobId) = TRIM(?)", [targetJobId], cb);
         } else if (rowId) {
-          // Backward-compat: purane frontend calls jo sirf plain rowId bhejte hain
+
           db.query("DELETE FROM job_creation WHERE id = ?", [rowId], cb);
         } else {
           cb(null);
@@ -483,9 +475,6 @@ exports.deleteJob = (req, res) => {
   });
 };
 
-// ============================
-// SUBMIT JOB
-// ============================
 exports.submitJob = (req, res) => {
   const { jobId, month, submissionDate } = req.body;
   const formattedSubmissionDate = submissionDate && submissionDate !== "" ? submissionDate : null;
