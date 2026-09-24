@@ -41,6 +41,8 @@ const Organogram = () => {
     const [users, setUsers] = useState([]);
     const [domains, setDomains] = useState([]);
     const treeRef = useRef(null);
+    // FIX: popup ke liye alag ref, taaki popup band hone par main tree ka ref null na ho jaye
+    const popupTreeRef = useRef(null);
     const [hiddenRoles, setHiddenRoles] = useState([]);
     const hoverTimerRef = useRef(null);
     const [selectedUser, setSelectedUser] = useState(null);
@@ -81,6 +83,11 @@ const Organogram = () => {
         fetchDomains();
     }, []);
 
+    // FIX: unmount par hover timer clear karo
+    useEffect(() => {
+        return () => clearTimeout(hoverTimerRef.current);
+    }, []);
+
     const fetchUsers = async () => {
         try {
             const res = await axios.get(`${API_BASE_URL}/api/auth/all-user-details`);
@@ -113,12 +120,20 @@ const Organogram = () => {
         return `${year}-${month}-${day} at ${hours}.${minutes}.${seconds} ${ampm}`;
     };
 
+    // FIX: export ke liye sahi element (popup khula ho to popup ka, warna main ka)
+    const getExportElement = () => {
+        return isFullScreen && popupTreeRef.current ? popupTreeRef.current : treeRef.current;
+    };
+
     const admins = users.filter((u) => u.role === "Admin").sort((a, b) => a.id - b.id);
     const misUsers = users.filter((u) => u.role === "MIS");
     const teamLeads = users.filter((u) => u.role === "TeamLead");
     const teamMembers = users.filter((u) => u.role === "TeamMember");
 
     const totalEmployeesCount = teamLeads.length + teamMembers.length;
+
+    // FIX: agar sirf 1 admin ho to bhi MIS dikhe (pehle index === 1 hone se hide ho jata tha)
+    const misAdminIndex = admins.length > 1 ? 1 : 0;
 
     const handleDelete = (id) => {
         Swal.fire({
@@ -153,66 +168,87 @@ const Organogram = () => {
 
     const exportPNG = async () => {
         setIsExporting(true);
-        await new Promise((r) => setTimeout(r, 100));
-        const element = treeRef.current;
-        const dataUrl = await htmlToImage.toPng(element, {
-            backgroundColor: "#fff",
-            pixelRatio: 2,
-            cacheBust: true,
-            width: element.scrollWidth,
-            height: element.scrollHeight,
-        });
-        setIsExporting(false);
-        const link = document.createElement("a");
-        link.download = `Organogram ${getFileNameDateTime()}.png`;
-        link.href = dataUrl;
-        link.click();
+        try {
+            await new Promise((r) => setTimeout(r, 100));
+            const element = getExportElement();
+            if (!element) return;
+            const dataUrl = await htmlToImage.toPng(element, {
+                backgroundColor: "#fff",
+                pixelRatio: 2,
+                cacheBust: true,
+                width: element.scrollWidth,
+                height: element.scrollHeight,
+            });
+            const link = document.createElement("a");
+            link.download = `Organogram ${getFileNameDateTime()}.png`;
+            link.href = dataUrl;
+            link.click();
+        } catch (err) {
+            console.log(err);
+        } finally {
+            setIsExporting(false);
+            setOpenExport(false);
+        }
     };
 
     const exportJPG = async () => {
         setIsExporting(true);
-        await new Promise((r) => setTimeout(r, 100));
-        const element = treeRef.current;
-        const dataUrl = await htmlToImage.toJpeg(element, {
-            quality: 0.95,
-            backgroundColor: "#fff",
-            width: element.scrollWidth,
-            height: element.scrollHeight,
-        });
-        setIsExporting(false);
-        const link = document.createElement("a");
-        link.download = `Organogram ${getFileNameDateTime()}.jpg`;
-        link.href = dataUrl;
-        link.click();
+        try {
+            await new Promise((r) => setTimeout(r, 100));
+            const element = getExportElement();
+            if (!element) return;
+            const dataUrl = await htmlToImage.toJpeg(element, {
+                quality: 0.95,
+                backgroundColor: "#fff",
+                width: element.scrollWidth,
+                height: element.scrollHeight,
+            });
+            const link = document.createElement("a");
+            link.download = `Organogram ${getFileNameDateTime()}.jpg`;
+            link.href = dataUrl;
+            link.click();
+        } catch (err) {
+            console.log(err);
+        } finally {
+            setIsExporting(false);
+            setOpenExport(false);
+        }
     };
 
     const exportPDF = async () => {
         setIsExporting(true);
-        await new Promise((r) => setTimeout(r, 100));
-        const element = treeRef.current;
-        const canvas = await htmlToImage.toCanvas(element, {
-            backgroundColor: "#fff",
-            pixelRatio: 2,
-        });
-        const imgData = canvas.toDataURL("image/png");
-        const pdf = new jsPDF("l", "mm", "a4");
-        const pageWidth = pdf.internal.pageSize.getWidth();
-        const pageHeight = pdf.internal.pageSize.getHeight();
-        const imgRatio = canvas.width / canvas.height;
-        const pageRatio = pageWidth / pageHeight;
-        let renderWidth = pageWidth;
-        let renderHeight = pageHeight;
+        try {
+            await new Promise((r) => setTimeout(r, 100));
+            const element = getExportElement();
+            if (!element) return;
+            const canvas = await htmlToImage.toCanvas(element, {
+                backgroundColor: "#fff",
+                pixelRatio: 2,
+            });
+            const imgData = canvas.toDataURL("image/png");
+            const pdf = new jsPDF("l", "mm", "a4");
+            const pageWidth = pdf.internal.pageSize.getWidth();
+            const pageHeight = pdf.internal.pageSize.getHeight();
+            const imgRatio = canvas.width / canvas.height;
+            const pageRatio = pageWidth / pageHeight;
+            let renderWidth = pageWidth;
+            let renderHeight = pageHeight;
 
-        if (imgRatio > pageRatio) {
-            renderHeight = pageWidth / imgRatio;
-        } else {
-            renderWidth = pageHeight * imgRatio;
+            if (imgRatio > pageRatio) {
+                renderHeight = pageWidth / imgRatio;
+            } else {
+                renderWidth = pageHeight * imgRatio;
+            }
+            const x = (pageWidth - renderWidth) / 2;
+            const y = (pageHeight - renderHeight) / 2;
+            pdf.addImage(imgData, "PNG", x, y, renderWidth, renderHeight);
+            pdf.save(`Organogram ${getFileNameDateTime()}.pdf`);
+        } catch (err) {
+            console.log(err);
+        } finally {
+            setIsExporting(false);
+            setOpenExport(false);
         }
-        const x = (pageWidth - renderWidth) / 2;
-        const y = (pageHeight - renderHeight) / 2;
-        pdf.addImage(imgData, "PNG", x, y, renderWidth, renderHeight);
-        setIsExporting(false);
-        pdf.save(`Organogram ${getFileNameDateTime()}.pdf`);
     };
 
     const exportExcel = () => {
@@ -249,15 +285,18 @@ const Organogram = () => {
                 };
             });
             const ws = XLSX.utils.json_to_sheet(rows);
-            const range = XLSX.utils.decode_range(ws["!ref"]);
-            for (let col = range.s.c; col <= range.e.c; col++) {
-                const cell = XLSX.utils.encode_cell({ r: 0, c: col });
-                if (ws[cell]) {
-                    ws[cell].s = {
-                        fill: { fgColor: { rgb: "1F4E78" } },
-                        font: { bold: true, color: { rgb: "FFFFFF" } },
-                        alignment: { horizontal: "center", vertical: "center" },
-                    };
+            // FIX: khali sheet me ws["!ref"] undefined hota hai, isse crash hota tha
+            if (ws["!ref"]) {
+                const range = XLSX.utils.decode_range(ws["!ref"]);
+                for (let col = range.s.c; col <= range.e.c; col++) {
+                    const cell = XLSX.utils.encode_cell({ r: 0, c: col });
+                    if (ws[cell]) {
+                        ws[cell].s = {
+                            fill: { fgColor: { rgb: "1F4E78" } },
+                            font: { bold: true, color: { rgb: "FFFFFF" } },
+                            alignment: { horizontal: "center", vertical: "center" },
+                        };
+                    }
                 }
             }
             XLSX.utils.book_append_sheet(wb, ws, sheetName);
@@ -272,6 +311,7 @@ const Organogram = () => {
         });
 
         saveAs(file, `Organogram Report ${getFileNameDateTime()}.xlsx`);
+        setOpenExport(false);
     };
 
     const handleDragEnd = async (event) => {
@@ -286,6 +326,7 @@ const Organogram = () => {
             const oldDomain = draggedUser.domain;
             const targetTL = users.find(
                 (u) =>
+                    u.id !== draggedUser.id &&
                     u.role === "TeamLead" &&
                     (u.domain || "").split(",").map((x) => x.trim()).includes(targetDomain)
             );
@@ -313,11 +354,22 @@ const Organogram = () => {
             return;
         }
 
+        // FIX: TeamMember ko TeamLead zone me drop karne par memberType "TeamLead" set ho jata tha
+        if (targetType === "TeamLead") return;
+
+        const targetUserForSwap = users.find(
+            (u) =>
+                u.id.toString() !== draggedId.toString() &&
+                u.memberType === targetType &&
+                (u.domain || "").split(",").map((x) => x.trim()).includes(targetDomain)
+        );
+
         setUsers((prev) => {
             const currentDraggedUser = prev.find((u) => u.id.toString() === draggedId.toString());
             if (!currentDraggedUser) return prev;
             const targetUser = prev.find(
                 (u) =>
+                    u.id.toString() !== draggedId.toString() &&
                     u.memberType === targetType &&
                     (u.domain || "").split(",").map((x) => x.trim()).includes(targetDomain)
             );
@@ -337,17 +389,12 @@ const Organogram = () => {
         });
 
         try {
-            const targetUser = users.find(
-                (u) =>
-                    u.memberType === targetType &&
-                    (u.domain || "").split(",").map((x) => x.trim()).includes(targetDomain)
-            );
             await axios.put(`${API_BASE_URL}/api/auth/update-position/${draggedId}`, {
                 domain: targetDomain,
                 memberType: targetType,
             });
-            if (targetUser) {
-                await axios.put(`${API_BASE_URL}/api/auth/update-position/${targetUser.id}`, {
+            if (targetUserForSwap) {
+                await axios.put(`${API_BASE_URL}/api/auth/update-position/${targetUserForSwap.id}`, {
                     domain: draggedUser.domain,
                     memberType: draggedUser.memberType,
                 });
@@ -357,10 +404,11 @@ const Organogram = () => {
         }
     };
 
-    const renderTreeContent = () => (
+    // FIX: ab ref parameter me aata hai, main aur popup dono ke liye alag ref use hota hai
+    const renderTreeContent = (refToUse) => (
         activeTab === "overall" ? (
             <DndContext onDragEnd={handleDragEnd}>
-                <div ref={treeRef} className="export-area">
+                <div ref={refToUse} className="export-area">
                     {isExporting && <ExportHeader />}
                     <div className="org-tree-wrapper">
                         <div className="org-tree">
@@ -370,7 +418,7 @@ const Organogram = () => {
                                         <div className="admin-row">
                                             <div className="org-node admin">{admin.name}</div>
 
-                                            {index === 1 && !hiddenRoles.includes("MIS") && (
+                                            {index === misAdminIndex && !hiddenRoles.includes("MIS") && (
                                                 <div className="mis-wrapper">
                                                     <div className="mis-top"></div>
                                                     <div className="mis-center"></div>
@@ -547,7 +595,7 @@ const Organogram = () => {
             </DndContext>
         ) : (
             <div className="org-body-box-inner">
-                <div ref={treeRef} className="export-area">
+                <div ref={refToUse} className="export-area">
                     {isExporting && <ExportHeader />}
                     <div className="org-tree">
                         <div className="domain-wrapp">
@@ -680,18 +728,22 @@ const Organogram = () => {
                                     <span className="legend-color tl-color"></span>Team Lead
                                 </div>
                             )}
-                            {!hiddenRoles.includes("QA", "QC", "Production") && (
-                                <>
-                                    <div className="legend-item" onClick={() => handleLegendClick("QA")}>
-                                        <span className="legend-color qa-color"></span>QA
-                                    </div>
-                                    <div className="legend-item" onClick={() => handleLegendClick("QC")}>
-                                        <span className="legend-color qc-color"></span>QC
-                                    </div>
-                                    <div className="legend-item" onClick={() => handleLegendClick("Production")}>
-                                        <span className="legend-color prod-color"></span>Production
-                                    </div>
-                                </>
+                            {/* FIX: includes("QA","QC","Production") sirf pehla value check karta tha (doosra argument index hota hai).
+                                Ab har role ka legend alag se check hota hai. */}
+                            {!hiddenRoles.includes("QA") && (
+                                <div className="legend-item" onClick={() => handleLegendClick("QA")}>
+                                    <span className="legend-color qa-color"></span>QA
+                                </div>
+                            )}
+                            {!hiddenRoles.includes("QC") && (
+                                <div className="legend-item" onClick={() => handleLegendClick("QC")}>
+                                    <span className="legend-color qc-color"></span>QC
+                                </div>
+                            )}
+                            {!hiddenRoles.includes("Production") && (
+                                <div className="legend-item" onClick={() => handleLegendClick("Production")}>
+                                    <span className="legend-color prod-color"></span>Production
+                                </div>
                             )}
                         </div>
                     </div>
@@ -760,7 +812,7 @@ const Organogram = () => {
                         <span>View</span>
                     </button>
 
-                    {renderTreeContent()}
+                    {renderTreeContent(treeRef)}
                 </div>
 
                 {isFullScreen && (
@@ -770,7 +822,7 @@ const Organogram = () => {
                                 <FaCompress /> Close
                             </button>
                             <div className="org-tree-popup-container">
-                                {renderTreeContent()}
+                                {renderTreeContent(popupTreeRef)}
                             </div>
                         </div>
                     </div>
