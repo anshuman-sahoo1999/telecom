@@ -586,7 +586,7 @@ export default function TelecomMap() {
               </div>
               <div style={{ display: "flex", gap: 10, paddingLeft: 13, whiteSpace: "nowrap" }}>
                 <span style={{ color: "#2563eb" }}><b style={{ fontWeight: 800 }}>Job-</b> <b style={{ fontWeight: 800 }}>{p.value}</b></span>
-                <span style={{ color: "#059669" }}><b style={{ fontWeight: 800 }}>QC-</b> <b style={{ fontWeight: 800 }}>{qc !== null && qc !== undefined ? `${qc}%` : "N/A"}</b></span>
+                <span style={{ color: "#059669" }}><b style={{ fontWeight: 800 }}>QC-</b> <b style={{ fontWeight: 800 }}>{qc !== null && qc !== undefined ? `${qc}%` : "0%"}</b></span>
                 <span style={{ color: "#d97706" }}><b style={{ fontWeight: 800 }}>OTP-</b> <b style={{ fontWeight: 800 }}>{otp !== null && otp !== undefined ? `${otp}%` : "N/A"}</b></span>
               </div>
             </div>
@@ -604,7 +604,7 @@ export default function TelecomMap() {
       <div style={{ background: "#ffffff", border: "1px solid #e2e8f0", borderRadius: 8, padding: "8px 11px", fontSize: 11.5, lineHeight: 1.7, boxShadow: "0 4px 14px rgba(0,0,0,0.18)" }}>
         <div style={{ fontWeight: 800, marginBottom: 4, fontSize: 12.5, color: "#0f172a" }}>{d.name}</div>
         <div style={{ color: "#2563eb" }}><b style={{ fontWeight: 800 }}>Job-</b> <b style={{ fontWeight: 800 }}>{d.jobs}</b> <span style={{ color: "#64748b", fontWeight: 600 }}>(<b style={{ fontWeight: 800 }}>{d.value}%</b>)</span></div>
-        <div style={{ color: "#059669" }}><b style={{ fontWeight: 800 }}>QC-</b> <b style={{ fontWeight: 800 }}>{d.qc !== null && d.qc !== undefined ? `${d.qc}%` : "N/A"}</b></div>
+        <div style={{ color: "#059669" }}><b style={{ fontWeight: 800 }}>QC-</b> <b style={{ fontWeight: 800 }}>{d.qc !== null && d.qc !== undefined ? `${d.qc}%` : "0%"}</b></div>
         <div style={{ color: "#d97706" }}><b style={{ fontWeight: 800 }}>OTP-</b> <b style={{ fontWeight: 800 }}>{d.otp !== null && d.otp !== undefined ? `${d.otp}%` : "N/A"}</b></div>
       </div>
     );
@@ -661,6 +661,9 @@ export default function TelecomMap() {
           <>
             <div className="kpiContainer">
               <h2 className="kpiTitle">📊 KPI - Job Delivery Summary</h2>
+              <p className="kpiSubtitle" style={{ margin: "-6px 0 14px 0", fontSize: "13px", fontWeight: 600, color: "#64748b" }}>
+                Domain-wise Jobs Delivered along with Amdocs QC% and OTP% for each domain
+              </p>
               <div className="kpiGridModern">
                 {sortedDomainStats.map((item) => {
                   const color = domainColors[item.domain] || "#6366f1";
@@ -694,7 +697,7 @@ export default function TelecomMap() {
                         </div>
                         <div className="kpiQcOtpRow" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", margin: "4px 0" }}>
                           <span style={{ fontSize: "11px", fontWeight: 700, color: "#0f766e" }}>
-                            Amdocs QC: {(() => { const v = getDomainQcAvg(item.domain); return v !== null ? `${v}%` : "N/A"; })()}
+                            Amdocs QC: {(() => { const v = getDomainQcAvg(item.domain); return v !== null ? `${v}%` : "0%"; })()}
                           </span>
                           <span style={{ fontSize: "11px", fontWeight: 700, color: "#b45309" }}>
                             OTP: {(() => { const v = getDomainOtpPercent(item.domain); return v !== null ? `${v}%` : "N/A"; })()}
@@ -821,7 +824,10 @@ export default function TelecomMap() {
 
             <div className="bottomChartsRow">
               <div className="chartBox">
-                <h3 className="chartTitle" style={{ marginBottom: "30px" }}>📊 Domain Wise Jobs</h3>
+                <h3 className="chartTitle" style={{ marginBottom: "6px" }}>📊 Month Wise Job Delivery, QC &amp; OTP</h3>
+                <p className="chartSubtitle" style={{ margin: "0 0 24px 0", fontSize: "12px", fontWeight: 600, color: "#64748b" }}>
+                  Jobs delivered per month by year — hover on a bar to view Amdocs QC% and OTP% for that month
+                </p>
                 <ResponsiveContainer width="100%" height={350}>
                   <BarChart data={monthlyJobsSorted} barGap={0} barCategoryGap={25}>
                     <CartesianGrid strokeDasharray="3 3" />
@@ -836,7 +842,10 @@ export default function TelecomMap() {
                 </ResponsiveContainer>
               </div>
               <div className="chartBox">
-                <h3 className="chartTitle">🥧 Domain % Share</h3>
+                <h3 className="chartTitle" style={{ marginBottom: "6px" }}>🥧 Domain % Share</h3>
+                <p className="chartSubtitle" style={{ margin: "0 0 10px 0", fontSize: "12px", fontWeight: 600, color: "#64748b" }}>
+                  Share of jobs delivered by domain — hover on a slice to view Job%, Amdocs QC% and OTP% for that domain
+                </p>
                 <ResponsiveContainer width="100%" height={360}>
                   <PieChart>
                     <Pie
@@ -918,7 +927,7 @@ export default function TelecomMap() {
                       <span style={{ color: "#16a34a", fontWeight: "700" }}>{jobs} Jobs</span>
                     </div>
                     <div style={{ display: "flex", justifyContent: "space-between", fontSize: "11px", fontWeight: "600" }}>
-                      <span style={{ color: "#0f766e" }}>QC: {qc !== null ? `${qc}%` : "N/A"}</span>
+                      <span style={{ color: "#0f766e" }}>QC: {qc !== null ? `${qc}%` : "0%"}</span>
                       <span style={{ color: "#b45309" }}>OTP: {otp !== null && otp !== undefined ? `${otp}%` : "N/A"}</span>
                     </div>
                   </div>
