@@ -729,30 +729,47 @@ const importExcel = async (req, res) => {
 };
 
 /* ======================================
+   SMALL HELPERS FOR CREATE / UPDATE
+====================================== */
+// Body se pehli defined value lo (snake_case ya camelCase dono chalein)
+const pick = (obj, ...keys) => {
+  for (const k of keys) {
+    if (obj && obj[k] !== undefined) return obj[k];
+  }
+  return undefined;
+};
+
+const isBlank = (v) =>
+  v === null || v === undefined || (typeof v === "string" && v.trim() === "");
+
+const flatText = (v) => (Array.isArray(v) ? v.join(", ") : v);
+
+/* ======================================
    CREATE WORK
 ====================================== */
-const createWork = (req, res) => {
-  const {
-    months,
-    domain,
-    sow,
-    job_type,
-    region,
-    state,
-    county,
-    uom,
-    otp,
-    current_status,
-    production_engineers,
-    qc_engineers,
-    internal_qc,
-    amdocs_qc,
-    jobs_delivered,
-    job_id,
-    receive_date,
-    ecd_date,
-    submission_date
-  } = req.body;
+const createWork = async (req, res) => {
+  const b = req.body || {};
+
+  // snake_case aur camelCase (month / jobId / submissionDate ...) dono accept
+  const months = pick(b, "months", "month");
+  const domain = pick(b, "domain");
+  const sow = pick(b, "sow");
+  const job_type = pick(b, "job_type", "jobType");
+  const region = pick(b, "region");
+  const state = pick(b, "state", "market");
+  const county = pick(b, "county");
+  const uom = pick(b, "uom");
+  const otp = pick(b, "otp", "internalOtp");
+  const current_status = pick(b, "current_status", "currentStatus");
+  const production_engineers = pick(b, "production_engineers");
+  const qc_engineers = pick(b, "qc_engineers");
+  const internal_qc = pick(b, "internal_qc", "internalQc");
+  const amdocs_qc = pick(b, "amdocs_qc", "amdocsQc");
+  const jobs_delivered = pick(b, "jobs_delivered");
+  const job_id = pick(b, "job_id", "jobId");
+  const receive_date = pick(b, "receive_date", "receiveDate", "receivedDate");
+  const ecd_date = pick(b, "ecd_date", "ecdDate");
+  const submission_date = pick(b, "submission_date", "submissionDate");
 
   const fixedDomain = normalize(domain);
   const fixedJobType = normalize(job_type);
@@ -760,44 +777,111 @@ const createWork = (req, res) => {
 
   const formattedInternalQc = formatPercentage(internal_qc);
   const formattedAmdocsQc = formatPercentage(amdocs_qc);
-  
+
   const formattedReceiveDate = parseExcelDate(receive_date);
   const formattedEcdDate = parseExcelDate(ecd_date);
   const formattedSubmissionDate = parseExcelDate(submission_date);
-  
+
   const parsedMonths = parseMonthsInput(months);
   const firstMonth = parsedMonths.length > 0 ? parsedMonths[0] : null;
 
-  const checkSql = cleanJobId ? `SELECT id FROM work_updates WHERE TRIM(job_id) = TRIM(?) LIMIT 1` : null;
+  const uomObj = uom && typeof uom === "object" ? uom : safeParseJson(uom, null);
+  const hasUom = uomObj && typeof uomObj === "object" && Object.keys(uomObj).length > 0;
 
-  const executeSave = (existingId = null) => {
-    if (existingId) {
-      const updateSql = `
-        UPDATE work_updates
-        SET months = ?, domain = ?, sow = ?, job_type = ?, region = ?, state = ?, county = ?, uom = ?, otp = ?, current_status = ?, production_engineers = ?, qc_engineers = ?, internal_qc = ?, amdocs_qc = ?, jobs_delivered = ?, receive_date = COALESCE(?, receive_date), ecd_date = COALESCE(?, ecd_date), submission_date = COALESCE(?, submission_date), updated_at = CURRENT_TIMESTAMP
-        WHERE id = ?
-      `;
-      db.query(updateSql, [JSON.stringify(parsedMonths), fixedDomain, sow, fixedJobType, region, state, county, JSON.stringify(uom || {}), clean(otp), clean(current_status), clean(production_engineers), clean(qc_engineers), formattedInternalQc, formattedAmdocsQc, Number(jobs_delivered || 1), formattedReceiveDate, formattedEcdDate, formattedSubmissionDate, existingId], (err) => {
-        if (err) return res.status(500).json(err);
-        syncToJobCreation(existingId);
-      });
-    } else {
-      const insertSql = `
-        INSERT INTO work_updates
-        (months, domain, sow, job_type, region, state, county, uom, otp, current_status, production_engineers, qc_engineers, internal_qc, amdocs_qc, jobs_delivered, job_id, receive_date, ecd_date, submission_date)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      `;
-      db.query(insertSql, [JSON.stringify(parsedMonths), fixedDomain, sow, fixedJobType, region, state, county, JSON.stringify(uom || {}), clean(otp), clean(current_status), clean(production_engineers), clean(qc_engineers), formattedInternalQc, formattedAmdocsQc, Number(jobs_delivered || 1), cleanJobId, formattedReceiveDate, formattedEcdDate, formattedSubmissionDate], (err, result) => {
-        if (err) return res.status(500).json(err);
-        syncToJobCreation(result.insertId);
-      });
+  try {
+    let existingId = null;
+    if (cleanJobId) {
+      const rows = await query(
+        "SELECT id FROM work_updates WHERE TRIM(job_id) = TRIM(?) LIMIT 1",
+        [cleanJobId]
+      );
+      if (rows && rows.length > 0) existingId = rows[0].id;
     }
-  };
 
-  const syncToJobCreation = async (workId) => {
+    let workId = existingId;
+
+    if (existingId) {
+      // Job pehle se hai -> sirf wahi fields badlo jo aayi hain.
+      // (Pehle months "[]" aur baaki fields khaali hokar Report se month/date gayab ho jate the.)
+      await query(
+        `UPDATE work_updates
+         SET months = COALESCE(?, months),
+             domain = COALESCE(NULLIF(?, ''), domain),
+             sow = COALESCE(NULLIF(?, ''), sow),
+             job_type = COALESCE(NULLIF(?, ''), job_type),
+             region = COALESCE(NULLIF(?, ''), region),
+             state = COALESCE(NULLIF(?, ''), state),
+             county = COALESCE(NULLIF(?, ''), county),
+             uom = COALESCE(?, uom),
+             otp = COALESCE(NULLIF(?, ''), otp),
+             current_status = COALESCE(NULLIF(?, ''), current_status),
+             production_engineers = COALESCE(NULLIF(?, ''), production_engineers),
+             qc_engineers = COALESCE(NULLIF(?, ''), qc_engineers),
+             internal_qc = COALESCE(NULLIF(?, ''), internal_qc),
+             amdocs_qc = COALESCE(NULLIF(?, ''), amdocs_qc),
+             jobs_delivered = COALESCE(?, jobs_delivered),
+             receive_date = COALESCE(?, receive_date),
+             ecd_date = COALESCE(?, ecd_date),
+             submission_date = COALESCE(?, submission_date),
+             updated_at = CURRENT_TIMESTAMP
+         WHERE id = ?`,
+        [
+          parsedMonths.length > 0 ? JSON.stringify(parsedMonths) : null,
+          fixedDomain,
+          clean(flatText(sow)),
+          fixedJobType,
+          clean(region),
+          clean(state),
+          clean(county),
+          hasUom ? JSON.stringify(uomObj) : null,
+          clean(otp),
+          clean(current_status),
+          clean(flatText(production_engineers)),
+          clean(flatText(qc_engineers)),
+          formattedInternalQc,
+          formattedAmdocsQc,
+          jobs_delivered !== undefined && jobs_delivered !== null && jobs_delivered !== ""
+            ? Number(jobs_delivered) || 1
+            : null,
+          formattedReceiveDate,
+          formattedEcdDate,
+          formattedSubmissionDate,
+          existingId
+        ]
+      );
+    } else {
+      const result = await query(
+        `INSERT INTO work_updates
+         (months, domain, sow, job_type, region, state, county, uom, otp, current_status, production_engineers, qc_engineers, internal_qc, amdocs_qc, jobs_delivered, job_id, receive_date, ecd_date, submission_date)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [
+          JSON.stringify(parsedMonths),
+          fixedDomain,
+          clean(flatText(sow)),
+          fixedJobType,
+          clean(region),
+          clean(state),
+          clean(county),
+          JSON.stringify(hasUom ? uomObj : {}),
+          clean(otp),
+          clean(current_status),
+          clean(flatText(production_engineers)),
+          clean(flatText(qc_engineers)),
+          formattedInternalQc,
+          formattedAmdocsQc,
+          Number(jobs_delivered || 1),
+          cleanJobId,
+          formattedReceiveDate,
+          formattedEcdDate,
+          formattedSubmissionDate
+        ]
+      );
+      workId = result.insertId;
+    }
+
     await helperSyncToJobCreation({
       domain: fixedDomain,
-      market: state || region,
+      market: clean(state) || clean(region),
       cleanJobId,
       month: firstMonth,
       receiveDate: formattedReceiveDate,
@@ -808,162 +892,159 @@ const createWork = (req, res) => {
       internalQc: formattedInternalQc
     });
 
-    res.json({
+    return res.json({
       message: "Work added and synced successfully",
       id: workId
     });
-  };
-
-  if (checkSql) {
-    db.query(checkSql, [cleanJobId], (err, rows) => {
-      if (!err && rows.length > 0) {
-        executeSave(rows[0].id);
-      } else {
-        executeSave(null);
-      }
-    });
-  } else {
-    executeSave(null);
+  } catch (err) {
+    console.error("createWork error:", err.message);
+    return res.status(500).json({ message: "Save failed", error: err.message });
   }
 };
 
 /* ======================================
    UPDATE WORK
+   Sirf wahi fields badalti hai jo request me aayi hain.
+   (Job History se update aane par months / dates ab mitte nahi.)
+   Date/field ko jaanbujh kar khaali (null / "") bhejo to wo clear hoti hai.
 ====================================== */
 const updateWork = async (req, res) => {
   const { id } = req.params;
-  const {
-    months,
-    domain,
-    sow,
-    job_type,
-    region,
-    state,
-    county,
-    uom,
-    jobs_delivered,
-    job_id,
-    current_status,
-    production_engineers,
-    qc_engineers,
-    otp,
-    internal_qc,
-    amdocs_qc,
-    receive_date,
-    ecd_date,
-    submission_date
-  } = req.body;
+  const b = req.body || {};
 
-  const fixedDomain = normalize(domain);
-  const fixedJobType = normalize(job_type);
-  const cleanJobId = clean(job_id);
+  const monthsRaw = pick(b, "months", "month");
+  const domain = pick(b, "domain");
+  const sow = pick(b, "sow");
+  const job_type = pick(b, "job_type", "jobType");
+  const region = pick(b, "region");
+  const state = pick(b, "state", "market");
+  const county = pick(b, "county");
+  const uom = pick(b, "uom");
+  const jobs_delivered = pick(b, "jobs_delivered");
+  const job_id = pick(b, "job_id", "jobId");
+  const current_status = pick(b, "current_status", "currentStatus");
+  const production_engineers = pick(b, "production_engineers");
+  const qc_engineers = pick(b, "qc_engineers");
+  const otp = pick(b, "otp", "internalOtp");
+  const internal_qc = pick(b, "internal_qc", "internalQc");
+  const amdocs_qc = pick(b, "amdocs_qc", "amdocsQc");
+  const receive_date = pick(b, "receive_date", "receiveDate", "receivedDate");
+  const ecd_date = pick(b, "ecd_date", "ecdDate");
+  const submission_date = pick(b, "submission_date", "submissionDate");
 
-  const formattedInternalQc = formatPercentage(internal_qc);
-  const formattedAmdocsQc = formatPercentage(amdocs_qc);
+  const has = (v) => v !== undefined;
 
-  const formattedReceiveDate = parseExcelDate(receive_date);
-  const formattedEcdDate = parseExcelDate(ecd_date);
-  const formattedSubmissionDate = parseExcelDate(submission_date);
+  const sets = [];
+  const vals = [];
+  const setCol = (col, val) => {
+    sets.push(`${col} = ?`);
+    vals.push(val);
+  };
 
-  const parsedMonths = parseMonthsInput(months);
+  // Month: khaali / na aaye to purana month rakho
+  let parsedMonths = [];
+  if (has(monthsRaw)) {
+    parsedMonths = parseMonthsInput(monthsRaw);
+    if (parsedMonths.length > 0) setCol("months", JSON.stringify(parsedMonths));
+  }
   const latestMonth = parsedMonths.length > 0 ? parsedMonths[parsedMonths.length - 1] : null;
 
-  const sql = `
-    UPDATE work_updates
-    SET
-      months = ?,
-      domain = ?,
-      sow = ?,
-      job_type = ?,
-      region = ?,
-      state = ?,
-      county = ?,
-      uom = ?,
-      jobs_delivered = ?,
-      job_id = ?,
-      current_status = ?,
-      production_engineers = ?,
-      qc_engineers = ?,
-      otp = ?,
-      internal_qc = ?,
-      amdocs_qc = ?,
-      receive_date = ?,
-      ecd_date = ?,
-      submission_date = ?,
-      updated_at = CURRENT_TIMESTAMP
-    WHERE id = ?
-  `;
+  if (has(domain)) setCol("domain", normalize(domain));
+  if (has(sow)) setCol("sow", flatText(sow));
+  if (has(job_type)) setCol("job_type", normalize(job_type));
+  if (has(region)) setCol("region", region);
+  if (has(state)) setCol("state", state);
+  if (has(county)) setCol("county", county);
+  if (has(uom)) setCol("uom", JSON.stringify(uom || {}));
+  if (has(jobs_delivered)) setCol("jobs_delivered", Number(jobs_delivered || 0));
+  if (has(current_status)) setCol("current_status", clean(current_status));
+  if (has(production_engineers)) setCol("production_engineers", clean(production_engineers));
+  if (has(qc_engineers)) setCol("qc_engineers", clean(qc_engineers));
+  if (has(otp)) setCol("otp", clean(otp));
+
+  const formattedInternalQc = has(internal_qc) ? formatPercentage(internal_qc) : "";
+  const formattedAmdocsQc = has(amdocs_qc) ? formatPercentage(amdocs_qc) : "";
+  if (has(internal_qc)) setCol("internal_qc", formattedInternalQc);
+  if (has(amdocs_qc)) setCol("amdocs_qc", formattedAmdocsQc);
+
+  const clearedDateCols = []; // job_creation me bhi clear karne wali date columns
+  const dateVals = { receiveDate: null, ecdDate: null, submissionDate: null };
+
+  if (has(receive_date)) {
+    dateVals.receiveDate = parseExcelDate(receive_date);
+    setCol("receive_date", dateVals.receiveDate);
+    if (dateVals.receiveDate === null) clearedDateCols.push("receiveDate");
+  }
+  if (has(ecd_date)) {
+    dateVals.ecdDate = parseExcelDate(ecd_date);
+    setCol("ecd_date", dateVals.ecdDate);
+    if (dateVals.ecdDate === null) clearedDateCols.push("ecdDate");
+  }
+  if (has(submission_date)) {
+    dateVals.submissionDate = parseExcelDate(submission_date);
+    setCol("submission_date", dateVals.submissionDate);
+    if (dateVals.submissionDate === null) clearedDateCols.push("submissionDate");
+  }
 
   try {
-    // Update se pehle purani Job ID yaad rakho.
-    // Agar Job ID badli aur job_creation me purani wali row chhod di,
-    // to wo "orphan" ban jati hai: Report se delete karne ke baad bhi
-    // Job History me dikhti rehti hai.
-    const oldRows = await query("SELECT job_id FROM work_updates WHERE id = ?", [id]);
-    const oldJobId = oldRows && oldRows.length > 0 ? clean(oldRows[0].job_id) : "";
-
-    const result = await query(sql, [
-      JSON.stringify(parsedMonths),
-      fixedDomain,
-      sow,
-      fixedJobType,
-      region,
-      state,
-      county,
-      JSON.stringify(uom || {}),
-      Number(jobs_delivered || 0),
-      cleanJobId,
-      clean(current_status),
-      clean(production_engineers),
-      clean(qc_engineers),
-      clean(otp),
-      formattedInternalQc,
-      formattedAmdocsQc,
-      formattedReceiveDate,
-      formattedEcdDate,
-      formattedSubmissionDate,
-      id
-    ]);
-
-    if (result && result.affectedRows === 0) {
+    const oldRows = await query("SELECT job_id, domain, state, region FROM work_updates WHERE id = ?", [id]);
+    if (!oldRows || oldRows.length === 0) {
       return res.status(404).json({ message: "Record not found", error: "No work row with this id" });
     }
+    const oldJobId = clean(oldRows[0].job_id);
 
+    // Job ID na aaye to wahi purani Job ID maani jayegi
+    const newJobId = has(job_id) ? clean(job_id) : oldJobId;
+    if (has(job_id)) setCol("job_id", newJobId);
+
+    sets.push("updated_at = CURRENT_TIMESTAMP");
+    const result = await query(
+      `UPDATE work_updates SET ${sets.join(", ")} WHERE id = ?`,
+      [...vals, id]
+    );
+
+    // Job ID badli -> job_creation ki purani row rename karo (orphan na bane)
     const jobIdChanged =
-      isRealJobId(oldJobId) && oldJobId.toLowerCase() !== cleanJobId.toLowerCase();
+      isRealJobId(oldJobId) && oldJobId.toLowerCase() !== newJobId.toLowerCase();
 
     if (jobIdChanged) {
-      if (isRealJobId(cleanJobId)) {
+      if (isRealJobId(newJobId)) {
         const newExists = await query(
           "SELECT id FROM job_creation WHERE TRIM(jobId) = TRIM(?) LIMIT 1",
-          [cleanJobId]
+          [newJobId]
         );
         if (newExists && newExists.length > 0) {
-          // Nayi Job ID ki row pehle se hai -> purani wali hata do (duplicate/orphan na bane)
           await query("DELETE FROM job_creation WHERE TRIM(jobId) = TRIM(?)", [oldJobId]);
         } else {
-          // Nayi row banane ki jagah purani row ka jobId rename karo
           await query(
             "UPDATE job_creation SET jobId = ?, updated_at = CURRENT_TIMESTAMP WHERE TRIM(jobId) = TRIM(?)",
-            [cleanJobId, oldJobId]
+            [newJobId, oldJobId]
           );
         }
       } else {
-        // Job ID hata di / "-" kar di -> purani job_creation row ka ab koi matlab nahi
         await query("DELETE FROM job_creation WHERE TRIM(jobId) = TRIM(?)", [oldJobId]);
       }
     }
 
-    if (isRealJobId(cleanJobId)) {
+    if (isRealJobId(newJobId)) {
+      // Report me jo date clear ki gayi, wo job_creation me bhi clear ho
+      // (warna getAllWork ka fallback purani date wapas dikha deta)
+      for (const col of clearedDateCols) {
+        await query(
+          `UPDATE job_creation SET ${col} = NULL WHERE TRIM(jobId) = TRIM(?)`,
+          [newJobId]
+        );
+      }
+
       await helperSyncToJobCreation({
-        domain: fixedDomain,
-        market: state || region,
-        cleanJobId,
+        domain: has(domain) ? normalize(domain) : "",
+        market: clean(state) || clean(region),
+        cleanJobId: newJobId,
         month: latestMonth,
-        receiveDate: formattedReceiveDate,
-        ecdDate: formattedEcdDate,
-        submissionDate: formattedSubmissionDate,
-        otp: clean(otp),
+        receiveDate: dateVals.receiveDate,
+        ecdDate: dateVals.ecdDate,
+        submissionDate: dateVals.submissionDate,
+        otp: has(otp) ? clean(otp) : "",
         amdocsQc: formattedAmdocsQc,
         internalQc: formattedInternalQc
       });
@@ -974,9 +1055,10 @@ const updateWork = async (req, res) => {
       result
     });
   } catch (err) {
+    console.error("updateWork error:", err.message);
     return res.status(500).json({
       message: "Update failed",
-      error: err
+      error: err.message
     });
   }
 };
@@ -984,37 +1066,67 @@ const updateWork = async (req, res) => {
 /* ======================================
    GETTERS (Formatted to MM-DD-YYYY for Frontend)
 ====================================== */
-const getAllWork = (req, res) => {
-  db.query(
-    "SELECT *, updated_at FROM work_updates ORDER BY id ASC",
-    (err, rows) => {
-      if (err) return res.status(500).json(err);
+const mapWorkRow = (row) => {
+  const { jc_month, jc_receive, jc_ecd, jc_submission, ...work } = row;
 
-      const data = (rows || []).map((row) => {
-        let monthsArr = safeParseJson(row.months, []);
-        if (!Array.isArray(monthsArr)) monthsArr = monthsArr ? [monthsArr] : [];
+  let monthsArr = safeParseJson(work.months, []);
+  if (!Array.isArray(monthsArr)) monthsArr = monthsArr ? [monthsArr] : [];
+  monthsArr = cleanMonthArray(monthsArr);
 
-        monthsArr = cleanMonthArray(monthsArr);
+  // work_updates me month khaali hai par Job Creation me hai -> wahi dikhao
+  if (monthsArr.length === 0 && !isBlank(jc_month)) {
+    monthsArr = cleanMonthArray([jc_month]);
+  }
 
-        const displayMonth = Array.isArray(monthsArr) && monthsArr.length > 0 
-          ? monthsArr[monthsArr.length - 1] 
-          : "";
+  const displayMonth = monthsArr.length > 0 ? monthsArr[monthsArr.length - 1] : "";
 
-        return {
-          ...row,
-          month: displayMonth,
-          months: monthsArr,
-          uom: safeParseJson(row.uom, {}),
-          receive_date: formatDateToMMDDYYYY(row.receive_date),
-          ecd_date: formatDateToMMDDYYYY(row.ecd_date),
-          submission_date: formatDateToMMDDYYYY(row.submission_date),
-          lastUpdate: row.updated_at ? row.updated_at : row.created_at
-        };
-      });
+  const dateOf = (own, fallback) => (isBlank(own) ? fallback : own);
 
-      res.json(data);
+  return {
+    ...work,
+    month: displayMonth,
+    months: monthsArr,
+    uom: safeParseJson(work.uom, {}),
+    receive_date: formatDateToMMDDYYYY(dateOf(work.receive_date, jc_receive)),
+    ecd_date: formatDateToMMDDYYYY(dateOf(work.ecd_date, jc_ecd)),
+    submission_date: formatDateToMMDDYYYY(dateOf(work.submission_date, jc_submission)),
+    lastUpdate: work.updated_at ? work.updated_at : work.created_at
+  };
+};
+
+const getAllWork = async (req, res) => {
+  // Job Creation ki month / dates bhi saath laate hain, taaki agar work_updates me
+  // ye khaali reh gayi ho (job_creation se sync chhoot gaya) to bhi Report me dikhe.
+  const joinSql = `
+    SELECT w.*,
+           jc.jc_month, jc.jc_receive, jc.jc_ecd, jc.jc_submission
+    FROM work_updates w
+    LEFT JOIN (
+      SELECT TRIM(jobId) AS jc_jobId,
+             MAX(month) AS jc_month,
+             MAX(receiveDate) AS jc_receive,
+             MAX(ecdDate) AS jc_ecd,
+             MAX(submissionDate) AS jc_submission
+      FROM job_creation
+      GROUP BY TRIM(jobId)
+    ) jc ON jc.jc_jobId = TRIM(w.job_id)
+    ORDER BY w.id ASC
+  `;
+
+  let rows;
+  try {
+    rows = await query(joinSql);
+  } catch (joinErr) {
+    // Join kisi wajah se (jaise collation) fail ho to purana simple query chalao
+    console.error("getAllWork join failed, using simple query:", joinErr.message);
+    try {
+      rows = await query("SELECT *, updated_at FROM work_updates ORDER BY id ASC");
+    } catch (err) {
+      return res.status(500).json(err);
     }
-  );
+  }
+
+  return res.json((rows || []).map(mapWorkRow));
 };
 
 const getFileData = (req, res) => {
