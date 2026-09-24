@@ -2,7 +2,7 @@ import { API_BASE_URL } from "../config";
 import React, { useState, useEffect, useRef } from "react";
 import axios from "axios";
 import { FaSitemap, FaProjectDiagram, FaFileExport, FaExpand, FaCompress } from "react-icons/fa";
-import { DndContext, useDroppable } from "@dnd-kit/core";
+import { DndContext, useDroppable, pointerWithin, rectIntersection } from "@dnd-kit/core";
 import DraggableUser from "../components/DraggableUser";
 import UserReportModal from "../components/UserReportModal";
 import * as htmlToImage from "html-to-image";
@@ -11,6 +11,22 @@ import { saveAs } from "file-saver";
 import { jsPDF } from "jspdf";
 import "../style/organogram.css";
 import Swal from "sweetalert2";
+
+// FIX: default collision (rectIntersection) me bade/lambe column (jaha zyada members hote hain)
+// ko drop zone ki tarah pakadna mushkil hota tha, aur user ka apna purana column jeet jata tha.
+// Ab pehle "pointer jis column ke upar hai wahi target" maana jata hai, nahi mila to rectIntersection.
+const collisionDetection = (args) => {
+    const pointerCollisions = pointerWithin(args);
+    if (pointerCollisions.length > 0) return pointerCollisions;
+    return rectIntersection(args);
+};
+
+// "Domain A, Domain B" jaisi comma wali string ko array me todta hai
+const splitDomains = (domain) =>
+    (domain || "")
+        .split(",")
+        .map((x) => x.trim())
+        .filter(Boolean);
 
 const DomainDropZone = ({ dropId, children }) => {
     const { setNodeRef } = useDroppable({ id: dropId });
@@ -314,22 +330,51 @@ const Organogram = () => {
         setOpenExport(false);
     };
 
+    // FIX: drag shuru hote hi hover wala report popup band kar do (drag ke beech me aa jata tha)
+    const handleDragStart = () => {
+        clearTimeout(hoverTimerRef.current);
+        setOpenReport(false);
+        setSelectedUser(null);
+    };
+
     const handleDragEnd = async (event) => {
         const { active, over } = event;
         if (!over) return;
-        const draggedId = active.id;
-        const draggedUser = users.find((u) => u.id.toString() === draggedId.toString());
-        if (!draggedUser) return;
-        const [targetDomain, targetType] = over.id.split("|");
 
+        const draggedId = String(active.id);
+        const draggedUser = users.find((u) => String(u.id) === draggedId);
+        if (!draggedUser) return;
+
+        const [targetDomain, targetType] = String(over.id).split("|");
+        if (!targetDomain || !targetType) return;
+
+        // FIX: API fail ho to UI ko purani state par wapas laane ke liye snapshot
+        const previousUsers = users;
+
+        const showSaveError = (err) => {
+            console.log(err);
+            setUsers(previousUsers);
+            Swal.fire(
+                "Error!",
+                err?.response?.data?.message || "Position update failed ❌",
+                "error"
+            );
+        };
+
+        // ---------- TEAM LEAD ----------
         if (draggedUser.role === "TeamLead") {
             const oldDomain = draggedUser.domain;
+
+            // FIX: apne hi domain me drop kiya to kuch mat karo
+            if (splitDomains(oldDomain).includes(targetDomain)) return;
+
             const targetTL = users.find(
                 (u) =>
                     u.id !== draggedUser.id &&
                     u.role === "TeamLead" &&
-                    (u.domain || "").split(",").map((x) => x.trim()).includes(targetDomain)
+                    splitDomains(u.domain).includes(targetDomain)
             );
+
             setUsers((prev) =>
                 prev.map((u) => {
                     if (u.id === draggedUser.id) return { ...u, domain: targetDomain };
@@ -337,6 +382,7 @@ const Organogram = () => {
                     return u;
                 })
             );
+
             try {
                 await axios.put(`${API_BASE_URL}/api/auth/update-position/${draggedUser.id}`, {
                     domain: targetDomain,
@@ -348,66 +394,57 @@ const Organogram = () => {
                         memberType: null,
                     });
                 }
+                // FIX: backend ka asli data wapas lao, taaki tree me wahi dikhe jo DB me hai
+                await fetchUsers();
             } catch (err) {
-                console.log(err);
+                showSaveError(err);
             }
             return;
         }
 
-        // FIX: TeamMember ko TeamLead zone me drop karne par memberType "TeamLead" set ho jata tha
+        // ---------- TEAM MEMBER ----------
+        // TeamMember ko TeamLead zone me drop karne par memberType "TeamLead" set ho jata tha
         if (targetType === "TeamLead") return;
 
-        const targetUserForSwap = users.find(
-            (u) =>
-                u.id.toString() !== draggedId.toString() &&
-                u.memberType === targetType &&
-                (u.domain || "").split(",").map((x) => x.trim()).includes(targetDomain)
-        );
+        // FIX: sirf QA / QC / Production hi valid target hain
+        if (!["QA", "QC", "Production"].includes(targetType)) return;
 
-        setUsers((prev) => {
-            const currentDraggedUser = prev.find((u) => u.id.toString() === draggedId.toString());
-            if (!currentDraggedUser) return prev;
-            const targetUser = prev.find(
-                (u) =>
-                    u.id.toString() !== draggedId.toString() &&
-                    u.memberType === targetType &&
-                    (u.domain || "").split(",").map((x) => x.trim()).includes(targetDomain)
-            );
-            return prev.map((u) => {
-                if (u.id.toString() === draggedId.toString()) {
-                    return { ...u, domain: targetDomain, memberType: targetType };
-                }
-                if (targetUser && u.id === targetUser.id) {
-                    return {
-                        ...u,
-                        domain: currentDraggedUser.domain,
-                        memberType: currentDraggedUser.memberType,
-                    };
-                }
-                return u;
-            });
-        });
+        // FIX: user pehle se usi domain ke usi column me hai to kuch mat karo
+        const alreadyThere =
+            draggedUser.memberType === targetType &&
+            splitDomains(draggedUser.domain).includes(targetDomain);
+        if (alreadyThere) return;
+
+        // FIX: pehle yaha swap hota tha (target column ka pehla banda dragged user ki jagah chala jata tha).
+        // Ab dragged user seedha target column me move hota hai (Production -> QA/QC, QA -> QC/Production, etc.)
+        setUsers((prev) =>
+            prev.map((u) =>
+                String(u.id) === draggedId
+                    ? { ...u, domain: targetDomain, memberType: targetType }
+                    : u
+            )
+        );
 
         try {
             await axios.put(`${API_BASE_URL}/api/auth/update-position/${draggedId}`, {
                 domain: targetDomain,
                 memberType: targetType,
             });
-            if (targetUserForSwap) {
-                await axios.put(`${API_BASE_URL}/api/auth/update-position/${targetUserForSwap.id}`, {
-                    domain: draggedUser.domain,
-                    memberType: draggedUser.memberType,
-                });
-            }
+            // FIX: backend ka asli data wapas lao, taaki tree me wahi dikhe jo DB me hai
+            await fetchUsers();
         } catch (err) {
-            console.log(err);
+            showSaveError(err);
         }
     };
 
     // FIX: ab ref parameter me aata hai, main aur popup dono ke liye alag ref use hota hai
     const renderTreeContent = (refToUse) => (
         activeTab === "overall" ? (
-            <DndContext onDragEnd={handleDragEnd}>
+            <DndContext
+                collisionDetection={collisionDetection}
+                onDragStart={handleDragStart}
+                onDragEnd={handleDragEnd}
+            >
                 <div ref={refToUse} className="export-area">
                     {isExporting && <ExportHeader />}
                     <div className="org-tree-wrapper">
