@@ -351,6 +351,7 @@ const JobHistory = () => {
     });
   };
 
+  // Save: pehle screen par confirm box dikhega
   const requestSave = (id) => {
     setConfirmAction({ type: "save", id });
   };
