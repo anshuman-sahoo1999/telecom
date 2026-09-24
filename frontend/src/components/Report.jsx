@@ -130,16 +130,6 @@ export default function Reports({ domain, states }) {
     return num > 0 && num <= 1 ? Math.round(num * 100) : Math.round(num);
   };
 
-  const isOtpMet = (val) => {
-    if (val === null || val === undefined || val === "") return null;
-    const str = val.toString().trim().toLowerCase();
-    if (["yes", "y", "met", "true", "ok", "pass", "passed"].includes(str)) return true;
-    if (["no", "n", "not met", "false", "fail", "failed", "0"].includes(str)) return false;
-    const num = parseFloat(str.replace("%", ""));
-    if (!isNaN(num)) return num > 0;
-    return null;
-  };
-
   // ================= JOB FORMAT =================
   const getJobData = (item) => {
     return {
@@ -175,6 +165,54 @@ export default function Reports({ domain, states }) {
 
   // ================= TOTAL JOBS =================
   const totalJobs = filteredData.length;
+
+  // ================= OVERALL QC / OTP (for summary boxes) =================
+  const overallQc = (() => {
+    const vals = filteredData
+      .map((x) => parsePercent(x.amdocsQc || x.amdocs_qc))
+      .filter((v) => v !== null);
+    if (!vals.length) return null;
+    return Math.round(vals.reduce((a, b) => a + b, 0) / vals.length);
+  })();
+
+  const overallOtp = (() => {
+    const vals = filteredData
+      .map((x) => parsePercent(x.otp))
+      .filter((v) => v !== null);
+    if (!vals.length) return null;
+    return Math.round(vals.reduce((a, b) => a + b, 0) / vals.length);
+  })();
+
+  // ================= DOMAIN WISE SUMMARY (Job / QC / OTP) =================
+  const domainStatsMap = {};
+  filteredData.forEach((item) => {
+    const d = item.domain || "Unknown";
+    if (!domainStatsMap[d]) {
+      domainStatsMap[d] = { jobs: 0, qcSum: 0, qcCount: 0, otpSum: 0, otpCount: 0 };
+    }
+    domainStatsMap[d].jobs += 1;
+
+    const qcVal = parsePercent(item.amdocsQc || item.amdocs_qc);
+    if (qcVal !== null) {
+      domainStatsMap[d].qcSum += qcVal;
+      domainStatsMap[d].qcCount += 1;
+    }
+
+    const otpVal = parsePercent(item.otp);
+    if (otpVal !== null) {
+      domainStatsMap[d].otpSum += otpVal;
+      domainStatsMap[d].otpCount += 1;
+    }
+  });
+
+  const domainSummaryRows = Object.keys(domainStatsMap)
+    .sort()
+    .map((d) => ({
+      domain: d,
+      jobs: domainStatsMap[d].jobs,
+      qc: domainStatsMap[d].qcCount > 0 ? Math.round(domainStatsMap[d].qcSum / domainStatsMap[d].qcCount) : null,
+      otp: domainStatsMap[d].otpCount > 0 ? Math.round(domainStatsMap[d].otpSum / domainStatsMap[d].otpCount) : null,
+    }));
 
   return (
     <div className={`reports ${open ? "open" : "close"}`}>
@@ -220,7 +258,7 @@ export default function Reports({ domain, states }) {
                 {filteredData.map((item, index) => {
                   const job = getJobData(item);
                   const qcVal = parsePercent(item.amdocsQc || item.amdocs_qc);
-                  const otpMet = isOtpMet(item.otp);
+                  const otpVal = parsePercent(item.otp);
 
                   return (
                     <tr key={index}>
@@ -251,9 +289,7 @@ export default function Reports({ domain, states }) {
                       </td>
 
                       <td className="job-cell">
-                        <div className="job-main" style={{ color: otpMet === true ? "#16a34a" : otpMet === false ? "#dc2626" : "inherit" }}>
-                          {otpMet === true ? "Yes" : otpMet === false ? "No" : "-"}
-                        </div>
+                        <div className="job-main">{otpVal !== null ? `${otpVal}%` : "-"}</div>
                         <div className="job-sub">OTP</div>
                       </td>
                     </tr>
@@ -267,10 +303,43 @@ export default function Reports({ domain, states }) {
                   <td></td>
                   <td>Total Jobs Delivered</td>
                   <td className="highlight">{totalJobs}</td>
-                  <td></td>
-                  <td></td>
+                  <td className="highlight">{overallQc !== null ? `${overallQc}%` : "-"}</td>
+                  <td className="highlight">{overallOtp !== null ? `${overallOtp}%` : "-"}</td>
                 </tr>
 
+              </tbody>
+            </table>
+
+            {/* ================= DOMAIN WISE SUMMARY ================= */}
+            <table className="reportTable" style={{ marginTop: "20px" }}>
+              <thead>
+                <tr>
+                  <th>Domain</th>
+                  <th>Total Job Delivered</th>
+                  <th>Amdocs QC</th>
+                  <th>OTP</th>
+                </tr>
+              </thead>
+              <tbody>
+                {domainSummaryRows.map((row) => (
+                  <tr key={row.domain}>
+                    <td className="domain-cell">
+                      <div className="domain-main">{row.domain}</div>
+                    </td>
+                    <td className="job-cell">
+                      <div className="job-main">{row.jobs}</div>
+                      <div className="job-sub">Jobs Delivered</div>
+                    </td>
+                    <td className="job-cell">
+                      <div className="job-main">{row.qc !== null ? `${row.qc}%` : "-"}</div>
+                      <div className="job-sub">Amdocs QC</div>
+                    </td>
+                    <td className="job-cell">
+                      <div className="job-main">{row.otp !== null ? `${row.otp}%` : "-"}</div>
+                      <div className="job-sub">OTP</div>
+                    </td>
+                  </tr>
+                ))}
               </tbody>
             </table>
 
@@ -285,6 +354,30 @@ export default function Reports({ domain, states }) {
                     As on {formattedLastUpdate}
                   </span>
                   <h1>{totalJobs}</h1>
+                </div>
+              </div>
+
+              <div className="summaryBox">
+                <div className="iconBox">✅</div>
+
+                <div className="summaryText">
+                  <p>Amdocs QC</p>
+                  <span className="dateText">
+                    As on {formattedLastUpdate}
+                  </span>
+                  <h1>{overallQc !== null ? `${overallQc}%` : "-"}</h1>
+                </div>
+              </div>
+
+              <div className="summaryBox">
+                <div className="iconBox">⏱</div>
+
+                <div className="summaryText">
+                  <p>OTP</p>
+                  <span className="dateText">
+                    As on {formattedLastUpdate}
+                  </span>
+                  <h1>{overallOtp !== null ? `${overallOtp}%` : "-"}</h1>
                 </div>
               </div>
             </div>
