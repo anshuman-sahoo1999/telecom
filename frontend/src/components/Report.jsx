@@ -47,11 +47,22 @@ export default function Reports({ domain, states }) {
       .get(`${API_BASE_URL}/api/work/domain-last-update`)
       .then((res) => {
         const mapObj = {};
-        if (Array.isArray(res.data)) {
-          res.data.forEach((item) => {
-            mapObj[item.domain] = item.lastUpdate;
-          });
-        }
+        const list = Array.isArray(res.data)
+          ? res.data
+          : Array.isArray(res.data?.data)
+          ? res.data.data
+          : Array.isArray(res.data?.result)
+          ? res.data.result
+          : [];
+        list.forEach((item) => {
+          const domainKey = item.domain || item.Domain;
+          const dateVal =
+            item.lastUpdate || item.lastUpdated || item.last_update ||
+            item.updatedAt || item.updated_at || item.date;
+          if (domainKey && dateVal) {
+            mapObj[domainKey] = dateVal;
+          }
+        });
         setLastUpdateMap(mapObj);
       })
       .catch((err) => {
@@ -65,13 +76,37 @@ export default function Reports({ domain, states }) {
       .filter(Boolean)
       .map((d) => new Date(d))
       .filter((d) => !isNaN(d.getTime()));
-    if (!dates.length) return null;
-    return new Date(Math.max(...dates.map((d) => d.getTime())));
+    if (dates.length) {
+      return new Date(Math.max(...dates.map((d) => d.getTime())));
+    }
+
+    // Fallback: if /api/work/domain-last-update gave nothing usable,
+    // try to derive the latest date directly from the job data itself.
+    const fallbackDates = data
+      .map((item) => item.updatedAt || item.lastUpdate || item.updated_at || item.last_update || item.date || item.createdAt)
+      .filter(Boolean)
+      .map((d) => new Date(d))
+      .filter((d) => !isNaN(d.getTime()));
+    if (!fallbackDates.length) return null;
+    return new Date(Math.max(...fallbackDates.map((d) => d.getTime())));
+  })();
+
+  const domainLastUpdate = (() => {
+    if (lastUpdateMap[domain]) return lastUpdateMap[domain];
+    // Fallback per-domain: latest date found among that domain's own rows.
+    const rows = data.filter((item) => item.domain === domain);
+    const fallbackDates = rows
+      .map((item) => item.updatedAt || item.lastUpdate || item.updated_at || item.last_update || item.date || item.createdAt)
+      .filter(Boolean)
+      .map((d) => new Date(d))
+      .filter((d) => !isNaN(d.getTime()));
+    if (!fallbackDates.length) return null;
+    return new Date(Math.max(...fallbackDates.map((d) => d.getTime())));
   })();
 
   const currentLastUpdate =
     domain && domain !== "All"
-      ? lastUpdateMap[domain]
+      ? domainLastUpdate
       : overallLastUpdate;
 
   const formattedLastUpdate = currentLastUpdate
@@ -304,7 +339,7 @@ export default function Reports({ domain, states }) {
                       </td>
 
                       <td className="job-cell">
-                        <div className="job-main">{qcVal !== null ? `${qcVal}%` : "-"}</div>
+                        <div className="job-main">{qcVal !== null ? `${qcVal}%` : "0%"}</div>
                         <div className="job-sub">Amdocs QC</div>
                       </td>
 
@@ -323,8 +358,8 @@ export default function Reports({ domain, states }) {
                   <td></td>
                   <td>Total Jobs Delivered</td>
                   <td className="highlight">{totalJobs}</td>
-                  <td className="highlight">{overallQc !== null ? `${overallQc}%` : "-"}</td>
-                  <td className="highlight">{overallOtp !== null ? `${overallOtp}%` : "-"}</td>
+                  <td className="highlight">{overallQc !== null ? `${overallQc}%` : "0%"}</td>
+                  <td className="highlight">{overallOtp !== null ? `${overallOtp}%` : "0%"}</td>
                 </tr>
 
               </tbody>
@@ -351,11 +386,11 @@ export default function Reports({ domain, states }) {
                       <div className="job-sub">Jobs Delivered</div>
                     </td>
                     <td className="job-cell">
-                      <div className="job-main">{row.qc !== null ? `${row.qc}%` : "-"}</div>
+                      <div className="job-main">{row.qc !== null ? `${row.qc}%` : "0%"}</div>
                       <div className="job-sub">Amdocs QC</div>
                     </td>
                     <td className="job-cell">
-                      <div className="job-main">{row.otp !== null ? `${row.otp}%` : "-"}</div>
+                      <div className="job-main">{row.otp !== null ? `${row.otp}%` : "0%"}</div>
                       <div className="job-sub">OTP</div>
                     </td>
                   </tr>
@@ -379,11 +414,11 @@ export default function Reports({ domain, states }) {
                   display: "flex",
                   flexWrap: "wrap",
                   gap: "24px",
-                  justifyContent: "space-between",
+                  justifyContent: "flex-end",
                 }}
               >
                 {/* Jobs Delivered */}
-                <div style={{ display: "flex", alignItems: "center", gap: "14px", flex: "1 1 180px" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: "14px", flex: "0 1 auto" }}>
                   <div
                     style={{
                       width: 52,
@@ -411,7 +446,7 @@ export default function Reports({ domain, states }) {
                 </div>
 
                 {/* Amdocs QC */}
-                <div style={{ display: "flex", alignItems: "center", gap: "14px", flex: "1 1 180px" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: "14px", flex: "0 1 auto" }}>
                   <div
                     style={{
                       width: 52,
@@ -433,13 +468,13 @@ export default function Reports({ domain, states }) {
                       Amdocs QC
                     </div>
                     <div style={{ fontSize: 30, fontWeight: 800, color: "#16a34a", lineHeight: 1.2 }}>
-                      {overallQc !== null ? `${overallQc}%` : "-"}
+                      {overallQc !== null ? `${overallQc}%` : "0%"}
                     </div>
                   </div>
                 </div>
 
                 {/* OTP */}
-                <div style={{ display: "flex", alignItems: "center", gap: "14px", flex: "1 1 180px" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: "14px", flex: "0 1 auto" }}>
                   <div
                     style={{
                       width: 52,
@@ -461,7 +496,7 @@ export default function Reports({ domain, states }) {
                       OTP
                     </div>
                     <div style={{ fontSize: 30, fontWeight: 800, color: "#d97706", lineHeight: 1.2 }}>
-                      {overallOtp !== null ? `${overallOtp}%` : "-"}
+                      {overallOtp !== null ? `${overallOtp}%` : "0%"}
                     </div>
                   </div>
                 </div>
