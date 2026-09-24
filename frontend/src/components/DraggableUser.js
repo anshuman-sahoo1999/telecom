@@ -2,12 +2,17 @@ import React from "react";
 import { useDraggable } from "@dnd-kit/core";
 import { RxCross2 } from "react-icons/rx";
 import "../style/organogram.css";
+const getLoginUser = () => {
+    try {
+        return JSON.parse(localStorage.getItem("user"));
+    } catch (e) {
+        return null;
+    }
+};
 
 const DraggableUser = ({ user, onDelete, onHover, disableDrag = false }) => {
-    const loginUser = JSON.parse(localStorage.getItem("user"));
+    const loginUser = getLoginUser();
     const isAdmin = loginUser?.role === "Admin";
-
-    // Agar disableDrag true hai (jaise project view mein), toh dragging band rahegi
     const canDrag = isAdmin && !disableDrag;
 
     const {
@@ -27,7 +32,9 @@ const DraggableUser = ({ user, onDelete, onHover, disableDrag = false }) => {
             : undefined,
         opacity: isDragging ? 0.6 : 1,
         cursor: canDrag ? "grab" : "default",
-        touchAction: "none",
+        touchAction: canDrag ? "none" : undefined,
+        position: isDragging ? "relative" : undefined,
+        zIndex: isDragging ? 9999 : undefined,
     };
 
     return (
