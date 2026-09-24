@@ -4,18 +4,9 @@ import axios from "axios";
 import { FaEdit, FaTrash } from "react-icons/fa";
 import "../style/jobhistory.css";
 
-/* =====================================================
-   Helper functions (component ke bahar)
-   ===================================================== */
-
 const normalizeUpper = (d) => (d || "").toString().trim().toUpperCase();
 
 const pad2 = (n) => String(n).padStart(2, "0");
-
-// Date ko "YYYY-MM-DD" key mein badalta hai.
-// - Agar already "YYYY-MM-DD" hai to seedha wahi use hota hai (timezone ka jhanjhat nahi)
-// - Warna local timezone ke hisaab se nikalta hai
-// - Invalid date par null (pehle toISOString() yahan crash kar deta tha)
 const toDateKey = (value) => {
   if (!value) return null;
   if (typeof value === "string" && /^\d{4}-\d{2}-\d{2}$/.test(value.trim())) {
@@ -54,14 +45,12 @@ const parseMonthField = (job) => {
         return parsed.length > 0 ? parsed[0] : "-";
       }
     } catch (e) {
-      // JSON string nahi hai, normal string hi use hogi
     }
   }
   return val;
 };
 
 const getJobId = (job) => job?.jobId || job?.job_id || "";
-// Pehle Internal QC ke fallback mein amdocs_qc bhi tha (galat), ab hata diya
 const getInternalQc = (job) => job?.internalQc || job?.internal_qc || "";
 const getAmdocsQc = (job) => job?.amdocsQc || job?.amdocs_qc || "";
 const getOtp = (job) => job?.otp || job?.internalOtp || "";
@@ -73,10 +62,6 @@ const qcColor = (value) => {
   if (val >= 50) return "#b8860b";
   return "red";
 };
-
-/* =====================================================
-   On-screen message (toast) + confirm box styles
-   ===================================================== */
 
 const toastBaseStyle = {
   position: "fixed",
@@ -145,6 +130,8 @@ const emptyEditData = {
   amdocsQc: "",
   otp: "",
   jobId: "",
+  jcId: null,
+  workId: null,
 };
 
 const JobHistory = () => {
@@ -317,9 +304,16 @@ const JobHistory = () => {
     const businessJobId = getJobId(job);
 
     try {
-      const url = businessJobId
-        ? `${API_BASE_URL}/api/job/delete/${rowId}?jobId=${encodeURIComponent(businessJobId)}`
-        : `${API_BASE_URL}/api/job/delete/${rowId}`;
+      const params = new URLSearchParams();
+      if (businessJobId) params.set("jobId", businessJobId);
+      // jcId/workId: job_creation aur work_updates ki apni-apni asli id.
+      // Ye backend ko batati hain ki kis table ki kaunsi exact row delete karni
+      // hai, taaki dono tables se hamesha sahi row delete ho (id collision na ho).
+      if (job.jcId !== undefined && job.jcId !== null) params.set("jcId", job.jcId);
+      if (job.workId !== undefined && job.workId !== null) params.set("workId", job.workId);
+
+      const qs = params.toString();
+      const url = `${API_BASE_URL}/api/job/delete/${rowId}${qs ? `?${qs}` : ""}`;
 
       await axios.delete(url);
       showToast("success", "Job Deleted Successfully!");
@@ -343,6 +337,8 @@ const JobHistory = () => {
       amdocsQc: getAmdocsQc(job),
       otp: getOtp(job),
       jobId: getJobId(job),
+      jcId: job.jcId ?? null,
+      workId: job.workId ?? null,
     });
   };
 
@@ -355,12 +351,19 @@ const JobHistory = () => {
     const job = combinedData.find((j) => j.id === id);
 
     try {
+      const originalJobId = job ? getJobId(job) : editData.jobId;
+
       const payload = {
         internalQc: editData.internalQc,
         amdocsQc: editData.amdocsQc,
         otp: editData.otp,
         internalOtp: editData.otp,
-        jobId: editData.jobId,
+        // jobId = purani/original Job ID jisse row dhoondhni hai,
+        // newJobId = user ne jo naya Job ID type kiya (agar change kiya ho)
+        jobId: originalJobId,
+        newJobId: editData.jobId,
+        jcId: editData.jcId,
+        workId: editData.workId,
       };
 
       // Month "-" ho to bhejna nahi hai, warna DB mein "-" save ho jata tha
