@@ -7,7 +7,7 @@ import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer,
   PieChart, Pie, Cell, Legend, CartesianGrid
 } from "recharts";
-import { FaTachometerAlt, FaChartBar, FaUsers, FaSitemap, FaPlusCircle, FaClock, FaHistory, FaLayerGroup, FaFolderOpen, FaPaperPlane, FaChartLine, FaUpload } from "react-icons/fa";
+import { FaTachometerAlt, FaChartBar, FaUsers, FaSitemap, FaPlusCircle, FaClock, FaHistory, FaLayerGroup, FaFolderOpen, FaPaperPlane, FaChartLine } from "react-icons/fa";
 import html2canvas from "html2canvas";
 import jsPDF from "jspdf";
 import geoData from "../us-states.json";
@@ -92,7 +92,7 @@ export default function TelecomMap() {
   const exportRef = useRef();
 
   const hasDataForState = (stateName) => {
-    return currentFilterData.some(item => item.state && item.state.trim().toLowerCase() === stateName.trim().toLowerCase());
+    return currentFilterData.some(item => item.state && String(item.state).trim().toLowerCase() === stateName.trim().toLowerCase());
   };
 
   const allStates = geoData.features.map((f) => f.properties.name);
@@ -139,18 +139,25 @@ export default function TelecomMap() {
   };
 
   const [role, setRole] = useState(null);
-  const { menuOpen, setMenuOpen } = useOutletContext();
+  const outletCtx = useOutletContext() || {};
+  const menuOpen = outletCtx.menuOpen ?? true;
+  const setMenuOpen = outletCtx.setMenuOpen || (() => {});
 
   useEffect(() => {
-    const user = JSON.parse(localStorage.getItem("user"));
-    setRole(user?.role);
+    try {
+      const user = JSON.parse(localStorage.getItem("user"));
+      setRole(user?.role);
+    } catch (e) {
+      setRole(null);
+    }
   }, []);
 
   const fetchAllData = async () => {
     try {
       const workRes = await axios.get(`${API_BASE_URL}/api/work/all`);
-      setAllWorkData(workRes.data || []);
-      setCurrentFilterData(workRes.data || []);
+      const workArr = Array.isArray(workRes.data) ? workRes.data : [];
+      setAllWorkData(workArr);
+      setCurrentFilterData(workArr);
 
       const masterRes = await axios.get(`${API_BASE_URL}/api/master`);
       const data = masterRes.data || {};
@@ -180,15 +187,15 @@ export default function TelecomMap() {
 
     if (selectedFilterStates.length > 0) {
       filtered = filtered.filter(item =>
-        item.state && selectedFilterStates.some(s => s.toLowerCase() === item.state.toLowerCase())
+        item.state && selectedFilterStates.some(s => s.toLowerCase() === String(item.state).toLowerCase())
       );
     }
 
     if (selectedMonth?.month) {
       filtered = filtered.filter(item =>
-        item?.months?.some(m => {
+        (Array.isArray(item?.months) ? item.months : []).some(m => {
           if (!m) return false;
-          const [month, year] = (m || "").split(",");
+          const [month, year] = String(m || "").split(",");
           const fullYear = year && year.length === 2 ? Number(`20${year}`) : Number(year || currentYear);
           return (
             month.toLowerCase() === selectedMonth.month.toLowerCase() &&
@@ -262,7 +269,7 @@ export default function TelecomMap() {
     const map = {};
     currentFilterData.forEach((item) => {
       if (!item.state) return;
-      const stateName = item.state.trim();
+      const stateName = String(item.state).trim();
       map[stateName] = (map[stateName] || 0) + Number(item.jobsDelivered || item.jobs_delivered || 0);
     });
     return map;
@@ -277,7 +284,7 @@ export default function TelecomMap() {
     const map = {};
     currentFilterData.forEach((item) => {
       if (!item.state) return;
-      const stateName = item.state.trim();
+      const stateName = String(item.state).trim();
       const domain = (item.domain || "").toString().trim().toUpperCase();
       if (!domain) return;
       if (!map[stateName]) map[stateName] = {};
@@ -455,9 +462,9 @@ export default function TelecomMap() {
     const totalJobs = Number(item.jobsDelivered || item.jobs_delivered || 0);
     const qcVal = parsePercent(item.amdocsQc || item.amdocs_qc);
     const otpMet = isOtpMet(item.otp);
-    item.months?.forEach((m) => {
+    (Array.isArray(item.months) ? item.months : []).forEach((m) => {
       if (!m) return;
-      const [month, year] = (m || "").split(",");
+      const [month, year] = String(m || "").split(",");
       const fullYear = year && year.length === 2 ? Number(`20${year}`) : Number(year || currentYear);
 
       if (!monthlyJobsMap[month]) monthlyJobsMap[month] = {};
@@ -614,7 +621,7 @@ export default function TelecomMap() {
     <div className="page">
       <div className={`topMenu ${menuOpen ? "expanded" : "collapsed"}`}>
         <button className={`menuBtn ${activePage === "dashboard" ? "active" : ""}`} onClick={() => { setActivePage("dashboard"); if (window.innerWidth <= 1100) setMenuOpen(false); }}><FaTachometerAlt className="menuIcon" />{menuOpen && "Dashboard"}</button>
-        {/* Data Upload button — commented out (hidden from sidebar). Uncomment to show it again.
+        {/* Data Upload button — commented out (hidden from sidebar). To show it again: uncomment this AND add FaUpload back in the react-icons/fa import at the top.
         <button className={`menuBtn ${activePage === "workupdate" ? "active" : ""}`} onClick={() => { setActivePage("workupdate"); if (window.innerWidth <= 1100) setMenuOpen(false); }}><FaUpload className="menuIcon" />{menuOpen && "Data Upload"}</button>
         */}
         <button className={`menuBtn ${activePage === "report" ? "active" : ""}`} onClick={() => { setActivePage("report"); if (window.innerWidth <= 1100) setMenuOpen(false); }}><FaChartBar className="menuIcon" />{menuOpen && "Report"}</button>
