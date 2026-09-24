@@ -37,7 +37,7 @@ export default function Reports({ domain, states }) {
     }
     return "Unknown";
   };
-  // FETCH LAST UPDATE MAP[cite: 3]
+  // FETCH LAST UPDATE MAP
   useEffect(() => {
     axios
       .get(`${API_BASE_URL}/api/work/domain-last-update`)
