@@ -317,7 +317,7 @@ export default function Reports({ domain, states }) {
 
                       <td className="job-cell">
                         <div className="job-main">{qcVal !== null ? `${qcVal}%` : "0%"}</div>
-                        <div className="job-sub">Amdocs QC</div>
+                        <div className="job-sub">QC</div>
                       </td>
 
                       <td className="job-cell">
