@@ -83,7 +83,9 @@ const toastIcons = {
 const MasterDashboard = () => {
     const [activeTab, setActiveTab] = useState("create");
     const [users, setUsers] = useState([]);
-    const [toast, setToast] = useState(null); 
+
+    // Screen par message
+    const [toast, setToast] = useState(null); // { type, text }
     const toastTimerRef = useRef(null);
 
     const [name, setName] = useState("");
@@ -143,8 +145,6 @@ const MasterDashboard = () => {
         }
     }, [showToast]);
 
-    // Pehle domains do alag effects se load ho rahe the aur ek dusre ko overwrite kar dete the.
-    // Ab ek hi jagah se, dono API ka merged data aata hai.
     const loadDomains = useCallback(async () => {
         const [masterRes, workRes] = await Promise.allSettled([
             axios.get(`${API_BASE_URL}/api/master`),
@@ -161,7 +161,7 @@ const MasterDashboard = () => {
                 ? workRes.value.data.map((d) => (typeof d === "string" ? d : d.domain))
                 : [];
 
-        // Case-insensitive duplicate hatao (pehla naam rakha jata hai)
+
         const seen = new Set();
         const unique = [];
         [...masterDomains, ...workDomains].forEach((d) => {
@@ -186,7 +186,7 @@ const MasterDashboard = () => {
         loadDomains();
     }, [getUsers, loadDomains]);
 
-    // Dropdown ke bahar click karne par sab dropdown band ho jayein
+
     useEffect(() => {
         const handleClickOutside = (event) => {
             if (!event.target.closest(".multi-select")) {
@@ -205,6 +205,7 @@ const MasterDashboard = () => {
     const handleSubmit = async (e) => {
         e.preventDefault();
         if (submitting) return;
+
         const cleanEmail = email.trim().split("@")[0].trim();
         if (!cleanEmail) {
             showToast("warning", "Please enter a valid email!");
@@ -244,6 +245,7 @@ const MasterDashboard = () => {
     };
 
     /* ---------------- Delete user ---------------- */
+
     const deleteUser = (id) => {
         Swal.fire({
             title: "Are you sure?",
