@@ -449,7 +449,10 @@ table td select:focus {
   color: #6b7280;
 }
 
-.dropeddown {
+/* Single, clean dropdown-list class (previously two conflicting
+   classes ".dropeddown" + ".dropdowned" were applied together,
+   which caused hover text to render white-on-light-gray = invisible) */
+.dropdown-list {
   position: absolute;
   top: calc(100% + 6px);
   left: 0;
@@ -463,7 +466,7 @@ table td select:focus {
   z-index: 9999;
 }
 
-.dropeddown .option {
+.dropdown-list .option {
   padding: 10px 14px;
   cursor: pointer;
   font-size: 14px;
@@ -472,36 +475,11 @@ table td select:focus {
   border-bottom: 1px solid #f1f1f1;
 }
 
-.dropeddown .option:last-child {
+.dropdown-list .option:last-child {
   border-bottom: none;
 }
 
-.dropeddown .option:hover {
+.dropdown-list .option:hover {
   background: #0d6efd;
   color: #fff;
-}
-
-.dropdowned{
-    position: absolute;
-    top: calc(100% + 5px);
-    left: 0;
-    width: 100%;
-    background: #fff;
-    border: 1px solid #ddd;
-    border-radius: 8px;
-    max-height: 220px;
-    overflow-y: auto;
-    z-index: 99999;
-    box-shadow: 0 8px 20px rgba(0,0,0,.15);
-}
-
-.dropdowned .option {
-  padding: 10px 12px;
-  cursor: pointer;
-  font-size: 14px;
-  border-bottom: 1px solid #f1f1f1;
-}
-
-.dropdowned .option:hover {
-  background: #f3f4f6;
 }
