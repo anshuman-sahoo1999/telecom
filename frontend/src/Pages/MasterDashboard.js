@@ -12,6 +12,20 @@ import UpdatePasswordModal from "../components/UpdatePasswordModal";
    ===================================================== */
 
 const memberTypeOptions = ["QA", "QC", "Production"];
+
+const formatDomain = (d) => {
+    const clean = (d ?? "").toString().trim();
+    if (!clean) return "";
+    return clean
+        .split(" ")
+        .map((word) =>
+            word.length > 0
+                ? word.charAt(0).toUpperCase() + word.slice(1).toLowerCase()
+                : word
+        )
+        .join(" ");
+};
+
 const toArray = (data) => {
     if (Array.isArray(data)) {
         return data.map((m) => String(m).trim()).filter(Boolean);
@@ -83,9 +97,7 @@ const toastIcons = {
 const MasterDashboard = () => {
     const [activeTab, setActiveTab] = useState("create");
     const [users, setUsers] = useState([]);
-
-    // Screen par message
-    const [toast, setToast] = useState(null); // { type, text }
+    const [toast, setToast] = useState(null); 
     const toastTimerRef = useRef(null);
 
     const [name, setName] = useState("");
@@ -161,7 +173,7 @@ const MasterDashboard = () => {
                 ? workRes.value.data.map((d) => (typeof d === "string" ? d : d.domain))
                 : [];
 
-
+        // Case-insensitive duplicate hatao (pehla naam rakha jata hai)
         const seen = new Set();
         const unique = [];
         [...masterDomains, ...workDomains].forEach((d) => {
@@ -185,8 +197,6 @@ const MasterDashboard = () => {
         getUsers();
         loadDomains();
     }, [getUsers, loadDomains]);
-
-
     useEffect(() => {
         const handleClickOutside = (event) => {
             if (!event.target.closest(".multi-select")) {
@@ -206,6 +216,8 @@ const MasterDashboard = () => {
         e.preventDefault();
         if (submitting) return;
 
+        // Agar user ne poora email (abc@gmail.com) likh diya ho to sirf "@" se pehle wala hissa lo
+        // (pehle "@" hata diya jata tha, jisse abcgmail.com@ecometrix.co.in ban jata tha)
         const cleanEmail = email.trim().split("@")[0].trim();
         if (!cleanEmail) {
             showToast("warning", "Please enter a valid email!");
@@ -303,6 +315,8 @@ const MasterDashboard = () => {
             return;
         }
 
+        // Pehle poora user object (id, password hash waghera sab) bhej diya jata tha.
+        // Ab sirf edit hone wali fields jayengi.
         const payload = {
             name: editRowData.name.trim(),
             emp_id: editRowData.emp_id,
@@ -567,7 +581,7 @@ const MasterDashboard = () => {
 
                                     {domain.map((item) => (
                                         <span className="tag" key={item}>
-                                            {item}
+                                            {formatDomain(item)}
                                             <span
                                                 className="remove"
                                                 onClick={(e) => {
@@ -596,7 +610,7 @@ const MasterDashboard = () => {
                                                     setOpenCreateDomain(false);
                                                 }}
                                             >
-                                                {d}
+                                                {formatDomain(d)}
                                             </div>
                                         ))}
                                     </div>
@@ -816,7 +830,7 @@ const MasterDashboard = () => {
 
                                                                 {editDomains.map((item) => (
                                                                     <span className="tag" key={item}>
-                                                                        {item}
+                                                                        {formatDomain(item)}
                                                                         <span
                                                                             className="remove"
                                                                             onClick={(e) => {
@@ -851,7 +865,7 @@ const MasterDashboard = () => {
                                                                                 setOpenEditDomain(false);
                                                                             }}
                                                                         >
-                                                                            {d}
+                                                                            {formatDomain(d)}
                                                                         </div>
                                                                     ))}
                                                                 </div>
@@ -859,7 +873,7 @@ const MasterDashboard = () => {
                                                         </div>
                                                     ) : (
                                                         toArray(u.domain).length > 0
-                                                            ? toArray(u.domain).join(", ")
+                                                            ? toArray(u.domain).map(formatDomain).join(", ")
                                                             : "-"
                                                     )}
                                                 </td>
