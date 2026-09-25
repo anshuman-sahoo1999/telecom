@@ -1,3 +1,19 @@
+
+.report-wrapper {
+  position: relative;
+  min-height: 100vh;
+  font-family: "Inter", "Segoe UI", sans-serif;
+  padding: 20px;
+}
+
+.title {
+  font-size: 32px;
+  font-weight: 700;
+  color: #1e3a8a;
+  text-align: center;
+  margin-bottom: 45px;
+}
+
 .export-box {
   position: absolute;
   right: 45px;
@@ -16,7 +32,7 @@
   border-radius: 8px;
   cursor: pointer;
   font-size: 14px;
-  transition: 0.2s;
+  transition: background 0.2s ease;
 }
 
 .export-btn:hover {
@@ -29,7 +45,7 @@
   right: 0;
   background: #fff;
   border-radius: 10px;
-  box-shadow: 0 10px 25px rgba(0,0,0,0.15);
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.15);
   min-width: 170px;
   z-index: 9999;
 }
@@ -47,21 +63,9 @@
   background: #f3f4f6;
 }
 
-.report-wrapper {
-  position: relative;
-  min-height: 100vh;
-  font-family: "Inter", "Segoe UI", sans-serif;
-  padding: 20px;
-}
-
-.title {
-  font-size: 32px;
-  font-weight: 700;
-  color: #1e3a8a;
-  text-align: center;
-  margin-bottom: 45px;
-}
-
+/* ==========================================
+   3. Filters Section
+   ================================---------- */
 .filters {
   display: flex;
   justify-content: space-between;
@@ -104,7 +108,9 @@ input:focus {
   outline: none;
 }
 
-/* Table Wrapper for Proper Width & Scroll */
+/* ==========================================
+   4. Table Styles & Responsive Container
+   ================================---------- */
 .table-responsive-container {
   width: 100%;
   overflow-x: auto;
@@ -142,7 +148,11 @@ input:focus {
 
 .table tbody tr:hover {
   background: #f1f5ff;
-  transition: 0.2s;
+  transition: background 0.2s ease;
+}
+
+.table tbody tr.light-orange-row {
+  background-color: #ffedd5;
 }
 
 .no-data {
@@ -152,6 +162,69 @@ input:focus {
   font-weight: 600;
 }
 
+/* ==========================================
+   5. Action Buttons inside Tables
+   ================================---------- */
+.action-buttons {
+  display: flex;
+  gap: 6px;
+  justify-content: center;
+  align-items: center;
+}
+
+.action-buttons button {
+  border: none;
+  outline: none;
+  padding: 6px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 600;
+  transition: all 0.25s ease;
+  color: white;
+}
+
+.edit-btn { background: linear-gradient(135deg, #2563eb, #1d4ed8); }
+.delete-btn { background: linear-gradient(135deg, #dc2626, #b91c1c); }
+.save-btn { background: linear-gradient(135deg, #16a34a, #15803d); }
+.cancel-btn { background: linear-gradient(135deg, #6b7280, #4b5563); }
+
+/* ==========================================
+   6. Pagination Component
+   ================================---------- */
+.pagination {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 15px;
+}
+
+.pagination button {
+  padding: 6px 14px;
+  border: 1px solid #cbd5e1;
+  background: white;
+  cursor: pointer;
+  border-radius: 6px;
+  font-weight: 500;
+}
+
+.pagination button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.page-input {
+  width: 60px;
+  text-align: center;
+  border: 1px solid #cbd5e1;
+  padding: 6px;
+  border-radius: 6px;
+}
+
+/* ==========================================
+   7. Extras, Legends, Updates, & Icons
+   ================================---------- */
 .last-update {
   margin-top: 12px;
   font-size: 13px;
@@ -159,6 +232,39 @@ input:focus {
   font-weight: 500;
 }
 
+.table-update-info {
+  margin: 15px 0;
+  padding: 10px 15px;
+  background: #f8fafc;
+  border-left: 4px solid #2563eb;
+  border-radius: 6px;
+  font-size: 13px;
+  color: #586f8d;
+  font-style: italic;
+}
+
+.table-update-info p {
+  font-size: 13px;
+  line-height: 1.8;
+  margin: 0;
+}
+
+.star-icon {
+  font-size: 20px;
+  font-weight: bold;
+  vertical-align: middle;
+  color: #2563eb;
+}
+
+.job-main {
+  font-size: 13px;
+  font-weight: bold;
+  color: #33570a;
+}
+
+/* ==========================================
+   8. PDF Layout Helpers & Legends
+   ================================---------- */
 .pdf-hidden {
   position: absolute;
   top: 0;
@@ -213,93 +319,9 @@ input:focus {
   background: transparent;
 }
 
-.job-main {
-  font-size: 13px;
-  font-weight: bold;
-  color: #33570a;
-}
-
-.pagination {
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 10px;
-  margin-top: 15px;
-}
-
-.pagination button {
-  padding: 6px 14px;
-  border: 1px solid #cbd5e1;
-  background: white;
-  cursor: pointer;
-  border-radius: 6px;
-  font-weight: 500;
-}
-
-.pagination button:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-.page-input {
-  width: 60px;
-  text-align: center;
-  border: 1px solid #cbd5e1;
-  padding: 6px;
-  border-radius: 6px;
-}
-
-.action-buttons {
-  display: flex;
-  gap: 6px;
-  justify-content: center;
-  align-items: center;
-}
-
-.action-buttons button {
-  border: none;
-  outline: none;
-  padding: 6px 10px;
-  border-radius: 6px;
-  cursor: pointer;
-  font-size: 12px;
-  font-weight: 600;
-  transition: all 0.25s ease;
-  color: white;
-}
-
-.edit-btn { background: linear-gradient(135deg, #2563eb, #1d4ed8); }
-.delete-btn { background: linear-gradient(135deg, #dc2626, #b91c1c); }
-.save-btn { background: linear-gradient(135deg, #16a34a, #15803d); }
-.cancel-btn { background: linear-gradient(135deg, #6b7280, #4b5563); }
-
-.table-update-info {
-  margin: 15px 0;
-  padding: 10px 15px;
-  background: #f8fafc;
-  border-left: 4px solid #2563eb;
-  border-radius: 6px;
-  font-size: 13px;
-  color: #586f8d;
-  font-style: italic;
-}
-
-.table-update-info p {
-  font-size: 13px;
-  line-height: 1.8;
-  margin: 0;
-}
-
-.star-icon {
-  font-size: 20px;
-  font-weight: bold;
-  vertical-align: middle;
-  color: #2563eb;
-}
-.table tbody tr.light-orange-row {
-  background-color: #ffedd5;
-}
-
+/* ==========================================
+   9. Media Queries (Mobile Responsive)
+   ================================---------- */
 @media (max-width: 768px) {
   .filters {
     flex-direction: column;
