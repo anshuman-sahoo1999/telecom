@@ -321,17 +321,8 @@ const JobHistory = () => {
         setEditingId(null);
         setEditData(emptyEditData);
       }
-
-      // Screen se turant hata do (Job ID ke basis par dono lists se)
-      if (businessJobId) {
-        const sameJob = (item) =>
-          String(item.jobId || item.job_id || "").trim() === String(businessJobId).trim();
-        setJobs((prev) => prev.filter((item) => !sameJob(item)));
-        setWorkDataReport((prev) => prev.filter((item) => !sameJob(item)));
-      }
-
-      // Phir server se fresh data lo (dono ka wait karke)
-      await Promise.all([fetchJobs(), fetchReportData()]);
+      fetchJobs();
+      fetchReportData();
     } catch (error) {
       console.log(error);
       showToast("error", "Delete Failed!");
