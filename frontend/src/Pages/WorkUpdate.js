@@ -12,10 +12,6 @@ import {
 } from "lucide-react";
 
 import "../style/workupdate.css";
-
-// Backend "MM-DD-YYYY" ya "YYYY-MM-DD" bhejta hai. new Date("MM-DD-YYYY")
-// Chrome/Node me chal jaata hai lekin Firefox/Safari me Invalid Date deta hai,
-// isliye khud regex se parse karke hamesha "YYYY-MM-DD" banate hain.
 const formatDateForView = (val) => {
   if (!val) return "";
   const str = val.toString().trim();
@@ -148,7 +144,6 @@ export default function WorkUpdate({ refreshDashboard }) {
     reader.readAsArrayBuffer(file);
   };
 
-  /* ================= REMOVE FILE ================= */
   const removeFile = () => {
     setExcelFile(null);
     setTempWorkbook({});
@@ -160,7 +155,6 @@ export default function WorkUpdate({ refreshDashboard }) {
     }
   };
 
-  /* ================= IMPORT EXCEL ================= */
   const handleImport = async () => {
     if (!excelFile) return alert("Select file");
 
