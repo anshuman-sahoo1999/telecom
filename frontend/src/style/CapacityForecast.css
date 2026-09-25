@@ -285,3 +285,157 @@
   font-weight: bold;
   margin-top: 1px;
 }
+
+/* =========================================================
+   RESPONSIVE / MOBILE VIEW
+   ========================================================= */
+
+/* Tablets and small laptops */
+@media (max-width: 992px) {
+  .img-reports-grid {
+    grid-template-columns: repeat(auto-fit, minmax(380px, 1fr));
+  }
+}
+
+/* Tablets / large phones */
+@media (max-width: 768px) {
+  .img-style-container {
+    padding: 10px;
+  }
+
+  .img-main-title {
+    font-size: 24px;
+    margin-bottom: 14px;
+  }
+
+  .img-form-wrapper {
+    grid-template-columns: 1fr;
+    padding: 15px;
+    gap: 12px;
+  }
+
+  .img-form-actions {
+    grid-column: span 1;
+    justify-content: center;
+  }
+
+  .img-submit-btn {
+    width: 100%;
+  }
+
+  .img-date-filter-simple {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 10px;
+  }
+
+  .img-filter-group input {
+    width: 100%;
+    box-sizing: border-box;
+  }
+
+  .img-clear-filter-btn {
+    width: 100%;
+  }
+
+  .img-reports-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .img-table-flex-row {
+    flex-direction: column;
+  }
+
+  .img-avg-card {
+    width: 100%;
+    flex-direction: row;
+    justify-content: center;
+    gap: 8px;
+    padding: 6px 0;
+  }
+
+  .img-table-scroll-wrapper {
+    width: 100%;
+  }
+
+  .img-custom-table {
+    font-size: 11px;
+  }
+}
+
+/* Phones */
+@media (max-width: 480px) {
+  .img-main-title {
+    font-size: 20px;
+  }
+
+  .img-form-wrapper {
+    padding: 12px;
+    border-radius: 4px;
+  }
+
+  .img-field-group label {
+    font-size: 11px;
+  }
+
+  .img-field-group select,
+  .img-field-group input {
+    padding: 7px;
+    font-size: 13px;
+  }
+
+  .img-table-header-title {
+    font-size: 12px;
+  }
+
+  .img-export-main-btn {
+    padding: 4px 8px;
+    font-size: 10px;
+  }
+
+  .img-export-dropdown-menu button {
+    padding: 7px 10px;
+    font-size: 10px;
+  }
+
+  .img-custom-table th,
+  .img-custom-table td {
+    padding: 5px 6px;
+    font-size: 10.5px;
+  }
+
+  .img-edit-row-input {
+    width: 38px;
+    font-size: 10px;
+  }
+
+  .img-action-btn {
+    font-size: 12px;
+    padding: 1px 2px;
+  }
+
+  .img-avg-card {
+    width: 100%;
+  }
+
+  .img-avg-title {
+    font-size: 11px;
+  }
+
+  .img-avg-val {
+    font-size: 13px;
+  }
+}
+
+/* Extra small phones */
+@media (max-width: 360px) {
+  .img-custom-table th,
+  .img-custom-table td {
+    padding: 4px 5px;
+    font-size: 10px;
+  }
+
+  .img-edit-row-input {
+    width: 32px;
+  }
+}
