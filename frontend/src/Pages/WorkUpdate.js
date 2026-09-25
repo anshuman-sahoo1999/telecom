@@ -13,6 +13,29 @@ import {
 
 import "../style/workupdate.css";
 
+// Backend "MM-DD-YYYY" ya "YYYY-MM-DD" bhejta hai. new Date("MM-DD-YYYY")
+// Chrome/Node me chal jaata hai lekin Firefox/Safari me Invalid Date deta hai,
+// isliye khud regex se parse karke hamesha "YYYY-MM-DD" banate hain.
+const formatDateForView = (val) => {
+  if (!val) return "";
+  const str = val.toString().trim();
+
+  let m = str.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (m) return `${m[1]}-${m[2]}-${m[3]}`;
+
+  m = str.match(/^(\d{1,2})[-/](\d{1,2})[-/](\d{4})$/);
+  if (m) {
+    const mm = m[1].padStart(2, "0");
+    const dd = m[2].padStart(2, "0");
+    return `${m[3]}-${mm}-${dd}`;
+  }
+
+  const d = new Date(str);
+  if (!isNaN(d.getTime())) return d.toISOString().split("T")[0];
+
+  return str;
+};
+
 export default function WorkUpdate({ refreshDashboard }) {
   const [excelFile, setExcelFile] = useState(null);
   const [imports, setImports] = useState([]);
@@ -84,16 +107,19 @@ export default function WorkUpdate({ refreshDashboard }) {
               let val = row.getCell(col).value;
 
               if (val instanceof Date) {
-                const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-                val = `${months[val.getMonth()]}-${val.getFullYear()}`;
-              }
-
-              if (val && typeof val === "object" && val.text) {
-                val = val.text;
-              }
-
-              if (val && typeof val === "object" && val.result !== undefined) {
-                val = val.result;
+                const mm = String(val.getMonth() + 1).padStart(2, "0");
+                const dd = String(val.getDate()).padStart(2, "0");
+                val = `${mm}/${dd}/${val.getFullYear()}`;
+              } else if (val && typeof val === "object") {
+                if (Array.isArray(val.richText)) {
+                  val = val.richText.map((t) => (t && t.text ? t.text : "")).join("");
+                } else if (val.text !== undefined) {
+                  val = val.text;
+                } else if (val.result !== undefined) {
+                  val = val.result;
+                } else if (val.error) {
+                  val = "";
+                }
               }
 
               if (rowNumber === 1) {
@@ -283,14 +309,7 @@ export default function WorkUpdate({ refreshDashboard }) {
                   val = val || "";
                 }
               } else if (["receive_date", "ecd_date", "submission_date"].includes(k)) {
-                if (val) {
-                  const d = new Date(val);
-                  if (!isNaN(d)) {
-                    val = d.toISOString().split('T')[0];
-                  }
-                } else {
-                  val = "";
-                }
+                val = formatDateForView(val);
               }
 
               tableRows.push(`<td style="padding:6px">${val ?? ""}</td>`);
