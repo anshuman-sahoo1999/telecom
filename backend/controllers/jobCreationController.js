@@ -3,7 +3,6 @@ const db = require("../config/db");
 const clean = (v) => (v !== undefined && v !== null ? v.toString().trim() : "");
 const normalize = (v) => clean(v).toUpperCase();
 
-// Region nikalne ke liye (workController jaisa hi stateCodes use hota hai)
 let stateData = {};
 try {
   stateData = require("../stateCodes") || {};
@@ -22,13 +21,7 @@ const regionFromMarket = (market) => {
   }
   return "";
 };
-
-// months column ke liye JSON text. SQL ke JSON_ARRAY() par nirbhar nahi
-// (text aur JSON dono type ke column me chalta hai). Month na ho to null (purana rahe).
 const monthsParam = (m) => (m ? JSON.stringify([m]) : null);
-
-// work_updates me nayi row: Report ke saare columns saath me (khaali text '' ke saath),
-// taaki koi NOT NULL column insert ko fail na kare aur Report me Region bhi aaye.
 const WORK_INSERT_SQL = `
   INSERT INTO work_updates
   (domain, state, region, job_id, months, receive_date, ecd_date, submission_date,
@@ -98,6 +91,7 @@ const cleanSingleMonth = (m) => {
 };
 
 exports.createJob = (req, res) => {
+ try {
   let {
     domain,
     market,
@@ -113,7 +107,7 @@ exports.createJob = (req, res) => {
     internal_qc,
     otp,
     internalOtp
-  } = req.body;
+  } = req.body || {};
 
   const finalReceiveDate = receiveDate || receivedDate || null;
   const formattedEcdDate = ecdDate && ecdDate !== "" ? ecdDate : null;
@@ -207,7 +201,6 @@ exports.createJob = (req, res) => {
           receiveDate: finalReceiveDate, ecdDate: formattedEcdDate, submissionDate: formattedSubmissionDate,
           amdocsQc: finalAmdocsQc, internalQc: finalInternalQc, otp: finalOtp
         }), (iwErr) => {
-          // Work insert fail ho to job_creation me akeli row (orphan) na bache
           if (iwErr) {
             if (newId) db.query("DELETE FROM job_creation WHERE id = ?", [newId], () => {});
             return res.status(500).json({ success: false, message: iwErr.message });
@@ -221,9 +214,14 @@ exports.createJob = (req, res) => {
       }
     });
   }
+ } catch (e) {
+  console.error("createJob crashed:", e.message);
+  return res.status(500).json({ success: false, message: e.message });
+ }
 };
 
 exports.getAllJobs = (req, res) => {
+ try {
   const queryJC = "SELECT id, jobId, domain, market, month, receiveDate, ecdDate, submissionDate, otp, amdocsQc, internalQc, updated_at FROM job_creation";
   const queryWU = "SELECT id, job_id AS jobId, domain, state AS market, months, receive_date AS receiveDate, ecd_date AS ecdDate, submission_date AS submissionDate, amdocs_qc, internal_qc, otp, updated_at FROM work_updates WHERE job_id IS NOT NULL AND job_id != '-' AND job_id != ''";
 
@@ -235,22 +233,14 @@ exports.getAllJobs = (req, res) => {
       if (errWU) {
         return res.status(500).json({ success: false, message: errWU.message });
       }
-
-      // Job ID ko trim + lowercase karke compare karte hain (MySQL TRIM/=
-      // bhi case-insensitive hai), taaki "abc1" aur "ABC1" alag na ginein.
       const keyOf = (v) => (v ? v.toString().trim().toLowerCase() : "");
       const isValidKey = (k) => k !== "" && k !== "-";
-
-      // work_updates hi Report ka source hai. Jo job_creation row ki
-      // work_updates me koi row nahi hai (Report/upload se delete ho chuki),
-      // wo "orphan" hai -> Job History me nahi dikhni chahiye.
       const workJobKeys = new Set();
       wuRows.forEach((row) => {
         const k = keyOf(row.jobId);
         if (isValidKey(k)) workJobKeys.add(k);
       });
 
-      // work_updates.months (JSON / text) se pehla month nikalo
       const monthFromWork = (val) => {
         let v = val;
         if (typeof v === "string") {
@@ -265,7 +255,7 @@ exports.getAllJobs = (req, res) => {
       jcRows.forEach((row) => {
         const k = keyOf(row.jobId);
         if (!isValidKey(k)) return;
-        if (!workJobKeys.has(k)) return; // orphan row skip
+        if (!workJobKeys.has(k)) return; 
 
         jobMap.set(k, {
           ...row,
@@ -313,9 +303,14 @@ exports.getAllJobs = (req, res) => {
       res.json(Array.from(jobMap.values()));
     });
   });
+ } catch (e) {
+  console.error("getAllJobs crashed:", e.message);
+  return res.status(500).json({ success: false, message: e.message });
+ }
 };
 
 exports.updateJob = (req, res) => {
+ try {
   const {
     internalQc, internal_qc,
     amdocsQc, amdocs_qc,
@@ -330,7 +325,7 @@ exports.updateJob = (req, res) => {
     newJobId,
     jcId,
     workId
-  } = req.body;
+  } = req.body || {};
 
   const paramId = clean(req.params.id);
 
@@ -489,13 +484,18 @@ exports.updateJob = (req, res) => {
       });
     });
   });
+ } catch (e) {
+  console.error("updateJob crashed:", e.message);
+  return res.status(500).json({ success: false, message: e.message });
+ }
 };
 
 exports.deleteJob = (req, res) => {
+ try {
   const rowId = clean(req.params.id);
-  const requestedJobId = clean(req.query.jobId);
-  const jcId = clean(req.query.jcId);
-  const workId = clean(req.query.workId);
+  const requestedJobId = clean((req.query || {}).jobId);
+  const jcId = clean((req.query || {}).jcId);
+  const workId = clean((req.query || {}).workId);
 
   const findJcSql = jcId
     ? `SELECT jobId FROM job_creation WHERE id = ? LIMIT 1`
@@ -556,15 +556,19 @@ exports.deleteJob = (req, res) => {
       });
     });
   });
+ } catch (e) {
+  console.error("deleteJob crashed:", e.message);
+  return res.status(500).json({ success: false, message: e.message });
+ }
 };
 
 exports.submitJob = (req, res) => {
-  const { jobId, month, submissionDate } = req.body;
+ try {
+  const { jobId, month, submissionDate } = req.body || {};
   const formattedSubmissionDate = submissionDate && submissionDate !== "" ? submissionDate : null;
   const cleanJobId = clean(jobId);
   const cleanMonth = cleanSingleMonth(month);
 
-  // month na aaye to job_creation ka purana month rakho (pehle NULL ho jata tha)
   const sql = `
     UPDATE job_creation
     SET submissionDate = ?,
@@ -599,8 +603,7 @@ exports.submitJob = (req, res) => {
         message: e.message,
       });
 
-    // Report (work_updates) me bhi submission date + month jaye.
-    // Pehle ye sync response ke baad chalta tha aur error chhup jata tha.
+ 
     db.query(
       "SELECT id FROM work_updates WHERE TRIM(job_id) = TRIM(?) LIMIT 1",
       [cleanJobId],
@@ -645,4 +648,8 @@ exports.submitJob = (req, res) => {
       }
     );
   });
+ } catch (e) {
+  console.error("submitJob crashed:", e.message);
+  return res.status(500).json({ success: false, message: e.message });
+ }
 };
