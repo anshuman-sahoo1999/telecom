@@ -250,6 +250,9 @@ export default function Report() {
 
   useEffect(() => {
     setCurrentPage(1);
+    // Filters badalne par page reset hota hai, isliye page-jump input bhi saaf kar do
+    // warna wahan purana typed number reh jaata tha jo current page se match nahi karta tha
+    setJumpPage("");
   }, [selectedMonthYear, selectedDomain, selectedState, fromDate, toDate]);
 
   /* ---------------- Rows banana ---------------- */
@@ -438,6 +441,9 @@ export default function Report() {
   useEffect(() => {
     if (currentPage > totalPages) {
       setCurrentPage(totalPages);
+      // Page number apne aap adjust hua hai, isliye jump-box ka purana typed number
+      // saaf kar do warna wo naye current page se mismatch dikhega
+      setJumpPage("");
     }
   }, [currentPage, totalPages]);
 
@@ -1549,7 +1555,11 @@ export default function Report() {
               <button
                 type="button"
                 disabled={currentPage === 1}
-                onClick={() => setCurrentPage(currentPage - 1)}
+                onClick={() => {
+                  setCurrentPage(currentPage - 1);
+                  // Prev par jaate hi jump-box saaf kar do, warna wo purana number dikhata rehta
+                  setJumpPage("");
+                }}
               >
                 Prev
               </button>
@@ -1577,7 +1587,11 @@ export default function Report() {
               <button
                 type="button"
                 disabled={currentPage === totalPages}
-                onClick={() => setCurrentPage(currentPage + 1)}
+                onClick={() => {
+                  setCurrentPage(currentPage + 1);
+                  // Next par jaate hi jump-box saaf kar do, warna wo purana number dikhata rehta
+                  setJumpPage("");
+                }}
               >
                 Next
               </button>
