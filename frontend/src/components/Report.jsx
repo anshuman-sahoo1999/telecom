@@ -332,7 +332,7 @@ export default function Reports({ domain, states }) {
                   <td></td>
                   <td></td>
                   <td></td>
-                  <td>Total Jobs Delivered</td>
+                  <td>Total</td>
                   <td className="highlight">{totalJobs}</td>
                   <td className="highlight">{overallQc !== null ? `${overallQc}%` : "0%"}</td>
                   <td className="highlight">{overallOtp !== null ? `${overallOtp}%` : "0%"}</td>
