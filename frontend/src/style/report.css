@@ -34,7 +34,7 @@
   background: #1d4ed8;
 }
 
-.export-dropdown {
+.export-dropdown button {
   position: absolute;
   top: 45px;
   right: 0;
@@ -43,15 +43,6 @@
   box-shadow: 0 10px 25px rgba(0,0,0,0.15);
   min-width: 170px;
   z-index: 9999;
-}
-
-.export-dropdown button {
-  width: 100%;
-  padding: 10px;
-  border: none;
-  background: white;
-  text-align: left;
-  cursor: pointer;
 }
 
 .export-dropdown button:hover {
