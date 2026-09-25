@@ -1,7 +1,7 @@
 .export-box {
   position: absolute;
-  right: 50px;
-  top: 30px;
+  right: 45px;
+  top: 35px;
   transform: translateY(-50%);
   display: flex;
   justify-content: flex-end;
