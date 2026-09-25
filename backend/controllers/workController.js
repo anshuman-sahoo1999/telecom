@@ -1071,8 +1071,27 @@ const updateWork = async (req, res) => {
 /* ======================================
    GETTERS (Formatted to MM-DD-YYYY for Frontend)
 ====================================== */
+// State (naam ya code) se region nikalo, case-insensitive
+const regionForState = (state) => {
+  const raw = clean(state).toUpperCase();
+  if (!raw) return "";
+  for (const name of Object.keys(stateData)) {
+    const info = stateData[name] || {};
+    if (name.toUpperCase() === raw || clean(info.code).toUpperCase() === raw) {
+      return info.region || "";
+    }
+  }
+  return "";
+};
+
 const mapWorkRow = (row) => {
   const { jc_month, jc_receive, jc_ecd, jc_submission, ...work } = row;
+
+  // Region khaali ho (jaise single-create job) to state se bhar do
+  if (isBlank(work.region)) {
+    const derived = regionForState(work.state);
+    if (derived) work.region = derived;
+  }
 
   let monthsArr = safeParseJson(work.months, []);
   if (!Array.isArray(monthsArr)) monthsArr = monthsArr ? [monthsArr] : [];
