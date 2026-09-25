@@ -1,15 +1,12 @@
-.img-style-container {
-  min-height: 100vh;
-  width: 100%;
-  font-family: Arial, sans-serif;
+* {
   box-sizing: border-box;
-  overflow-x: hidden;
 }
 
-.img-style-container *,
-.img-style-container *::before,
-.img-style-container *::after {
+.img-style-container {
+  min-height: 100vh;
+  font-family: Arial, sans-serif;
   box-sizing: border-box;
+  padding: 16px;
 }
 
 .img-main-title {
@@ -20,6 +17,7 @@
   margin-bottom: 20px;
 }
 
+/* ---------- Form ---------- */
 .img-form-wrapper {
   background: #fff;
   padding: 20px;
@@ -28,12 +26,13 @@
   grid-template-columns: repeat(2, 1fr);
   gap: 15px;
   margin-bottom: 20px;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
 }
 
 .img-field-group {
   display: flex;
   flex-direction: column;
+  min-width: 0;
 }
 
 .img-field-group label {
@@ -43,11 +42,20 @@
   color: #333;
 }
 
-.img-field-group select, 
+.img-field-group select,
 .img-field-group input {
   padding: 8px;
   border: 1px solid #ccc;
   border-radius: 4px;
+  width: 100%;
+  font-size: 14px;
+}
+
+.img-field-group select:focus,
+.img-field-group input:focus {
+  outline: none;
+  border-color: #1e3c72;
+  box-shadow: 0 0 0 2px rgba(30, 60, 114, 0.15);
 }
 
 .img-form-actions {
@@ -73,11 +81,17 @@
   background: #2a5298;
 }
 
+.img-submit-btn:active {
+  transform: translateY(1px);
+}
+
+/* ---------- Date filter ---------- */
 .img-date-filter-simple {
   display: flex;
   gap: 15px;
   align-items: flex-end;
   margin-bottom: 20px;
+  flex-wrap: wrap;
 }
 
 .img-filter-group {
@@ -110,12 +124,14 @@
   font-weight: bold;
   font-size: 12px;
   height: 31px;
+  white-space: nowrap;
 }
 
 .img-clear-filter-btn:hover {
   background: #b91c1c;
 }
 
+/* ---------- Reports grid ---------- */
 .img-reports-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(450px, 1fr));
@@ -126,11 +142,13 @@
 .img-table-box {
   background: #ffffff;
   border: 1px solid #b0b0b0;
-  box-shadow: 0 2px 6px rgba(0,0,0,0.1);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
   width: 100%;
   max-width: 100%;
   box-sizing: border-box;
   margin-bottom: 20px;
+  border-radius: 4px;
+  overflow: hidden;
 }
 
 .img-table-header-container {
@@ -141,6 +159,8 @@
   padding: 5px 10px;
   border-bottom: 1px solid #b0b0b0;
   position: relative;
+  gap: 8px;
+  flex-wrap: wrap;
 }
 
 .img-table-header-title {
@@ -165,6 +185,7 @@
   font-weight: bold;
   cursor: pointer;
   transition: background 0.2s ease;
+  white-space: nowrap;
 }
 
 .img-export-main-btn:hover {
@@ -204,6 +225,7 @@
   color: #1d4ed8;
 }
 
+/* ---------- Table row (table + avg card side by side) ---------- */
 .img-table-flex-row {
   display: flex;
   align-items: stretch;
@@ -215,19 +237,21 @@
 
 .img-table-scroll-wrapper {
   overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
   flex: 1;
   min-width: 0;
 }
 
 .img-custom-table {
   width: 100%;
+  min-width: 480px;
   border-collapse: collapse;
   text-align: center;
   font-size: 12px;
   table-layout: auto;
 }
 
-.img-custom-table th, 
+.img-custom-table th,
 .img-custom-table td {
   border: 1px solid #333333;
   padding: 6px 8px;
@@ -238,6 +262,8 @@
   background-color: #334e68;
   color: #ffffff;
   font-weight: bold;
+  position: sticky;
+  top: 0;
 }
 
 .img-total-row {
@@ -298,21 +324,21 @@
    RESPONSIVE / MOBILE VIEW
    ========================================================= */
 
-/* Tablets and small laptops: just tighten the grid, table stays a table */
-@media (max-width: 992px) {
+/* Tablets & small laptops */
+@media (max-width: 1024px) {
   .img-reports-grid {
     grid-template-columns: repeat(auto-fit, minmax(380px, 1fr));
   }
 }
 
-/* Tablets / large phones (landscape) */
+/* Tablets / large phones */
 @media (max-width: 768px) {
   .img-style-container {
-    padding: 10px;
+    padding: 12px;
   }
 
   .img-main-title {
-    font-size: 22px;
+    font-size: 24px;
     margin-bottom: 14px;
   }
 
@@ -324,7 +350,6 @@
 
   .img-form-actions {
     grid-column: span 1;
-    justify-content: center;
   }
 
   .img-submit-btn {
@@ -347,28 +372,12 @@
 
   .img-reports-grid {
     grid-template-columns: 1fr;
-    gap: 16px;
+    gap: 14px;
   }
 
-  .img-table-box {
-    margin-bottom: 0;
-  }
-}
-
-/* =========================================================
-   PHONES (portrait): table becomes a stacked card list.
-   thead is hidden and every <td> shows its own label
-   (from the data-label attribute) above its value, so
-   nothing gets cut off and there's no sideways scrolling.
-   ========================================================= */
-@media (max-width: 600px) {
-  .img-main-title {
-    font-size: 19px;
-  }
-
+  /* Table + avg card stack instead of sitting side by side */
   .img-table-flex-row {
     flex-direction: column;
-    padding: 8px;
   }
 
   .img-avg-card {
@@ -376,112 +385,79 @@
     flex-direction: row;
     justify-content: center;
     gap: 8px;
-    padding: 7px 0;
+    padding: 6px 0;
+  }
+
+  .img-table-header-title {
+    font-size: 12px;
+  }
+}
+
+/* Phones */
+@media (max-width: 480px) {
+  .img-style-container {
+    padding: 8px;
+  }
+
+  .img-main-title {
+    font-size: 20px;
+  }
+
+  .img-form-wrapper {
+    padding: 12px;
     border-radius: 4px;
-    order: -1; /* show the Avg badge above the table on mobile */
+  }
+
+  .img-field-group label {
+    font-size: 11px;
+  }
+
+  .img-field-group select,
+  .img-field-group input {
+    padding: 7px;
+    font-size: 13px;
+  }
+
+  .img-table-header-container {
+    padding: 6px 8px;
+  }
+
+  .img-export-main-btn {
+    font-size: 10px;
+    padding: 4px 8px;
+  }
+
+  .img-export-dropdown-menu {
+    min-width: 100px;
+  }
+
+  .img-export-dropdown-menu button {
+    font-size: 10px;
+    padding: 7px 10px;
+  }
+
+  .img-custom-table {
+    font-size: 11px;
+    min-width: 420px;
+  }
+
+  .img-custom-table th,
+  .img-custom-table td {
+    padding: 5px 6px;
+  }
+
+  .img-edit-row-input {
+    width: 38px;
+    font-size: 10px;
+  }
+
+  .img-action-btn {
+    font-size: 15px;
+    padding: 4px 5px;
   }
 
   .img-avg-title,
   .img-avg-val {
-    margin: 0;
-  }
-
-  .img-table-scroll-wrapper {
-    overflow-x: visible;
-    width: 100%;
-  }
-
-  .img-custom-table {
-    display: block;
-    width: 100%;
-  }
-
-  .img-custom-table thead {
-    display: none;
-  }
-
-  .img-custom-table tbody,
-  .img-custom-table tr {
-    display: block;
-    width: 100%;
-  }
-
-  .img-custom-table tr {
-    margin-bottom: 10px;
-    border: 1px solid #333333;
-    border-radius: 6px;
-    overflow: hidden;
-  }
-
-  .img-custom-table tr.img-total-row {
-    margin-bottom: 0;
-  }
-
-  .img-custom-table td {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 10px;
-    width: 100%;
-    white-space: normal;
-    text-align: right;
-    border: none;
-    border-bottom: 1px solid #e2e8f0;
-    padding: 8px 10px;
-  }
-
-  .img-custom-table td:last-child {
-    border-bottom: none;
-  }
-
-  /* label comes from the data-label attribute set in the component */
-  .img-custom-table td[data-label]::before {
-    content: attr(data-label);
-    font-weight: bold;
-    color: #334e68;
-    text-align: left;
-    text-transform: uppercase;
-    font-size: 10.5px;
-    letter-spacing: 0.3px;
-  }
-
-  .img-total-row td[data-label]::before {
-    color: #7a5b00;
-  }
-
-  .img-custom-table td.img-action-cell {
-    justify-content: flex-end;
-    gap: 14px;
-    background: #f8fafc;
-  }
-
-  .img-custom-table td.img-action-cell::before {
-    display: none;
-  }
-
-  .img-action-btn {
-    font-size: 18px;
-    padding: 4px 6px;
-  }
-
-  .img-edit-row-input {
-    width: 90px;
-    max-width: 55%;
-  }
-}
-
-/* Extra small phones */
-@media (max-width: 360px) {
-  .img-custom-table td {
-    padding: 7px 8px;
     font-size: 11px;
-  }
-
-  .img-custom-table td[data-label]::before {
-    font-size: 9.5px;
-  }
-
-  .img-edit-row-input {
-    width: 75px;
   }
 }
