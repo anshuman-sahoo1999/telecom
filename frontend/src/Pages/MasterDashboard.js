@@ -8,12 +8,10 @@ import Swal from "sweetalert2";
 import UpdatePasswordModal from "../components/UpdatePasswordModal";
 
 /* =====================================================
-   Helper functions (component ke bahar)
+   Helper functions 
    ===================================================== */
 
 const memberTypeOptions = ["QA", "QC", "Production"];
-
-// String ya array, dono ko clean array mein badalta hai
 const toArray = (data) => {
     if (Array.isArray(data)) {
         return data.map((m) => String(m).trim()).filter(Boolean);
@@ -85,9 +83,7 @@ const toastIcons = {
 const MasterDashboard = () => {
     const [activeTab, setActiveTab] = useState("create");
     const [users, setUsers] = useState([]);
-
-    // Screen par message
-    const [toast, setToast] = useState(null); // { type, text }
+    const [toast, setToast] = useState(null); 
     const toastTimerRef = useRef(null);
 
     const [name, setName] = useState("");
@@ -113,8 +109,6 @@ const MasterDashboard = () => {
     const [openCreateDomain, setOpenCreateDomain] = useState(false);
     const [openEditDomain, setOpenEditDomain] = useState(false);
     const [domains, setDomains] = useState([]);
-
-    // User list ka search aur Update Password modal ka search alag-alag
     const [searchTerm, setSearchTerm] = useState("");
     const [passSearchTerm, setPassSearchTerm] = useState("");
 
@@ -211,9 +205,6 @@ const MasterDashboard = () => {
     const handleSubmit = async (e) => {
         e.preventDefault();
         if (submitting) return;
-
-        // Agar user ne poora email (abc@gmail.com) likh diya ho to sirf "@" se pehle wala hissa lo
-        // (pehle "@" hata diya jata tha, jisse abcgmail.com@ecometrix.co.in ban jata tha)
         const cleanEmail = email.trim().split("@")[0].trim();
         if (!cleanEmail) {
             showToast("warning", "Please enter a valid email!");
@@ -253,8 +244,6 @@ const MasterDashboard = () => {
     };
 
     /* ---------------- Delete user ---------------- */
-
-    // Confirm ke liye Swal ka screen dialog; success/error message toast mein aayega
     const deleteUser = (id) => {
         Swal.fire({
             title: "Are you sure?",
@@ -312,8 +301,6 @@ const MasterDashboard = () => {
             return;
         }
 
-        // Pehle poora user object (id, password hash waghera sab) bhej diya jata tha.
-        // Ab sirf edit hone wali fields jayengi.
         const payload = {
             name: editRowData.name.trim(),
             emp_id: editRowData.emp_id,
@@ -547,7 +534,7 @@ const MasterDashboard = () => {
                                     </div>
 
                                     {openCreateMemberType && (
-                                        <div className="dropdowned dropeddown">
+                                        <div className="dropdown-list">
                                             {memberTypeOptions.map((m) => (
                                                 <div
                                                     key={m}
@@ -595,7 +582,7 @@ const MasterDashboard = () => {
                                 </div>
 
                                 {openCreateDomain && (
-                                    <div className="dropdowned dropeddown">
+                                    <div className="dropdown-list">
                                         {domains.map((d) => (
                                             <div
                                                 key={d}
@@ -786,7 +773,7 @@ const MasterDashboard = () => {
                                                                     </div>
 
                                                                     {openEditMemberType && (
-                                                                        <div className="dropdowned dropeddown">
+                                                                        <div className="dropdown-list">
                                                                             {memberTypeOptions.map((m) => (
                                                                                 <div
                                                                                     key={m}
@@ -847,7 +834,7 @@ const MasterDashboard = () => {
                                                             </div>
 
                                                             {openEditDomain && (
-                                                                <div className="dropdowned dropeddown">
+                                                                <div className="dropdown-list">
                                                                     {domains.map((d) => (
                                                                         <div
                                                                             key={d}
