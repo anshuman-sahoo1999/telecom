@@ -98,7 +98,23 @@ const UserManagement = () => {
       );
 
       const merged = [...masterDomains, ...workDomains];
-      setDomains([...new Set(merged)]);
+
+      // Domain kabhi "JPA" kabhi "jpa" jaisi mixed-case aa sakti hai (purana
+      // data, ya kisi job edit se). Pehle "JPA" aur "jpa" ko new Set() do alag
+      // entries maanta tha, isliye ek hi domain do baar (ek chhoti, ek badi)
+      // dikhti thi. Ab case ignore karke duplicate hatate hain aur hamesha
+      // CAPITAL (uppercase) dikhate hain, taaki ek domain sirf ek hi baar aaye.
+      const seenDomains = new Map(); // lowercase key -> uppercase display value
+      merged.forEach((d) => {
+        const cleanD = (d || "").toString().trim();
+        if (!cleanD) return;
+        const key = cleanD.toLowerCase();
+        if (!seenDomains.has(key)) {
+          seenDomains.set(key, cleanD.toUpperCase());
+        }
+      });
+
+      setDomains(Array.from(seenDomains.values()));
     } catch (err) {
       console.log(err);
     }
