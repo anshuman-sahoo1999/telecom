@@ -397,11 +397,11 @@ export default function TelecomMap() {
           logo.style.top = "-90px";
         }
       }
-      const mapLegendEl = clone.querySelector(".mapLegend");
-      if (mapLegendEl) {
-        mapLegendEl.style.fontSize = "16px";
-        mapLegendEl.style.fontWeight = "700";
-        mapLegendEl.style.marginLeft = "90px";
+      const Legend = clone.querySelector(".mapLegend");
+      if (Legend) {
+        Legend.style.fontSize = "16px";
+        Legend.style.fontWeight = "700";
+        Legend.style.marginLeft = "90px";
       }
       const compass = clone.querySelector(".resized-image");
       if (compass) {
