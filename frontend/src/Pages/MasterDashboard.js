@@ -26,6 +26,7 @@ const formatDomain = (d) => {
         .join(" ");
 };
 
+// String ya array, dono ko clean array mein badalta hai
 const toArray = (data) => {
     if (Array.isArray(data)) {
         return data.map((m) => String(m).trim()).filter(Boolean);
@@ -97,7 +98,9 @@ const toastIcons = {
 const MasterDashboard = () => {
     const [activeTab, setActiveTab] = useState("create");
     const [users, setUsers] = useState([]);
-    const [toast, setToast] = useState(null); 
+
+    // Screen par message
+    const [toast, setToast] = useState(null); // { type, text }
     const toastTimerRef = useRef(null);
 
     const [name, setName] = useState("");
@@ -123,6 +126,8 @@ const MasterDashboard = () => {
     const [openCreateDomain, setOpenCreateDomain] = useState(false);
     const [openEditDomain, setOpenEditDomain] = useState(false);
     const [domains, setDomains] = useState([]);
+
+    // User list ka search aur Update Password modal ka search alag-alag
     const [searchTerm, setSearchTerm] = useState("");
     const [passSearchTerm, setPassSearchTerm] = useState("");
 
@@ -157,6 +162,8 @@ const MasterDashboard = () => {
         }
     }, [showToast]);
 
+    // Pehle domains do alag effects se load ho rahe the aur ek dusre ko overwrite kar dete the.
+    // Ab ek hi jagah se, dono API ka merged data aata hai.
     const loadDomains = useCallback(async () => {
         const [masterRes, workRes] = await Promise.allSettled([
             axios.get(`${API_BASE_URL}/api/master`),
@@ -197,6 +204,8 @@ const MasterDashboard = () => {
         getUsers();
         loadDomains();
     }, [getUsers, loadDomains]);
+
+    // Dropdown ke bahar click karne par sab dropdown band ho jayein
     useEffect(() => {
         const handleClickOutside = (event) => {
             if (!event.target.closest(".multi-select")) {
@@ -258,6 +267,7 @@ const MasterDashboard = () => {
 
     /* ---------------- Delete user ---------------- */
 
+    // Confirm ke liye Swal ka screen dialog; success/error message toast mein aayega
     const deleteUser = (id) => {
         Swal.fire({
             title: "Are you sure?",
