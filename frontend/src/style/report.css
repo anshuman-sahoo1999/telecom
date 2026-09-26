@@ -73,7 +73,7 @@ input:focus {
 }
 
 /* ==========================================================================
-   3. Export Box & Dropdown (Always Right-Aligned)
+   3. Export Box & Dropdown
    ========================================================================== */
 .export-box {
   position: absolute;
@@ -378,11 +378,12 @@ input:focus {
   input {
     width: 100%;
   }
+
   .export-box {
-    position: absolute;
-    top: 24px;
-    right: 24px;
-    margin-bottom: 0;
+    position: relative;
+    top: 0;
+    right: 0;
+    margin-bottom: 20px;
     justify-content: flex-end;
   }
 }
