@@ -685,12 +685,25 @@
     font-size: 20px;
   }
 
-  .org-view-fullscreen-btn {
-    position: relative;
-    top: auto;
-    right: auto;
-    margin: 10px auto;
+  /* MOBILE VIEW: Place View Button and Export Button side-by-side on the right */
+  .org-body-box {
     display: flex;
+    flex-direction: column;
+  }
+
+  .org-view-fullscreen-btn {
+    position: static;
+    margin-left: auto; /* Push to the right */
+    margin-bottom: 12px;
+    display: inline-flex;
+  }
+
+  /* If you have a container wrapping your export button or if it's separate, align it right too */
+  .export-wrapper {
+    display: flex;
+    width: 100%;
+    justify-content: flex-end;
+    margin-bottom: 10px;
   }
 
   .org-legend {
