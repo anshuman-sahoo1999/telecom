@@ -1,3 +1,4 @@
+/* --- Global Dashboard Variables & Resets --- */
 * { 
   margin: 0; 
   padding: 0; 
@@ -475,50 +476,6 @@ top:0;
   font-weight: 500;
 }
 
-/* --- QC / OTP Value Color Badges ---
-   Used everywhere a QC% or OTP% value is shown: KPI cards, map hover
-   tooltip, bar chart tooltip, pie chart tooltip.
-   90% - 100%  -> GREEN
-   80% - <90%  -> ORANGE
-   below 80%   -> RED
-   no data     -> GRAY
-*/
-.qcOtpBadge {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  font-size: 11px;
-  font-weight: 700;
-  padding: 2px 8px;
-  border-radius: 6px;
-  line-height: 1.5;
-  white-space: nowrap;
-}
-
-.qcOtpBadge.kpiGreen {
-  background: #dcfce7;
-  color: #15803d;
-  border: 1px solid #86efac;
-}
-
-.qcOtpBadge.kpiOrange {
-  background: #fef3c7;
-  color: #b45309;
-  border: 1px solid #fcd34d;
-}
-
-.qcOtpBadge.kpiRed {
-  background: #fee2e2;
-  color: #dc2626;
-  border: 1px solid #fca5a5;
-}
-
-.qcOtpBadge.kpiGray {
-  background: #f1f5f9;
-  color: #64748b;
-  border: 1px solid #e2e8f0;
-}
-
 .kpiEyeBtnLeft { 
   position: absolute; 
   top: 16px; 
@@ -565,183 +522,140 @@ top:0;
   box-shadow: 0 10px 30px rgba(0,0,0,0.15); 
   z-index: 99999; 
   border: 1px solid #e2e8f0;
-  max-height: 80vh;
-  overflow-y: auto;
-}
-
-/* Mobile-only dim backdrop shown behind the map hover tooltip so tapping
-   outside it (or the ✖ button) closes it cleanly on touch devices. */
-.tooltipBackdrop {
-  position: fixed;
-  inset: 0;
-  background: rgba(15, 23, 42, 0.45);
-  z-index: 99998;
-}
-
-.tooltipCloseBtn {
-  border: none;
-  background: rgba(15, 23, 42, 0.08);
-  color: #0f172a;
-  width: 22px;
-  height: 22px;
-  min-width: 22px;
-  border-radius: 6px;
-  font-size: 11px;
-  line-height: 1;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-}
-
-/* --- KPI Status Modal (Reports popup) --- */
-.modalOverlay {
-  position: fixed;
-  inset: 0;
-  background: rgba(15, 23, 42, 0.55);
-  backdrop-filter: blur(2px);
-  -webkit-backdrop-filter: blur(2px);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 24px;
-  z-index: 100000;
-}
-
-.modalContent {
-  background: #ffffff;
-  width: 100%;
-  max-width: 1000px;
-  max-height: 88vh;
-  border-radius: 16px;
-  box-shadow: 0 24px 60px rgba(0,0,0,0.35);
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-}
-
-.modalHeader {
-  flex-shrink: 0;
-  border-bottom: 1px solid #e2e8f0;
-  background: #fff;
-}
-
-.statusHeaderBox {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 16px 22px;
-}
-
-.statusLeft {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  min-width: 0;
-}
-
-.statusIcon {
-  width: 42px;
-  height: 42px;
-  min-width: 42px;
-  border-radius: 10px;
-  background: #eff6ff;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 20px;
-}
-
-.statusInfo {
-  display: flex;
-  flex-direction: column;
-  min-width: 0;
-}
-
-.statusSmall {
-  font-size: 11px;
-  font-weight: 700;
-  color: #64748b;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-}
-
-.statusMain {
-  font-size: 17px;
-  font-weight: 800;
-  color: #0f172a;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.closeBtn {
-  border: none;
-  background: #f1f5f9;
-  color: #475569;
-  width: 34px;
-  height: 34px;
-  min-width: 34px;
-  border-radius: 8px;
-  font-size: 14px;
-  cursor: pointer;
-  transition: 0.2s;
-}
-
-.closeBtn:hover {
-  background: #e2e8f0;
-  color: #0f172a;
-}
-
-.modalBody {
-  padding: 20px 22px;
-  overflow-y: auto;
-  flex: 1;
-}
-
-.belowSection {
-  width: 100%;
 }
 
 /* --- Media Queries for Device Optimization --- */
+@media (max-width:1100px){
 
-/* ======================================================================
-   BREAKPOINT 1: TABLET / SMALL LAPTOP  (<= 1100px)
-   Sidebar becomes an off-canvas drawer, map + filters stack vertically.
-====================================================================== */
+  .page{
+      display:block;
+  }
+
+  /* ===== SIDEBAR ===== */
+  .topMenu{
+      position: fixed;
+      top: 140px;
+      left: -260px;   /* (FIX: match width properly) */
+
+      width: 260px;
+
+      height: calc(100vh - 95px);
+
+      display: flex;
+      flex-direction: column;
+
+      padding: 20px 12px;
+
+      background: rgba(15, 23, 42, 0.82);
+      backdrop-filter: blur(18px);
+      -webkit-backdrop-filter: blur(18px);
+
+      border-right: 1px solid rgba(255,255,255,.08);
+
+      box-shadow: 8px 0 30px rgba(0,0,0,.35);
+
+      transition: left .35s ease;
+
+      z-index: 9999;
+  }
+
+  /* OPEN STATE */
+  .topMenu.expanded{
+      left: 0;
+  }
+
+  /* ===== MAIN CONTENT ===== */
+  .mainContentContainer{
+      width:100%;
+      padding:16px;
+  }
+
+  .container{
+      flex-direction:column;
+  }
+
+  .menuBtn{
+      width:100%;
+  }
+
+  /* ===== OVERLAY (NEW - IMPORTANT) ===== */
+  .sidebarOverlay{
+      position: fixed;
+      top: 95px;
+      left: 0;
+      width: 100%;
+      height: calc(100vh - 95px);
+
+      background: rgba(0,0,0,0.35);
+      backdrop-filter: blur(2px);
+
+      z-index: 9998;
+  }
+}
+@media (max-width:768px){
+  .topMenu{
+      position: fixed;
+      top: 95px;
+      left: -260px;   /* (FIX: match width properly) */
+
+      width: 260px;
+
+      height: calc(100vh - 95px);
+
+      display: flex;
+      flex-direction: column;
+
+      padding: 20px 12px;
+
+      background: rgba(15, 23, 42, 0.82);
+      backdrop-filter: blur(18px);
+      -webkit-backdrop-filter: blur(18px);
+
+      border-right: 1px solid rgba(255,255,255,.08);
+
+      box-shadow: 8px 0 30px rgba(0,0,0,.35);
+
+      transition: left .35s ease;
+
+      z-index: 9999;
+  }
+}
 @media (max-width: 1100px) {
   .page {
     display: block;
     width: 100%;
   }
 
-  /* ===== SIDEBAR (off-canvas drawer) ===== */
   .topMenu {
     position: fixed;
     top: 95px;
     left: -280px;
     width: 260px;
     height: calc(100vh - 95px);
-    display: flex;
-    flex-direction: column;
     padding: 20px 12px;
     background: rgba(15, 23, 42, 0.92);
     backdrop-filter: blur(18px);
     -webkit-backdrop-filter: blur(18px);
     border-right: 1px solid rgba(255, 255, 255, 0.08);
     box-shadow: 8px 0 30px rgba(0, 0, 0, 0.35);
-    transition: left 0.35s ease;
     z-index: 9999;
+    transition: left 0.35s ease;
   }
 
   .topMenu.expanded {
     left: 0;
   }
 
-  .menuBtn {
+  .mainContentContainer {
     width: 100%;
+    padding: 16px;
+    max-height: none;
+    overflow-y: visible;
+  }
+
+  .container {
+    flex-direction: column;
+    gap: 18px;
   }
 
   .sidebarOverlay {
@@ -755,39 +669,14 @@ top:0;
     z-index: 9998;
   }
 
-  /* ===== MAIN CONTENT ===== */
-  .mainContentContainer {
-    width: 100%;
-    padding: 16px;
-    max-height: none;
-    overflow-y: visible;
-  }
-
-  .container {
-    flex-direction: column;
-    gap: 18px;
-  }
-
-  /* ===== MAP ===== */
   .mapContainer {
     width: 100%;
-    height: auto;
     padding: 24px 16px;
   }
 
   .mapTitleContainer {
     font-size: 20px;
     text-align: center;
-  }
-
-  .resized-image {
-    top: 10px;
-    left: 10px;
-  }
-
-  .export {
-    top: 16px;
-    right: 16px;
   }
 
   .mapBox {
@@ -797,10 +686,9 @@ top:0;
   }
 
   .mapLegend {
-    margin-top: -76px;
+    margin-top:-76px;
     gap: 20px;
     font-size: 15px;
-    padding-left: 10px;
   }
 
   .mapFooter {
@@ -816,7 +704,6 @@ top:0;
     height: auto;
   }
 
-  /* ===== SIDE FILTER PANEL ===== */
   .sidePanel {
     width: 100%;
     gap: 16px;
@@ -849,7 +736,6 @@ top:0;
     gap: 6px;
   }
 
-  /* ===== KPI CARDS ===== */
   .kpiContainer {
     padding: 18px;
   }
@@ -858,7 +744,6 @@ top:0;
     grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
   }
 
-  /* ===== CHARTS ===== */
   .bottomChartsRow {
     flex-direction: column;
     gap: 16px;
@@ -868,26 +753,11 @@ top:0;
     padding: 18px;
   }
 
-  /* ===== TOOLTIP ===== */
   .tooltipBox {
-    width: 300px;
-  }
-
-  /* ===== MODAL ===== */
-  .modalOverlay {
-    padding: 16px;
-  }
-
-  .modalContent {
-    max-height: 90vh;
+    width: 280px;
   }
 }
 
-/* ======================================================================
-   BREAKPOINT 2: MOBILE PHONES (<= 768px)
-   Single column everywhere, larger tap targets, map hover tooltip turns
-   into a bottom-sheet with a dimmed backdrop and a close button.
-====================================================================== */
 @media (max-width: 768px) {
   .topMenu {
     top: 95px;
@@ -904,13 +774,12 @@ top:0;
   .mainContentContainer {
     width: 100%;
     padding: 12px;
-    gap: 16px;
+    gap: 18px;
   }
 
   .menuBtn {
     font-size: 14px;
-    padding: 12px;
-    min-height: 44px;
+    padding: 10px 12px;
   }
 
   .menuIcon {
@@ -922,9 +791,7 @@ top:0;
     gap: 14px;
   }
 
-  /* ===== MAP ===== */
   .mapContainer {
-    height: auto;
     padding: 14px 10px;
     border-radius: 12px;
   }
@@ -932,7 +799,6 @@ top:0;
   .mapTitleContainer {
     font-size: 17px;
     line-height: 1.4;
-    margin-bottom: 16px;
   }
 
   .resized-image {
@@ -948,37 +814,29 @@ top:0;
 
   .export button {
     margin-top: 40px;
-    padding: 9px 12px;
+    padding: 7px 10px;
     font-size: 12px;
     border-radius: 6px;
-    min-height: 38px;
   }
 
   .dropdown {
-    width: 130px;
-  }
-
-  .dropdown div {
-    padding: 12px 16px;
-    min-height: 40px;
-    display: flex;
-    align-items: center;
+    width: 120px;
   }
 
   .mapBox {
     width: 100%;
-    min-height: 320px;
+    min-height: 340px;
     margin-top: 24px;
   }
 
-  .mapLegend {
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 10px;
-    padding-left: 10px;
-    margin-top: -70px;
-    font-size: 12px;
-  }
+    .mapLegend{
+        flex-direction:column;
+        align-items:flex-start;
+        gap: 10px;
+        padding-left: 10px;
+        margin-top: -78px;
+        font-size: 11px;
+    }
 
   .legendItem {
     gap: 6px;
@@ -993,7 +851,6 @@ top:0;
   .mapFooter {
     flex-direction: column;
     gap: 10px;
-    margin-top: 12px;
   }
 
   .mapLogo img {
@@ -1003,7 +860,6 @@ top:0;
     height: auto;
   }
 
-  /* ===== SIDE FILTER PANEL ===== */
   .sidePanel {
     width: 100%;
     gap: 12px;
@@ -1011,7 +867,7 @@ top:0;
 
   .panelCard {
     width: 100%;
-    padding: 14px;
+    padding: 12px;
     border-radius: 12px;
   }
 
@@ -1021,12 +877,12 @@ top:0;
   }
 
   .searchBox {
-    padding: 10px 12px;
+    padding: 9px 12px;
     font-size: 13px;
   }
 
   .scrollBox {
-    max-height: 150px;
+    max-height: 130px;
     overflow-y: auto;
     overflow-x: hidden;
     -webkit-overflow-scrolling: touch;
@@ -1034,33 +890,30 @@ top:0;
 
   .scrollBox label {
     font-size: 12px;
-    padding: 6px 2px;
+    padding: 4px 2px;
     gap: 6px;
-    line-height: 1.3;
+    line-height: 1.25;
     word-break: break-word;
-    min-height: 34px;
   }
 
   .scrollBox input[type="checkbox"] {
-    width: 16px;
-    height: 16px;
+    width: 13px;
+    height: 13px;
     flex-shrink: 0;
   }
 
-  /* ===== KPI CARDS ===== */
   .kpiContainer {
-    padding: 14px;
+    padding: 16px;
     border-radius: 12px;
   }
 
   .kpiTitle {
-    font-size: 17px;
-    margin-bottom: 14px;
+    font-size: 18px;
+    margin-bottom: 16px;
   }
 
   .kpiGridModern {
     grid-template-columns: 1fr;
-    gap: 12px;
   }
 
   .kpiCardModern {
@@ -1068,33 +921,11 @@ top:0;
   }
 
   .kpiDomainModern {
-    font-size: 15px;
-  }
-
-  .kpiSubModern {
-    font-size: 11.5px;
+    font-size: 14px;
   }
 
   .kpiValueModern {
     font-size: 20px;
-  }
-
-  .kpiEyeBtnLeft {
-    width: 30px;
-    height: 30px;
-    top: 14px;
-    right: 14px;
-  }
-
-  .qcOtpBadge {
-    font-size: 11px;
-    padding: 3px 8px;
-  }
-
-  /* ===== CHARTS ===== */
-  .bottomChartsRow {
-    flex-direction: column;
-    gap: 14px;
   }
 
   .bottomChartsRow .chartBox {
@@ -1104,145 +935,12 @@ top:0;
 
   .chartTitle {
     font-size: 14px;
-    margin-bottom: 12px;
-  }
-
-  /* ===== MAP HOVER TOOLTIP -> bottom sheet on mobile ===== */
-  .tooltipBox {
-    position: fixed !important;
-    top: auto !important;
-    bottom: 0 !important;
-    left: 0 !important;
-    right: 0 !important;
-    width: 100% !important;
-    max-height: 65vh;
-    border-radius: 16px 16px 0 0;
-    box-shadow: 0 -10px 30px rgba(0, 0, 0, 0.25);
-    z-index: 99999;
-  }
-
-  /* ===== MODAL -> bottom sheet on mobile ===== */
-  .modalOverlay {
-    padding: 0;
-    align-items: flex-end;
-  }
-
-  .modalContent {
-    max-width: 100%;
-    width: 100%;
-    max-height: 92vh;
-    border-radius: 16px 16px 0 0;
-  }
-
-  .statusHeaderBox {
-    padding: 14px 16px;
-  }
-
-  .statusIcon {
-    width: 36px;
-    height: 36px;
-    min-width: 36px;
-    font-size: 17px;
-  }
-
-  .statusMain {
-    font-size: 15px;
-  }
-
-  .closeBtn {
-    width: 32px;
-    height: 32px;
-    min-width: 32px;
-  }
-
-  .modalBody {
-    padding: 14px 16px;
-  }
-}
-
-/* ======================================================================
-   BREAKPOINT 3: SMALL / NARROW PHONES (<= 480px)
-   Extra tightening so nothing crowds or overflows on the smallest screens.
-====================================================================== */
-@media (max-width: 480px) {
-  .mainContentContainer {
-    padding: 10px;
-    gap: 12px;
-  }
-
-  .mapContainer {
-    padding: 12px 8px;
-  }
-
-  .mapTitleContainer {
-    font-size: 15px;
-  }
-
-  .mapBox {
-    min-height: 260px;
-    margin-top: 20px;
-  }
-
-  .mapLegend {
-    font-size: 11px;
-    margin-top: -60px;
-  }
-
-  .panelCard {
-    padding: 12px;
-  }
-
-  .kpiGridModern {
-    gap: 10px;
-  }
-
-  .kpiCardModern {
-    padding: 14px;
-  }
-
-  .kpiDomainModern {
-    font-size: 14px;
-  }
-
-  .kpiSubModern {
-    font-size: 11px;
-  }
-
-  .kpiValueModern {
-    font-size: 18px;
-  }
-
-  .kpiQcOtpRow {
-    flex-wrap: wrap;
-    gap: 6px !important;
-  }
-
-  .qcOtpBadge {
-    font-size: 10px;
-    padding: 2px 6px;
-  }
-
-  .bottomChartsRow .chartBox {
-    padding: 12px;
-  }
-
-  .chartTitle {
-    font-size: 13px;
+    margin-bottom: 14px;
   }
 
   .tooltipBox {
-    max-height: 70vh;
-  }
-
-  .statusHeaderBox {
-    padding: 12px;
-  }
-
-  .statusMain {
-    font-size: 14px;
-  }
-
-  .modalBody {
-    padding: 12px;
+    width: calc(100vw - 24px);
+    left: 12px !important;
+    right: 12px;
   }
 }
