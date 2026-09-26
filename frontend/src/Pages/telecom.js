@@ -30,24 +30,6 @@ export default function TelecomMap() {
   const [showKpiModal, setShowKpiModal] = useState(false);
   const [expandedJobMenu, setExpandedJobMenu] = useState(false);
 
-  // Live window width tracking so mobile/tablet layouts (charts, map,
-  // pie radius, tooltip position) react instantly to resize / rotation
-  // instead of only being correct on first render.
-  const [windowWidth, setWindowWidth] = useState(
-    typeof window !== "undefined" ? window.innerWidth : 1200
-  );
-  useEffect(() => {
-    const handleResize = () => setWindowWidth(window.innerWidth);
-    window.addEventListener("resize", handleResize);
-    window.addEventListener("orientationchange", handleResize);
-    return () => {
-      window.removeEventListener("resize", handleResize);
-      window.removeEventListener("orientationchange", handleResize);
-    };
-  }, []);
-  const isMobileView = windowWidth < 768;
-  const isSmallMobileView = windowWidth < 480;
-
   const handleKpiReport = (domain) => {
     setSelectedKpiDomain(domain);
     setShowKpiModal(true);
@@ -281,29 +263,6 @@ export default function TelecomMap() {
     if (["no", "n", "not met", "false", "fail", "failed", "0"].includes(str)) return false;
     const num = parseFloat(str.replace("%", ""));
     return !isNaN(num) && num > 0;
-  };
-
-  /* ======================================
-     QC / OTP COLOR CODING
-     - Applied to EVERY place a QC% or OTP% value is shown (KPI cards,
-       map hover tooltip, bar chart tooltip, pie chart tooltip)
-     - 90% to 100%   -> GREEN
-     - 80% to < 90%  -> ORANGE
-     - below 80%     -> RED
-     - no data (null/undefined) -> GRAY (neutral, not counted as "bad")
-  ====================================== */
-  const getKpiClass = (value) => {
-    if (value === null || value === undefined || isNaN(value)) return "kpiGray";
-    if (value >= 90) return "kpiGreen";
-    if (value >= 80) return "kpiOrange";
-    return "kpiRed";
-  };
-
-  const getKpiTextColor = (value) => {
-    if (value === null || value === undefined || isNaN(value)) return "#64748b";
-    if (value >= 90) return "#15803d";
-    if (value >= 80) return "#b45309";
-    return "#dc2626";
   };
 
   const stateJobsMap = useMemo(() => {
@@ -632,10 +591,10 @@ export default function TelecomMap() {
                 <span style={{ width: 8, height: 8, borderRadius: "50%", background: p.color, display: "inline-block" }}></span>
                 <span style={{ fontWeight: 800, color: "#0f172a" }}>{year}</span>
               </div>
-              <div style={{ display: "flex", gap: 8, paddingLeft: 13, whiteSpace: "nowrap", alignItems: "center" }}>
+              <div style={{ display: "flex", gap: 10, paddingLeft: 13, whiteSpace: "nowrap" }}>
                 <span style={{ color: "#2563eb" }}><b style={{ fontWeight: 800 }}>Job-</b> <b style={{ fontWeight: 800 }}>{p.value}</b></span>
-                <span className={`qcOtpBadge ${getKpiClass(qc)}`}><b style={{ fontWeight: 800 }}>QC-</b> <b style={{ fontWeight: 800 }}>{qc !== null && qc !== undefined ? `${qc}%` : "0%"}</b></span>
-                <span className={`qcOtpBadge ${getKpiClass(otp)}`}><b style={{ fontWeight: 800 }}>OTP-</b> <b style={{ fontWeight: 800 }}>{otp !== null && otp !== undefined ? `${otp}%` : "N/A"}</b></span>
+                <span style={{ color: "#059669" }}><b style={{ fontWeight: 800 }}>QC-</b> <b style={{ fontWeight: 800 }}>{qc !== null && qc !== undefined ? `${qc}%` : "0%"}</b></span>
+                <span style={{ color: "#d97706" }}><b style={{ fontWeight: 800 }}>OTP-</b> <b style={{ fontWeight: 800 }}>{otp !== null && otp !== undefined ? `${otp}%` : "N/A"}</b></span>
               </div>
             </div>
           );
@@ -652,8 +611,8 @@ export default function TelecomMap() {
       <div style={{ background: "#ffffff", border: "1px solid #e2e8f0", borderRadius: 8, padding: "8px 11px", fontSize: 11.5, lineHeight: 1.7, boxShadow: "0 4px 14px rgba(0,0,0,0.18)" }}>
         <div style={{ fontWeight: 800, marginBottom: 4, fontSize: 12.5, color: "#0f172a" }}>{d.name}</div>
         <div style={{ color: "#2563eb" }}><b style={{ fontWeight: 800 }}>Job-</b> <b style={{ fontWeight: 800 }}>{d.jobs}</b> <span style={{ color: "#64748b", fontWeight: 600 }}>(<b style={{ fontWeight: 800 }}>{d.value}%</b>)</span></div>
-        <div style={{ marginTop: 4 }}><span className={`qcOtpBadge ${getKpiClass(d.qc)}`}><b style={{ fontWeight: 800 }}>QC-</b> <b style={{ fontWeight: 800 }}>{d.qc !== null && d.qc !== undefined ? `${d.qc}%` : "0%"}</b></span></div>
-        <div style={{ marginTop: 4 }}><span className={`qcOtpBadge ${getKpiClass(d.otp)}`}><b style={{ fontWeight: 800 }}>OTP-</b> <b style={{ fontWeight: 800 }}>{d.otp !== null && d.otp !== undefined ? `${d.otp}%` : "N/A"}</b></span></div>
+        <div style={{ color: "#059669" }}><b style={{ fontWeight: 800 }}>QC-</b> <b style={{ fontWeight: 800 }}>{d.qc !== null && d.qc !== undefined ? `${d.qc}%` : "0%"}</b></div>
+        <div style={{ color: "#d97706" }}><b style={{ fontWeight: 800 }}>OTP-</b> <b style={{ fontWeight: 800 }}>{d.otp !== null && d.otp !== undefined ? `${d.otp}%` : "N/A"}</b></div>
       </div>
     );
   };
@@ -742,23 +701,13 @@ export default function TelecomMap() {
                             return Object.entries(uomTotals).map(([key, value]) => `${key}: ${value}`).join(" | ");
                           })()}
                         </div>
-                        <div className="kpiQcOtpRow" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", margin: "4px 0", gap: "6px" }}>
-                          {(() => {
-                            const qcVal = getDomainQcAvg(item.domain);
-                            return (
-                              <span className={`qcOtpBadge ${getKpiClass(qcVal)}`}>
-                                Amdocs QC: {qcVal !== null ? `${qcVal}%` : "0%"}
-                              </span>
-                            );
-                          })()}
-                          {(() => {
-                            const otpVal = getDomainOtpPercent(item.domain);
-                            return (
-                              <span className={`qcOtpBadge ${getKpiClass(otpVal)}`}>
-                                OTP: {otpVal !== null ? `${otpVal}%` : "N/A"}
-                              </span>
-                            );
-                          })()}
+                        <div className="kpiQcOtpRow" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", margin: "4px 0" }}>
+                          <span style={{ fontSize: "11px", fontWeight: 700, color: "#0f766e" }}>
+                            Amdocs QC: {(() => { const v = getDomainQcAvg(item.domain); return v !== null ? `${v}%` : "0%"; })()}
+                          </span>
+                          <span style={{ fontSize: "11px", fontWeight: 700, color: "#b45309" }}>
+                            OTP: {(() => { const v = getDomainOtpPercent(item.domain); return v !== null ? `${v}%` : "N/A"; })()}
+                          </span>
                         </div>
                         <div className="kpiValueModern">{getDomainJobs(item.domain)}<span> Jobs</span></div>
                       </div>
@@ -882,22 +831,22 @@ export default function TelecomMap() {
             <div className="bottomChartsRow">
               <div className="chartBox">
                 <h3 className="chartTitle" style={{ marginBottom: "6px" }}>📊 Month Wise Job Delivery, Amdocs QC & OTP</h3>
-                <ResponsiveContainer width="100%" height={isSmallMobileView ? 260 : isMobileView ? 300 : 350}>
-                  <BarChart data={monthlyJobsSorted} barGap={0} barCategoryGap={isSmallMobileView ? 14 : 25} margin={isMobileView ? { left: -20, right: 5, top: 5, bottom: 0 } : undefined}>
+                <ResponsiveContainer width="100%" height={350}>
+                  <BarChart data={monthlyJobsSorted} barGap={0} barCategoryGap={25}>
                     <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis dataKey="name" interval={0} angle={-45} textAnchor="end" height={isSmallMobileView ? 70 : 60} tick={{ fontSize: isSmallMobileView ? 9 : isMobileView ? 10 : 12 }} />
-                    <YAxis tick={{ fontSize: isSmallMobileView ? 9 : isMobileView ? 10 : 12 }} width={isMobileView ? 30 : 60} />
+                    <XAxis dataKey="name" interval={0} angle={-45} textAnchor="end" height={60} />
+                    <YAxis />
                     <Tooltip content={<BarChartTooltip />} />
-                    <Legend wrapperStyle={{ fontSize: isSmallMobileView ? 11 : 13 }} />
+                    <Legend />
                     {allYears.map((year, index) => (
-                      <Bar key={year} dataKey={year} stackId="a" fill={COLORS[index % COLORS.length]} name={year} barSize={isSmallMobileView ? 12 : isMobileView ? 18 : 35} radius={[6, 6, 0, 0]} />
+                      <Bar key={year} dataKey={year} stackId="a" fill={COLORS[index % COLORS.length]} name={year} barSize={window.innerWidth < 768 ? 18 : 35} radius={[6, 6, 0, 0]} />
                     ))}
                   </BarChart>
                 </ResponsiveContainer>
               </div>
               <div className="chartBox">
                 <h3 className="chartTitle" style={{ marginBottom: "6px" }}>🥧 Domain % Share (Job, Amdocs QC & OTP)</h3>
-                <ResponsiveContainer width="100%" height={isSmallMobileView ? 300 : isMobileView ? 330 : 360}>
+                <ResponsiveContainer width="100%" height={360}>
                   <PieChart>
                     <Pie
                       data={pieChartData}
@@ -905,7 +854,7 @@ export default function TelecomMap() {
                       nameKey="name"
                       cx="50%"
                       cy="50%"
-                      outerRadius={isSmallMobileView ? 65 : isMobileView ? 80 : 120}
+                      outerRadius={window.innerWidth < 768 ? 80 : 120}
                       innerRadius={0}
                       paddingAngle={2}
                       stroke="#fff"
@@ -925,7 +874,7 @@ export default function TelecomMap() {
                     </Pie>
                     <Tooltip content={<PieChartTooltip />} />
                     <Legend content={() => (
-                      <div style={{ display: "flex", justifyContent: "center", alignItems: "center", flexWrap: "wrap", gap: isSmallMobileView ? "8px" : "14px", marginTop: "10px", fontSize: isSmallMobileView ? "11px" : "13px", fontWeight: "600" }}>
+                      <div style={{ display: "flex", justifyContent: "center", alignItems: "center", flexWrap: "wrap", gap: "14px", marginTop: "10px", fontSize: "13px", fontWeight: "600" }}>
                         <div onClick={() => setHiddenDomains([])} style={{ display: "flex", alignItems: "center", gap: "6px", cursor: "pointer" }}><span style={{ width: "16px", height: "10px", borderRadius: "2px", background: "#111827", display: "inline-block" }}></span>ALL</div>
                         {pieChartData.filter(item => item.jobs > 0).map((entry, index) => (
                           <div key={entry.name} onClick={() => { setHiddenDomains(prev => prev.includes(entry.name) ? prev.filter(x => x !== entry.name) : [...prev, entry.name]); }} style={{ display: "flex", alignItems: "center", gap: "6px", cursor: "pointer" }}><span style={{ width: "16px", height: "10px", borderRadius: "2px", background: COLORS[index % COLORS.length], display: "inline-block" }}></span>{entry.name}</div>
@@ -951,23 +900,15 @@ export default function TelecomMap() {
         {activePage === "domaincreation" && <div className="belowSection"><MasterDomainCreation /></div>}
       </div>
 
-      {tooltip.visible && isMobileView && (
-        <div className="tooltipBackdrop" onClick={() => setTooltip({ visible: false, x: 0, y: 0, data: null })} />
-      )}
       {tooltip.visible && (
-        <div className="tooltipBox" style={isMobileView ? {} : { top: tooltip.y + 10, left: tooltip.x + 10 }} onClick={(e) => e.stopPropagation()}>
+        <div className="tooltipBox" style={window.innerWidth < 768 ? {} : { top: tooltip.y + 10, left: tooltip.x + 10 }}>
           {(() => {
             const stateData = mapReportData[tooltip.data?.state] || {};
             const totalJobsDelivered = Object.values(stateData).reduce((sum, val) => sum + Number(val || 0), 0);
             return (
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px", background: "#f1f5f9", fontWeight: "700", gap: "8px" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", padding: "10px", background: "#f1f5f9", fontWeight: "700" }}>
                 <div style={{ fontSize: "14px", color: "#0f4a63" }}>{getRegionByState(tooltip.data?.state)} - {tooltip.data?.state}</div>
-                <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                  <div style={{ fontSize: "12px", color: "#166534", fontWeight: "700", whiteSpace: "nowrap" }}>{totalJobsDelivered > 0 ? `Total Jobs: ${totalJobsDelivered}` : "N/A"}</div>
-                  {isMobileView && (
-                    <button className="tooltipCloseBtn" onClick={() => setTooltip({ visible: false, x: 0, y: 0, data: null })}>✖</button>
-                  )}
-                </div>
+                <div style={{ fontSize: "12px", color: "#166534", fontWeight: "700" }}>{totalJobsDelivered > 0 ? `Total Jobs: ${totalJobsDelivered}` : "N/A"}</div>
               </div>
             );
           })()}
@@ -984,9 +925,9 @@ export default function TelecomMap() {
                       <span>{d}</span>
                       <span style={{ color: "#16a34a", fontWeight: "700" }}>{jobs} Jobs</span>
                     </div>
-                    <div style={{ display: "flex", justifyContent: "space-between", fontSize: "11px", fontWeight: "600", gap: "6px" }}>
-                      <span className={`qcOtpBadge ${getKpiClass(qc)}`}>QC: {qc !== null ? `${qc}%` : "0%"}</span>
-                      <span className={`qcOtpBadge ${getKpiClass(otp)}`}>OTP: {otp !== null && otp !== undefined ? `${otp}%` : "N/A"}</span>
+                    <div style={{ display: "flex", justifyContent: "space-between", fontSize: "11px", fontWeight: "600" }}>
+                      <span style={{ color: "#0f766e" }}>QC: {qc !== null ? `${qc}%` : "0%"}</span>
+                      <span style={{ color: "#b45309" }}>OTP: {otp !== null && otp !== undefined ? `${otp}%` : "N/A"}</span>
                     </div>
                   </div>
                 );
