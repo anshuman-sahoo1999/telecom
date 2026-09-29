@@ -1,3 +1,5 @@
+
+
 /* ---------- 1. Global ---------- */
 * { margin: 0; padding: 0; box-sizing: border-box; }
 
@@ -461,7 +463,9 @@ body {
     top: var(--hb-top);
     right: var(--hb-right);
     left: auto;
-    z-index: 9000;             /* header ke upar, drawer/overlay (10000+) ke neeche */
+    z-index: 9999;             /* header ke upar, drawer/overlay (10000+) ke neeche */
+    visibility: visible;
+    opacity: 1;
     width: 40px;
     height: 40px;
     margin: 0;
@@ -489,7 +493,7 @@ body {
     height: 4px;                /* bold */
     margin: 0 0 5px 0 !important;
     background: #0f172a;
-    box-shadow: none;
+    box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.85);   /* patli safed outline: green/white dono header pe dikhe */
     opacity: 1;
     transform: none;
   }
@@ -500,9 +504,11 @@ body {
   .menu-icon.active .bar2,
   .menu-icon.active .bar3 { transform: none; opacity: 1; }
 
-  /* Menu KHULA (class "active" nahi): hamburger chhup jata hai,
-     kyunki drawer ke andar apna ✕ close button already hai (duplicate ✕ nahi dikhega) */
-  .menu-icon:not(.active) { visibility: hidden; }
+  /* Tablet/mobile: hamburger hamesha ≡ hi rahega (khula/band dono me) —
+     menu khulne par overlay iske upar aa jata hai, drawer ka apna ✕ close button hai */
+  .menu-icon:not(.active) .bar1,
+  .menu-icon:not(.active) .bar2,
+  .menu-icon:not(.active) .bar3 { transform: none; opacity: 1; }
 
   /* ---------- Sidebar = slide-in drawer ---------- */
   .topMenu,
