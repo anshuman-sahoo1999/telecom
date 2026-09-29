@@ -275,9 +275,9 @@ export default function Reports({ domain, states }) {
   return (
     <div className={`reports ${open ? "open" : "close"}`}>
       {/* ================= FILTER ================= */}
-      <div className="headerRight">
+      <div className="rpFilterBar">
         <select
-          className="month-select"
+          className="rpMonthSelect"
           value={selectedPeriod}
           onChange={(e) => setSelectedPeriod(e.target.value)}
         >
