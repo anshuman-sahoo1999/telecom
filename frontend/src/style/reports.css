@@ -104,13 +104,25 @@
   background: linear-gradient(135deg, #eef2ff, #f7f9fc);
 }
 
-.headerRight {
+.reports .rpFilterBar {
+  position: relative;
+  inset: auto;
+  transform: none;
+  float: none;
   display: flex;
   justify-content: flex-end;
-  margin-bottom: 18px;
+  align-items: center;
+  width: 100%;
+  box-sizing: border-box;
+  margin: 0 0 18px 0;
+  padding: 0;
 }
 
-.month-select {
+.reports .rpMonthSelect {
+  position: static;
+  inset: auto;
+  transform: none;
+  margin: 0;
   width: 130px;
   padding: 10px 14px;
   border-radius: 10px;
@@ -122,7 +134,7 @@
   transition: 0.2s;
 }
 
-.month-select:focus {
+.reports .rpMonthSelect:focus {
   border-color: #5b7cfa;
   box-shadow: 0 0 0 3px rgba(91, 124, 250, 0.2);
 }
@@ -301,7 +313,7 @@
     padding: 14px;
   }
 
-  .headerRight {
+  .reports .rpFilterBar {
     margin-bottom: 12px;
   }
 
@@ -424,7 +436,7 @@
     padding: 10px;
   }
 
-  .month-select {
+  .reports .rpMonthSelect {
     width: 130px;
     padding: 8px 10px;
     font-size: 13px;
