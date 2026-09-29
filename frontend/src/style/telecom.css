@@ -1,42 +1,60 @@
-
-
-/* ---------- 1. Global ---------- */
-* { margin: 0; padding: 0; box-sizing: border-box; }
-
-html, body { min-height: 100%; overflow-x: hidden; }
-
-body {
-  font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
-  background: #f8fafc;
-  color: #1e293b;
+/* --- Global Dashboard Variables & Resets --- */
+* { 
+  margin: 0; 
+  padding: 0; 
+  box-sizing: border-box; 
+}
+html,
+body{
+    min-height:100%;
+    overflow-x:hidden;
+}
+body{
+    font-family:'Segoe UI',Roboto,Helvetica,Arial,sans-serif;
+    background:#f8fafc;
+    color:#1e293b;
 }
 
-.page { display: flex; width: 100%; }
+.page{
+    display:flex;
+    width:100%;
+}
+/* --- Left Sidebar Navigation --- */
+.topMenu{
+  height:calc(100vh - 110px);
+position:sticky;
+top:0;
+    width:280px;
+    background:#0f172a;
+    display:flex;
+    flex-direction:column;
+    gap:8px;
+    padding:20px 14px;
+ overflow-y:auto;
+    transition:
+        width .35s cubic-bezier(.4,0,.2,1),
+        padding .35s cubic-bezier(.4,0,.2,1);
 
-/* Desktop me overlay + close button chhupe rahen */
-.sidebarOverlay { display: none; }
-.sidebarCloseBtn { display: none; }
-
-/* ---------- 2. DESKTOP ---------- */
-
-/* Sidebar */
-.topMenu {
-  height: calc(100vh - 110px);
-  position: sticky;
-  top: 0;
-  width: 280px;
-  background: #0f172a;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  padding: 20px 14px;
-  overflow-y: auto;
-  transition: width .35s cubic-bezier(.4, 0, .2, 1), padding .35s cubic-bezier(.4, 0, .2, 1);
-  box-shadow: 4px 0 25px rgba(0, 0, 0, .12);
+    box-shadow:4px 0 25px rgba(0,0,0,.12);
 }
 
-.topMenu.collapsed { width: 78px; padding: 20px 8px; }
+.topMenu.collapsed{
+    width:78px;
+    padding:20px 8px;
+}
 
+/* Navigation Heading */
+.topMenu::before {
+  font-size: 16px;
+  font-weight: 800;
+  color: #38bdf8;
+  letter-spacing: 1.5px;
+  margin-bottom: 24px;
+  padding-left: 12px;
+  display: block;
+}
+
+/* Sidebar Menu Controls */
 .menuBtn {
   width: 100%;
   padding: 12px 16px;
@@ -53,155 +71,253 @@ body {
   gap: 12px;
 }
 
-.menuBtn:hover { background: rgba(255, 255, 255, 0.06); color: #f8fafc; transform: translateX(4px); }
+.menuBtn:hover { 
+  background: rgba(255, 255, 255, 0.06); 
+  color: #f8fafc;
+  transform: translateX(4px); 
+}
 
+/* State management tracking via utility classes or standard hooks */
 .menuBtn.active {
   background: linear-gradient(135deg, #3b82f6, #1d4ed8);
   color: #ffffff;
   box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
 }
 
-.menuBtn:active { transform: scale(0.98); }
-
-.menuIcon { font-size: 22px; min-width: 20px; transition: all 0.3s ease; }
-.menuBtn:hover .menuIcon { transform: scale(1.15); transition: 0.2s; }
-.menuBtn.active .menuIcon { color: #fff; }
-
-/* Main content */
-.mainContentContainer {
-  padding: 22px;
-  display: flex;
-  flex-direction: column;
-  gap: 24px;
-  max-height: calc(100vh - 120px);
-  flex: 1;
-  min-width: 0;
-  overflow-y: auto;
-  overflow-x: hidden;
-  scrollbar-width: none;
-  -ms-overflow-style: none;
+.menuBtn:active { 
+  transform: scale(0.98); 
 }
-.mainContentContainer::-webkit-scrollbar { display: none; }
+.menuIcon {
+  font-size: 22px;
+  min-width: 20px;
+  transition: all 0.3s ease;
+}
 
-/* ---------- HAMBURGER (pehle jaisa, bina back-box) ---------- */
-.menu-icon-container { display: flex; justify-content: flex-start; flex: 0 0 auto; }
+.menuBtn:hover .menuIcon {
+  transform: scale(1.15);
+  transition: 0.2s;
+}
+
+.menuBtn.active .menuIcon {
+  color: #fff;
+}
+.mainContentContainer{
+    padding:22px;
+    display:flex;
+    flex-direction:column;
+    gap:24px;
+    max-height:calc(100vh - 120px);
+    flex: 1;
+    overflow-y: auto;
+    overflow-x: hidden;
+    scrollbar-width: none;   /* Firefox */
+    -ms-overflow-style: none;
+}
+.main-content::-webkit-scrollbar{
+    display: none;           /* Chrome, Edge, Safari */
+}
+
 
 .menu-icon {
   display: block;
   float: left;
   cursor: pointer;
+  -webkit-transition: all 0.2s ease-in;
+  -moz-transition: all 0.2s ease-in;
+  -o-transition: all 0.2s ease-in;
   transition: all 0.2s ease-in;
 }
-.menu-icon span {
-  display: block;
-  position: relative;
-  width: 22px;
-  height: 4px;
-  margin-bottom: 3px;
-  border-radius: 50px;
-  background: #000000;
-  box-shadow: 0 0 4px rgba(126, 125, 125, 0.7), 0 0 10px rgba(56, 56, 56, 0.45);
-  transition: .35s ease;
+.menu-icon span{
+    display:block;
+    position:relative;
+
+    width:22px;
+    height:4px;
+
+    margin-bottom:3px;
+    border-radius:50px;
+
+    background:#000000;
+
+    box-shadow:
+        0 0 4px rgba(126, 125, 125, 0.7),
+        0 0 10px rgba(56, 56, 56, 0.45);
+
+    transition:.35s ease;
 }
-.menu-icon span.bar1 { margin-top: 2px; }
-.menu-icon:hover span { margin-bottom: 4px; }
-.menu-icon:hover span.bar1 { margin-top: 0; }
-/* Desktop: menu khula ho ya band, hamburger hamesha ≡ hi dikhega (✕ nahi) */
-.menu-icon.active { transform: none; }
-.menu-icon.active .bar1,
-.menu-icon.active .bar2,
-.menu-icon.active .bar3 { transform: none; opacity: 1; }
+.menu-icon span.bar1 {
+  margin-top: 2px;
+}
+.menu-icon:hover span {
+  margin-bottom: 4px;
+}
+.menu-icon:hover span.bar1 {
+  margin-top: 0px;
+}
+.menu-icon.active {
+  -webkit-transform: rotate(-45deg);
+  -moz-transform: rotate(-45deg);
+  -ms-transform: rotate(-45deg);
+  -o-transform: rotate(-45deg);
+  transform: rotate(-45deg);
+}
+.menu-icon.active:hover span {
+  margin-top: 2px;
+  margin-bottom: 2px;
+}
+.menu-icon.active .bar1 {
+  -webkit-transform: rotate(0deg) translateY(6px);
+  -moz-transform: rotate(0deg) translateY(6px);
+  -ms-transform: rotate(0deg) translateY(6px);
+  -o-transform: rotate(0deg) translateY(6px);
+  transform: rotate(0deg) translateY(6px);
+}
+.menu-icon.active .bar2 {
+  opacity: 0;
+}
+.menu-icon.active .bar3 {
+  -webkit-transform: rotate(-90deg) translateX(5px);
+  -moz-transform: rotate(-90deg) translateX(5px);
+  -ms-transform: rotate(-90deg) translateX(5px);
+  -o-transform: rotate(-90deg) translateX(5px);
+  transform: rotate(-90deg) translateX(5px);
+}
 
-/* ---------- Map card ---------- */
-.container { display: flex; width: 100%; gap: 24px; }
+/* --- Card Grids & Map Canvas Configs --- */
+.container { 
+  display: flex; 
+  width: 100%;
+  gap: 24px; 
+}
 
-.mapContainer {
-  flex: 3;
-  background: #ffffff;
-  border-radius: 16px;
-  padding: 64px;
-  position: relative;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.05);
-  display: flex;
-  flex-direction: column;
+.mapContainer { 
+  flex: 3; 
+  background: #ffffff; 
+  border-radius: 16px; 
+  padding: 64px; 
+  position: relative; 
+  box-shadow: 0 4px 20px rgba(0,0,0,0.05); 
+  display: flex; 
+  flex-direction: column; 
   align-items: center;
   border: 1px solid #e2e8f0;
 }
 
-.mapTitleContainer {
-  display: flex;
-  justify-content: center;
-  width: 100%;
-  margin-bottom: 24px;
-  font-size: 22px;
+.mapTitleContainer { 
+  display: flex; 
+  justify-content: center; 
+  width: 100%; 
+  margin-bottom: 24px; 
+  font-size: 22px; 
   font-weight: 700;
   color: #1e293b;
 }
 
-.mapTopBar {
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  width: 100%;
-  position: relative;
+.mapTopBar { 
+  display: flex; 
+  justify-content: center; 
+  align-items: center; 
+  width: 100%; 
+  position: relative; 
 }
 
-.resized-image {
-  width: 100px;
-  height: auto;
-  position: absolute;
-  left: -30px;
+.resized-image { 
+  width: 100px; 
+  height: auto; 
+  position: absolute; 
+  left: -30px; 
   top: -70px;
   opacity: 0.8;
 }
 
-.export { position: absolute; top: 24px; right: 24px; z-index: 10; }
+.export { 
+  position: absolute; 
+  top: 24px; 
+  right: 24px; 
+  z-index: 10;
+}
 
-.export button {
-  background: #2563eb;
-  font-size: 14px;
-  font-weight: 600;
-  padding: 10px 16px;
-  border-radius: 8px;
-  color: white;
-  border: none;
-  cursor: pointer;
+.export button { 
+  background: #2563eb; 
+  font-size: 14px; 
+  font-weight: 600; 
+  padding: 10px 16px; 
+  border-radius: 8px; 
+  color: white; 
+  border: none; 
+  cursor: pointer; 
   box-shadow: 0 2px 8px rgba(37, 99, 235, 0.25);
   transition: all 0.2s ease;
 }
-.export button:hover { background: #1d4ed8; box-shadow: 0 4px 12px rgba(37, 99, 235, 0.35); }
 
-.dropdown {
+.export button:hover { 
+  background: #1d4ed8; 
+  box-shadow: 0 4px 12px rgba(37, 99, 235, 0.35);
+}
+
+.dropdown { 
   position: absolute;
   right: 0;
-  margin-top: 6px;
-  width: 130px;
-  background: white;
-  border-radius: 8px;
-  border: 1px solid #e2e8f0;
-  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
-  overflow: hidden;
+  margin-top: 6px; 
+  width: 130px; 
+  background: white; 
+  border-radius: 8px; 
+  border: 1px solid #e2e8f0; 
+  box-shadow: 0 10px 25px rgba(0,0,0,0.1);
+  overflow: hidden; 
 }
-.dropdown div { padding: 10px 16px; font-size: 13px; font-weight: 600; color: #475569; cursor: pointer; }
-.dropdown div:hover { background: #f1f5f9; color: #1e293b; }
 
-.mapBox { width: 125%; margin-top: -25px; height: auto; min-height: 520px; }
+.dropdown div { 
+  padding: 10px 16px; 
+  font-size: 13px; 
+  font-weight: 600; 
+  color: #475569;
+  cursor: pointer; 
+}
 
-.mapLegend {
+.dropdown div:hover { 
+  background: #f1f5f9; 
+  color: #1e293b;
+}
+
+.mapBox { 
+  width: 125%; 
+  margin-top: -25px;
+  height: auto;
+  min-height: 520px;
+}
+
+.mapLegend { 
   display: flex;
-  justify-content: flex-start;
-  gap: 32px;
+  justify-content: flex-start; 
+  gap: 32px; 
   width: 100%;
   padding-left: 50px;
   margin-top: -170px;
-  font-size: 18px;
-  font-weight: 700;
-  color: #334155;
+  font-size: 18px; 
+  font-weight: 700; 
+  color: #334155; 
 }
 
-.legendItem { display: flex; align-items: center; gap: 8px; }
-.greenDot { width: 16px; height: 16px; border-radius: 50%; background: #15803d; }
-.redDot { width: 16px; height: 16px; border-radius: 50%; background: #ef4444; }
+.legendItem { 
+  display: flex; 
+  align-items: center; 
+  gap: 8px; 
+}
+
+.greenDot { 
+  width: 16px; 
+  height: 16px; 
+  border-radius: 50%; 
+  background: #15803d; 
+}
+
+.redDot { 
+  width: 16px; 
+  height: 16px; 
+  border-radius: 50%; 
+  background: #ef4444; 
+}
 
 .mapFooter {
   display: flex;
@@ -211,28 +327,38 @@ body {
   margin-top: 20px;
 }
 
-.mapLogo img {
-  position: relative;
-  top: -85px;
-  width: 130%;
-  right: 50px;
-  height: 85px;
-  object-fit: contain;
-  opacity: .85;
+.mapLogo img{
+    position: relative;
+    top:-85px;   /* ya -20px */
+    width: 130%;
+    right: 50px;
+    height:85px;
+    object-fit:contain;
+    opacity:.85;
 }
 
-/* ---------- Side panel ---------- */
-.sidePanel { flex: 1.1; display: flex; flex-direction: column; gap: 35px; }
+/* --- Filter & Control Side Panels --- */
+.sidePanel { 
+  flex: 1.1; 
+  display: flex; 
+  flex-direction: column; 
+  gap: 35px; 
+}
 
-.panelCard {
-  background: white;
-  padding: 20px;
-  border-radius: 16px;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.04);
+.panelCard { 
+  background: white; 
+  padding: 20px; 
+  border-radius: 16px; 
+  box-shadow: 0 4px 16px rgba(0,0,0,0.04); 
   border: 1px solid #e2e8f0;
 }
 
-.panelCard1 { font-size: 15px; font-weight: 700; color: #0f172a; margin-bottom: 12px; }
+.panelCard1 {
+  font-size: 15px; 
+  font-weight: 700; 
+  color: #0f172a; 
+  margin-bottom: 12px;
+}
 
 .panelCard select.dropdown {
   position: relative;
@@ -243,116 +369,621 @@ body {
   font-weight: 500;
 }
 
-.searchBox {
-  width: 100%;
-  padding: 10px 14px;
-  font-size: 14px;
-  border-radius: 8px;
-  border: 1px solid #cbd5e1;
-  margin-bottom: 12px;
+.searchBox { 
+  width: 100%; 
+  padding: 10px 14px; 
+  font-size: 14px; 
+  border-radius: 8px; 
+  border: 1px solid #cbd5e1; 
+  margin-bottom: 12px; 
   outline: none;
 }
-.searchBox:focus { border-color: #3b82f6; box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15); }
+.searchBox:focus {
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15);
+}
 
-.scrollBox { max-height: 180px; overflow-y: auto; }
-.scrollBox label {
-  font-size: 14px;
-  font-weight: 500;
-  display: flex;
+.scrollBox { 
+  max-height: 180px; 
+  overflow-y: auto; 
+}
+
+.scrollBox label { 
+  font-size: 14px; 
+  font-weight: 500; 
+  display: flex; 
   align-items: center;
   padding: 6px 4px;
   color: #475569;
 }
+
 .scrollBox::-webkit-scrollbar { width: 5px; }
 .scrollBox::-webkit-scrollbar-thumb { background-color: #cbd5e1; border-radius: 10px; }
 
-/* ---------- KPI cards ---------- */
-.kpiContainer {
-  padding: 24px;
-  background: linear-gradient(135deg, #f8fafc, #edf2f9);
-  border-radius: 16px;
+/* --- Modern Glassmorphic KPI Grid Cards --- */
+.kpiContainer { 
+  padding: 24px; 
+  background: linear-gradient(135deg, #f8fafc, #edf2f9); 
+  border-radius: 16px; 
   border: 1px solid #e2e8f0;
 }
 
-.kpiTitle { font-size: 22px; font-weight: 700; margin-bottom: 20px; text-align: left; color: #0f172a; }
+.kpiTitle { 
+  font-size: 22px; 
+  font-weight: 700; 
+  margin-bottom: 20px; 
+  text-align: left; 
+  color: #0f172a; 
+}
 
-.kpiGridModern {
+.kpiGridModern { 
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
-  gap: 16px;
+  gap: 16px; 
   width: 100%;
 }
 
-.kpiCardModern {
-  padding: 20px;
-  border-radius: 14px;
+.kpiCardModern { 
+  padding: 20px; 
+  border-radius: 14px; 
   background: #ffffff;
+  border: 1px solid #e2e8f0; 
+  box-shadow: 0 4px 12px rgba(0,0,0,0.03); 
+  position: relative; 
+  transition: all 0.25s ease; 
+  overflow: hidden; 
+}
+
+.kpiCardModern::before { 
+  content: ""; 
+  position: absolute; 
+  top: 0; 
+  left: 0; 
+  height: 4px; 
+  width: 100%; 
+  background: var(--themeColor); 
+}
+
+.kpiCardModern:hover { 
+  transform: translateY(-4px); 
+  box-shadow: 0 10px 20px rgba(0,0,0,0.08); 
+}
+
+.kpiDomainModern { 
+  font-size: 16px; 
+  font-weight: 700; 
+  color: #0f172a; 
+}
+
+.kpiSubModern { 
+  font-size: 12px; 
+  margin-top: 6px; 
+  color: #64748b; 
+  line-height: 1.4;
+}
+
+.kpiValueModern { 
+  font-size: 24px; 
+  font-weight: 800; 
+  margin-top: 12px; 
+  color: var(--themeColor); 
+}
+
+.kpiValueModern span { 
+  font-size: 13px; 
+  color: #64748b; 
+  font-weight: 500;
+}
+
+.kpiEyeBtnLeft { 
+  position: absolute; 
+  top: 16px; 
+  right: 16px; 
+  border-radius: 6px; 
+  width: 24px; 
+  height: 24px; 
+  cursor: pointer; 
+  display: flex; 
+  align-items: center; 
+  justify-content: center; 
+  transition: 0.2s; 
+}
+
+/* --- Responsive Layout Charts Rows --- */
+.bottomChartsRow { 
+  display: flex; 
+  flex-direction: row; 
+  gap: 24px; 
+  width: 100%; 
+}
+
+.bottomChartsRow .chartBox { 
+  flex: 1; 
+  background: #fff; 
+  padding: 24px; 
+  border-radius: 16px; 
+  box-shadow: 0 4px 16px rgba(0,0,0,0.04); 
   border: 1px solid #e2e8f0;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.03);
-  position: relative;
-  transition: all 0.25s ease;
-  overflow: hidden;
 }
-.kpiCardModern::before {
-  content: "";
-  position: absolute;
-  top: 0;
-  left: 0;
-  height: 4px;
-  width: 100%;
-  background: var(--themeColor);
+
+.chartTitle { 
+  font-size: 16px; 
+  font-weight: 700; 
+  color: #0f172a;
+  margin-bottom: 20px; 
 }
-.kpiCardModern:hover { transform: translateY(-4px); box-shadow: 0 10px 20px rgba(0, 0, 0, 0.08); }
 
-.kpiDomainModern { font-size: 16px; font-weight: 700; color: #0f172a; }
-.kpiSubModern { font-size: 12px; margin-top: 6px; color: #64748b; line-height: 1.4; }
-.kpiValueModern { font-size: 24px; font-weight: 800; margin-top: 12px; color: var(--themeColor); }
-.kpiValueModern span { font-size: 13px; color: #64748b; font-weight: 500; }
+.tooltipBox { 
+  position: fixed; 
+  width: 320px; 
+  background: #fff; 
+  border-radius: 12px; 
+  box-shadow: 0 10px 30px rgba(0,0,0,0.15); 
+  z-index: 99999; 
+  border: 1px solid #e2e8f0;
+}
 
-.kpiEyeBtnLeft {
-  position: absolute;
-  top: 16px;
-  right: 16px;
-  border-radius: 6px;
-  width: 24px;
-  height: 24px;
+/* --- Touch / mobile tooltip (bottom sheet) --- */
+.tooltipBox.tooltipSheet {
+  top: auto;
+  left: 50%;
+  right: auto;
+  bottom: calc(12px + env(safe-area-inset-bottom, 0px));
+  transform: translateX(-50%);
+  width: min(520px, calc(100vw - 24px));
+  max-height: 55vh;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+  animation: tooltipSheetUp .18s ease-out;
+}
+
+@keyframes tooltipSheetUp {
+  from { opacity: 0; transform: translate(-50%, 12px); }
+  to   { opacity: 1; transform: translate(-50%, 0); }
+}
+
+.tooltipClose {
+  flex-shrink: 0;
+  width: 26px;
+  height: 26px;
+  margin-left: 8px;
+  border: none;
+  border-radius: 50%;
+  background: #e2e8f0;
+  color: #334155;
+  font-size: 13px;
+  line-height: 1;
   cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition: 0.2s;
 }
 
-.kpiQcOtpRow { flex-wrap: wrap; gap: 4px 12px; }
-
-/* ---------- Charts ---------- */
-.bottomChartsRow { display: flex; flex-direction: row; gap: 24px; width: 100%; }
-
-.bottomChartsRow .chartBox {
-  flex: 1;
-  min-width: 0;
-  background: #fff;
-  padding: 24px;
-  border-radius: 16px;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.04);
-  border: 1px solid #e2e8f0;
+@media (prefers-reduced-motion: reduce) {
+  .tooltipBox.tooltipSheet { animation: none; }
 }
 
-.chartTitle { font-size: 16px; font-weight: 700; color: #0f172a; margin-bottom: 20px; }
+/* =========================================================
+   RESPONSIVE  —  TABLET & MOBILE
+   (Desktop styles above 1100px are untouched)
+   ========================================================= */
 
-/* ---------- Map hover tooltip ---------- */
-.tooltipBox {
-  position: fixed;
-  width: 320px;
-  background: #fff;
-  border-radius: 12px;
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.15);
-  z-index: 99999;
-  border: 1px solid #e2e8f0;
-  pointer-events: none;
+/* ---------- Tablet + Mobile : up to 1100px ---------- */
+@media (max-width: 1100px) {
+
+  .page {
+    display: block;
+    width: 100%;
+  }
+
+  /* Sidebar becomes a slide-in drawer */
+  .topMenu {
+    position: fixed;
+    top: 95px;
+    left: -280px;
+    width: 260px;
+    height: calc(100vh - 95px);
+    display: flex;
+    flex-direction: column;
+    padding: 20px 12px;
+    background: rgba(15, 23, 42, 0.92);
+    backdrop-filter: blur(18px);
+    -webkit-backdrop-filter: blur(18px);
+    border-right: 1px solid rgba(255, 255, 255, 0.08);
+    box-shadow: 8px 0 30px rgba(0, 0, 0, 0.35);
+    z-index: 9999;
+    transition: left 0.35s ease;
+  }
+
+  .topMenu.expanded {
+    left: 0;
+  }
+
+  .menuBtn {
+    width: 100%;
+  }
+
+  .sidebarOverlay {
+    position: fixed;
+    top: 95px;
+    left: 0;
+    width: 100%;
+    height: calc(100vh - 95px);
+    background: rgba(0, 0, 0, 0.35);
+    backdrop-filter: blur(2px);
+    z-index: 9998;
+  }
+
+  .mainContentContainer {
+    width: 100%;
+    padding: 16px;
+    max-height: none;
+    overflow-y: visible;
+  }
+
+  .container {
+    flex-direction: column;
+    gap: 18px;
+  }
+
+  /* ----- MAP CARD ----- */
+  .mapContainer {
+    width: 100%;
+    padding: 22px 18px 18px;
+    border-radius: 14px;
+  }
+
+  .mapTitleContainer {
+    font-size: 20px;
+    line-height: 1.35;
+    text-align: center;
+    margin-bottom: 8px;
+  }
+
+  /* Compass sits at the left of the export row */
+  .mapTopBar {
+    height: 0;
+  }
+
+  .resized-image {
+    width: 64px;
+    top: 4px;
+    left: 0;
+    pointer-events: none;
+  }
+
+  /* Export button: normal flow, right aligned, never overlaps title/map */
+  .export {
+    position: relative;
+    top: auto;
+    right: auto;
+    width: 100%;
+    min-height: 64px;
+    margin-bottom: 6px;
+    text-align: right;
+    z-index: 10;
+  }
+
+  .export button {
+    margin-top: 0;
+    padding: 8px 14px;
+    font-size: 13px;
+  }
+
+  .dropdown {
+    text-align: left;
+  }
+
+  /* Map itself: fluid, keeps aspect ratio, no negative margins */
+  .mapBox {
+    width: 100%;
+    min-height: 0;
+    margin-top: 0;
+  }
+
+  .usMap {
+    display: block;
+    width: 100% !important;
+    height: auto !important;
+  }
+
+  /* Legend + logo below the map */
+  .mapFooter {
+    flex-wrap: wrap;
+    justify-content: space-between;
+    align-items: center;
+    gap: 10px 16px;
+    margin-top: 14px;
+  }
+
+  .mapLegend {
+    width: auto;
+    padding-left: 0;
+    margin-top: 0;
+    flex-wrap: wrap;
+    gap: 8px 22px;
+    font-size: 14px;
+  }
+
+  .mapLogo {
+    margin-left: auto;
+  }
+
+  .mapLogo img {
+    position: static;
+    right: auto;
+    top: auto;
+    width: auto;
+    max-width: 150px;
+    height: 52px;
+  }
+
+  /* ----- FILTER PANELS ----- */
+  .sidePanel {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    align-items: start;
+    gap: 16px;
+    width: 100%;
+  }
+
+  .panelCard {
+    width: 100%;
+    padding: 16px;
+  }
+
+  .panelCard1 {
+    font-size: 14px;
+    margin-bottom: 10px;
+  }
+
+  .searchBox {
+    width: 100%;
+  }
+
+  .scrollBox {
+    max-height: 200px;
+    overflow-y: auto;
+    overflow-x: hidden;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .scrollBox label {
+    font-size: 14px;
+    padding: 7px 4px;
+    gap: 6px;
+  }
+
+  .scrollBox input[type="checkbox"] {
+    width: 16px;
+    height: 16px;
+    flex-shrink: 0;
+  }
+
+  /* ----- KPI + CHARTS ----- */
+  .kpiContainer {
+    padding: 18px;
+  }
+
+  .kpiGridModern {
+    grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  }
+
+  .bottomChartsRow {
+    flex-direction: column;
+    gap: 16px;
+  }
+
+  .bottomChartsRow .chartBox {
+    padding: 18px;
+  }
+
+  .tooltipBox {
+    width: 280px;
+  }
 }
 
-/* ---------- Top filter bar ---------- */
+/* ---------- Small tablet + Mobile : up to 768px ---------- */
+@media (max-width: 768px) {
+
+  .topMenu {
+    padding: 18px 10px;
+  }
+
+  .mainContentContainer {
+    padding: 12px;
+    gap: 18px;
+  }
+
+  .menuBtn {
+    font-size: 14px;
+    padding: 10px 12px;
+  }
+
+  .menuIcon {
+    font-size: 20px;
+  }
+
+  .container {
+    gap: 14px;
+  }
+
+  /* ----- MAP CARD ----- */
+  .mapContainer {
+    padding: 16px 10px 14px;
+    border-radius: 12px;
+  }
+
+  .mapTitleContainer {
+    font-size: 17px;
+  }
+
+  .resized-image {
+    width: 50px;
+  }
+
+  .export {
+    min-height: 50px;
+  }
+
+  .export button {
+    padding: 7px 12px;
+    font-size: 12px;
+    border-radius: 6px;
+  }
+
+  .dropdown {
+    width: 120px;
+  }
+
+  .mapFooter {
+    margin-top: 12px;
+  }
+
+  .mapLegend {
+    gap: 6px 18px;
+    font-size: 13px;
+  }
+
+  .legendItem {
+    gap: 6px;
+  }
+
+  .greenDot,
+  .redDot {
+    width: 12px;
+    height: 12px;
+  }
+
+  .mapLogo img {
+    max-width: 130px;
+    height: 44px;
+  }
+
+  /* ----- FILTER PANELS : Region on top, Markets + Domains side by side ----- */
+  .sidePanel {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
+  }
+
+  .sidePanel > .panelCard:first-child {
+    grid-column: 1 / -1;
+  }
+
+  .panelCard {
+    padding: 12px;
+    border-radius: 12px;
+  }
+
+  .panelCard1 {
+    font-size: 13px;
+    margin-bottom: 8px;
+  }
+
+  .searchBox {
+    padding: 9px 12px;
+    font-size: 13px;
+  }
+
+  .scrollBox {
+    max-height: 170px;
+  }
+
+  .scrollBox label {
+    font-size: 13px;
+    line-height: 1.25;
+    word-break: break-word;
+  }
+
+  /* ----- KPI + CHARTS ----- */
+  .kpiContainer {
+    padding: 16px;
+    border-radius: 12px;
+  }
+
+  .kpiTitle {
+    font-size: 18px;
+    margin-bottom: 16px;
+  }
+
+  .kpiGridModern {
+    grid-template-columns: 1fr;
+  }
+
+  .kpiCardModern {
+    padding: 16px;
+  }
+
+  .kpiDomainModern {
+    font-size: 14px;
+  }
+
+  .kpiValueModern {
+    font-size: 20px;
+  }
+
+  .bottomChartsRow .chartBox {
+    padding: 14px;
+    border-radius: 12px;
+  }
+
+  .chartTitle {
+    font-size: 14px;
+    margin-bottom: 14px;
+  }
+}
+
+/* ---------- Phones : up to 600px ---------- */
+@media (max-width: 600px) {
+
+  .mapContainer {
+    padding: 14px 8px 12px;
+  }
+
+  .mapTitleContainer {
+    font-size: 16px;
+  }
+
+  .resized-image {
+    width: 42px;
+  }
+
+  .export {
+    min-height: 42px;
+  }
+
+  .mapFooter {
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .mapLegend {
+    justify-content: center;
+    gap: 6px 16px;
+    font-size: 12px;
+  }
+
+  .mapLogo {
+    margin-left: 0;
+  }
+
+  .mapLogo img {
+    max-width: 120px;
+    height: 40px;
+  }
+
+  .sidePanel {
+    grid-template-columns: 1fr;
+  }
+
+  .scrollBox {
+    max-height: 150px;
+  }
+}
+
+
+/* =========================================================
+   TOP FILTER BAR (Month / From Date / To Date / Reset)
+   ========================================================= */
 .tmFilterBar {
   display: flex;
   flex-direction: row;
@@ -365,20 +996,36 @@ body {
   min-height: 0;
   overflow: visible;
   padding: 16px 20px;
-  background: linear-gradient(135deg, #f8fafc, #edf2f9);
+  background:linear-gradient(135deg, #f8fafc, #edf2f9);
   border: 1px solid #e2e8f0;
   border-radius: 16px;
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.04);
 }
 
-.tmFilterField { display: flex; flex-direction: column; gap: 6px; width: 180px; min-width: 0; }
-.tmFilterFieldMonth { width: 240px; }
+.tmFilterField {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: 180px;
+  min-width: 0;
+}
 
-.tmFilterLabel { display: block; font-size: 13px; font-weight: 700; color: #0f172a; line-height: 1.2; }
+.tmFilterFieldMonth {
+  width: 240px;
+}
+
+.tmFilterLabel {
+  display: block;
+  font-size: 13px;
+  font-weight: 700;
+  color: #0f172a;
+  line-height: 1.2;
+}
 
 .tmFilterSelect,
 .tmFilterInput {
   display: block;
+  box-sizing: border-box;
   height: 40px;
   min-height: 40px;
   min-width: 0;
@@ -393,6 +1040,8 @@ body {
   border: 1px solid #cbd5e1;
   border-radius: 8px;
   outline: none;
+  opacity: 1;
+  visibility: visible;
 }
 
 .tmFilterSelect {
@@ -402,19 +1051,27 @@ body {
   background-image:
     linear-gradient(45deg, transparent 50%, #64748b 50%),
     linear-gradient(135deg, #64748b 50%, transparent 50%);
-  background-position: calc(100% - 18px) 17px, calc(100% - 13px) 17px;
+  background-position:
+    calc(100% - 18px) 17px,
+    calc(100% - 13px) 17px;
   background-size: 5px 5px, 5px 5px;
   background-repeat: no-repeat;
   cursor: pointer;
 }
 
-.tmFilterInput { cursor: pointer; }
+.tmFilterInput {
+  cursor: pointer;
+}
 
 .tmFilterSelect:focus,
-.tmFilterInput:focus { border-color: #3b82f6; box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15); }
+.tmFilterInput:focus {
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15);
+}
 
 .tmFilterResetBtn {
   display: block;
+  box-sizing: border-box;
   height: 40px;
   min-height: 40px;
   padding: 0 28px;
@@ -430,315 +1087,40 @@ body {
   box-shadow: 0 2px 8px rgba(37, 99, 235, 0.25);
   transition: all 0.2s ease;
 }
-.tmFilterResetBtn:hover { background: #1d4ed8; box-shadow: 0 4px 12px rgba(37, 99, 235, 0.35); }
-.tmFilterResetBtn:active { transform: scale(0.98); }
 
-
-/* =========================================================================
-   3. TABLET + MOBILE  (max-width: 1100px)
-   ========================================================================= */
-@media (max-width: 1100px) {
-
-  .page { display: block; width: 100%; }
-
-  /* overflow-x: clip => sticky hamburger kaam karega (hidden se nahi karta) */
-  .mainContentContainer {
-    width: 100%;
-    max-width: 100%;
-    min-width: 0;
-    padding: 16px;
-    max-height: none;
-    overflow-y: visible;
-    overflow-x: clip;
-  }
-
-  .container { flex-direction: column; gap: 18px; }
-
-  /* ---------- Hamburger: header me USER ICON ke thik NEECHE ----------
-     Position badalni ho to sirf --hb-top / --hb-right badlein. */
-  :root { --hb-top: 130px; --hb-right: 16px; }
-
-  .menu-icon-container {
-    position: fixed;
-    top: var(--hb-top);
-    right: var(--hb-right);
-    left: auto;
-    z-index: 9999;             /* header ke upar, drawer/overlay (10000+) ke neeche */
-    visibility: visible;
-    opacity: 1;
-    width: 40px;
-    height: 40px;
-    margin: 0;
-    padding: 0;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-  }
-
-  .menu-icon {
-    float: none;
-    width: 40px;
-    height: 40px;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    background: none;           /* koi back-box nahi */
-    box-shadow: none;
-    transform: none !important;
-    -webkit-tap-highlight-color: transparent;
-  }
-  .menu-icon span {
-    width: 24px;
-    height: 4px;                /* bold */
-    margin: 0 0 5px 0 !important;
-    background: #0f172a;
-    box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.85);   /* patli safed outline: green/white dono header pe dikhe */
-    opacity: 1;
-    transform: none;
-  }
-  .menu-icon span.bar3 { margin-bottom: 0 !important; }
-
-  /* Menu BAND (class "active") = simple ≡ */
-  .menu-icon.active .bar1,
-  .menu-icon.active .bar2,
-  .menu-icon.active .bar3 { transform: none; opacity: 1; }
-
-  /* Tablet/mobile: hamburger hamesha ≡ hi rahega (khula/band dono me) —
-     menu khulne par overlay iske upar aa jata hai, drawer ka apna ✕ close button hai */
-  .menu-icon:not(.active) .bar1,
-  .menu-icon:not(.active) .bar2,
-  .menu-icon:not(.active) .bar3 { transform: none; opacity: 1; }
-
-  /* ---------- Sidebar = slide-in drawer ---------- */
-  .topMenu,
-  .topMenu.collapsed {
-    position: fixed;
-    top: 0;
-    left: 0;
-    bottom: 0;
-    height: 100vh;
-    height: 100dvh;
-    width: min(280px, 82vw);
-    padding: 14px 12px 24px;
-    gap: 6px;
-    background: #0f172a;
-    border-right: 1px solid rgba(255, 255, 255, 0.08);
-    box-shadow: none;
-    overflow-y: auto;
-    overscroll-behavior: contain;
-    -webkit-overflow-scrolling: touch;
-    z-index: 10001;
-
-    /* band = poori tarah bahar + tap nahi hoga */
-    transform: translateX(-105%);
-    visibility: hidden;
-    transition: transform .3s ease, visibility 0s linear .3s, box-shadow .3s ease;
-  }
-
-  .topMenu.expanded {
-    transform: translateX(0);
-    visibility: visible;
-    box-shadow: 8px 0 30px rgba(0, 0, 0, .35);
-    transition: transform .3s ease, visibility 0s, box-shadow .3s ease;
-  }
-
-  .sidebarCloseBtn {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    align-self: flex-end;
-    flex-shrink: 0;
-    width: 38px;
-    height: 38px;
-    margin-bottom: 6px;
-    border: none;
-    border-radius: 50%;
-    background: rgba(255, 255, 255, 0.12);
-    color: #fff;
-    font-size: 18px;
-    font-weight: 700;
-    cursor: pointer;
-  }
-  .sidebarCloseBtn:active { background: rgba(255, 255, 255, 0.24); }
-
-  .sidebarOverlay {
-    display: block;
-    position: fixed;
-    inset: 0;
-    width: 100%;
-    height: 100%;
-    background: rgba(0, 0, 0, 0.45);
-    backdrop-filter: blur(2px);
-    -webkit-backdrop-filter: blur(2px);
-    z-index: 10000;
-  }
-
-  .menuBtn { width: 100%; font-size: 15px; padding: 12px 14px; }
-  .menuBtn:hover { transform: none; }
-  .menuBtn .menuIcon { flex-shrink: 0; }
-
-  /* ---------- MAP CARD (desktop ke negative-margin hacks reset) ---------- */
-  .mapContainer {
-    width: 100%;
-    padding: 64px 24px 22px;    /* upar jagah: compass + export ke liye */
-    border-radius: 14px;
-    overflow: hidden;
-  }
-
-  .mapTitleContainer {
-    font-size: 22px;
-    line-height: 1.3;
-    text-align: center;
-    margin-bottom: 8px;
-    padding: 0 8px;
-  }
-
-  /* compass = top-left, export = top-right (dono card ke corner me) */
-  .mapTopBar { position: static; height: 0; width: 0; }
-  .resized-image {
-    position: absolute;
-    width: 90px;
-    left: 16px;
-    top: 12px;
-    opacity: .85;
-    pointer-events: none;
-  }
-  .export { top: 14px; right: 16px; }
-  .export button { margin-top: 0; padding: 8px 14px; font-size: 13px; }
-  .dropdown { right: 0; width: 120px; z-index: 20; }
-
-  /* map: sahi aspect ratio, faltu khali jagah nahi */
-  .mapBox { width: 100%; min-height: 0; height: auto; margin: 0; }
-  .mapBox > svg {
-    display: block;
-    width: 100% !important;
-    height: auto !important;
-    aspect-ratio: 1000 / 600;
-    margin: 0;
-  }
-
-  /* legend (left) + logo (right) — map ke neeche, overlap nahi */
-  .mapFooter {
-    display: flex;
-    flex-direction: row;
-    flex-wrap: wrap;
-    align-items: center;
-    justify-content: space-between;
-    gap: 10px 16px;
-    width: 100%;
-    margin-top: 10px;
-  }
-  .mapLegend {
-    display: flex;
-    flex-direction: row;
-    flex-wrap: wrap;
-    gap: 8px 18px;
-    width: auto;
-    margin: 0;
-    padding: 0;
-    font-size: 15px;
-  }
-  .mapLogo { margin-left: auto; }
-  .mapLogo img {
-    position: static;
-    top: auto;
-    right: auto;
-    left: auto;
-    width: 130px;
-    height: auto;
-    display: block;
-  }
-
-  /* ---------- Side panel ---------- */
-  .sidePanel { width: 100%; gap: 16px; }
-  .panelCard { width: 100%; padding: 16px; }
-  .panelCard1 { font-size: 14px; margin-bottom: 10px; }
-  .scrollBox {
-    max-height: 160px;
-    overflow-y: auto;
-    overflow-x: hidden;
-    -webkit-overflow-scrolling: touch;
-  }
-  .scrollBox label { font-size: 13px; padding: 5px 4px; gap: 6px; }
-
-  /* ---------- KPI + charts ---------- */
-  .kpiContainer { padding: 18px; }
-  .kpiGridModern { grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); }
-  .bottomChartsRow { flex-direction: column; gap: 16px; }
-  .bottomChartsRow .chartBox { padding: 18px; }
-
-  /* ---------- Tooltip ---------- */
-  .tooltipBox { width: 290px; }
-
-  /* ---------- Filter bar ---------- */
-  .tmFilterBar { padding: 14px 16px; gap: 14px; }
-  .tmFilterField { width: calc(33.333% - 10px); flex: 1 1 150px; }
-  .tmFilterFieldMonth { width: auto; flex: 1 1 220px; }
+.tmFilterResetBtn:hover {
+  background: #1d4ed8;
+  box-shadow: 0 4px 12px rgba(37, 99, 235, 0.35);
 }
 
+.tmFilterResetBtn:active {
+  transform: scale(0.98);
+}
 
-/* =========================================================================
-   4. MOBILE  (max-width: 768px)
-   ========================================================================= */
-@media (max-width: 768px) {
+/* KPI card: QC / OTP row should never overflow */
+.kpiQcOtpRow {
+  flex-wrap: wrap;
+  gap: 4px 12px;
+}
 
-  .mainContentContainer { padding: 12px; gap: 16px; }
-
-  .menuBtn { font-size: 14px; padding: 10px 12px; }
-  .menuIcon { font-size: 20px; }
-
-  /* hamburger: mobile pe avatar ke just niche */
-  :root { --hb-top: 212px; --hb-right: 14px; }
-
-  /* ---------- MAP CARD ---------- */
-  /* upar 74px jagah: compass (left) + Export (right) pehli line me,
-     title unke NEECHE — ab title ke upar overlap nahi hoga */
-  .mapContainer { padding: 74px 10px 14px; border-radius: 12px; }
-  .mapTitleContainer { font-size: 16px; line-height: 1.35; margin-bottom: 6px; padding: 0 4px; }
-
-  .resized-image { width: 58px; left: 10px; top: 8px; }
-  .export { top: 12px; right: 10px; }
-  .export button { padding: 7px 12px; font-size: 12px; border-radius: 6px; }
-  .dropdown { width: 110px; }
-
-  .mapFooter { margin-top: 8px; gap: 8px 10px; }
-  .mapLegend { flex-direction: column; flex-wrap: nowrap; gap: 6px; font-size: 12px; }
-  .legendItem { gap: 6px; }
-  .greenDot, .redDot { width: 12px; height: 12px; flex-shrink: 0; }
-  .mapLogo img { width: 90px; }
-
-  /* ---------- Side panel ---------- */
-  .sidePanel { gap: 12px; }
-  .panelCard { padding: 12px; border-radius: 12px; }
-  .panelCard1 { font-size: 13px; margin-bottom: 8px; }
-  .searchBox { padding: 9px 12px; font-size: 13px; }
-  .scrollBox { max-height: 130px; }
-  .scrollBox label { font-size: 12px; padding: 4px 2px; line-height: 1.25; word-break: break-word; }
-  .scrollBox input[type="checkbox"] { width: 13px; height: 13px; flex-shrink: 0; }
-
-  /* ---------- KPI + charts ---------- */
-  .kpiContainer { padding: 16px; border-radius: 12px; }
-  .kpiTitle { font-size: 18px; margin-bottom: 16px; }
-  .kpiGridModern { grid-template-columns: 1fr; }
-  .kpiCardModern { padding: 16px; }
-  .kpiDomainModern { font-size: 14px; }
-  .kpiValueModern { font-size: 20px; }
-  .kpiQcOtpRow { gap: 4px 10px; }
-
-  .bottomChartsRow .chartBox { padding: 14px; border-radius: 12px; }
-  .chartTitle { font-size: 14px; margin-bottom: 14px; }
-
-  /* ---------- Tooltip: mobile pe neeche fixed card ---------- */
-  .tooltipBox {
-    top: auto;
-    bottom: 12px;
-    left: 12px !important;
-    right: 12px;
-    width: auto;
+/* ---- Tablet ---- */
+@media (max-width: 1100px) {
+  .tmFilterBar {
+    padding: 14px 16px;
+    gap: 14px;
   }
+  .tmFilterField {
+    width: calc(33.333% - 10px);
+    flex: 1 1 150px;
+  }
+  .tmFilterFieldMonth {
+    width: auto;
+    flex: 1 1 220px;
+  }
+}
 
-  /* ---------- Filter bar ---------- */
+/* ---- Mobile ---- */
+@media (max-width: 768px) {
   .tmFilterBar {
     display: grid;
     grid-template-columns: 1fr 1fr;
@@ -746,22 +1128,106 @@ body {
     padding: 12px;
     border-radius: 12px;
   }
+
   .tmFilterField,
-  .tmFilterFieldMonth { width: 100%; flex: none; }
-  .tmFilterFieldMonth { grid-column: 1 / -1; }
-  .tmFilterLabel { font-size: 12px; }
+  .tmFilterFieldMonth {
+    width: 100%;
+    flex: none;
+  }
+
+  .tmFilterFieldMonth {
+    grid-column: 1 / -1;
+  }
+
+  .tmFilterLabel {
+    font-size: 12px;
+  }
+
   .tmFilterSelect,
-  .tmFilterInput { font-size: 13px; padding: 0 10px; }
-  .tmFilterSelect { padding-right: 30px; }
-  .tmFilterResetBtn { grid-column: 1 / -1; width: 100%; }
+  .tmFilterInput {
+    font-size: 13px;
+    padding: 0 10px;
+  }
+
+  .tmFilterSelect {
+    padding-right: 30px;
+  }
+
+  .tmFilterResetBtn {
+    grid-column: 1 / -1;
+    width: 100%;
+  }
+
+  .kpiQcOtpRow {
+    gap: 4px 10px;
+  }
 }
 
 
-/* =========================================================================
-   5. SMALL PHONES (max-width: 380px)
-   ========================================================================= */
-@media (max-width: 380px) {
-  .mapTitleContainer { font-size: 15px; }
-  .mapLegend { font-size: 11px; }
-  .mapLogo img { width: 76px; }
+/* =========================================================
+   MAP EXPORT (PNG / JPG / PDF) on tablet & mobile
+   JS adds .exporting to the cloned map card so the exported
+   image always uses a clean, fixed, desktop-like layout.
+   ========================================================= */
+.mapContainer.exporting {
+  width: 1000px;
+  padding: 32px 40px 24px;
+  border-radius: 0;
+  box-shadow: none;
+}
+
+.mapContainer.exporting .mapTitleContainer {
+  font-size: 34px;
+  margin-bottom: 12px;
+}
+
+.mapContainer.exporting .resized-image {
+  width: 110px;
+  top: 0;
+  left: 0;
+}
+
+.mapContainer.exporting .export {
+  display: none;
+}
+
+.mapContainer.exporting .mapBox {
+  width: 100%;
+  min-height: 0;
+  margin-top: 0;
+}
+
+.mapContainer.exporting .mapFooter {
+  flex-direction: row;
+  flex-wrap: nowrap;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 16px;
+}
+
+.mapContainer.exporting .mapLegend {
+  flex-direction: row;
+  flex-wrap: nowrap;
+  justify-content: flex-start;
+  gap: 32px;
+  padding: 0;
+  margin: 0;
+  font-size: 18px;
+}
+
+.mapContainer.exporting .greenDot,
+.mapContainer.exporting .redDot {
+  width: 16px;
+  height: 16px;
+}
+
+.mapContainer.exporting .mapLogo {
+  margin-left: auto;
+}
+
+.mapContainer.exporting .mapLogo img {
+  position: static;
+  width: auto;
+  max-width: none;
+  height: 70px;
 }
