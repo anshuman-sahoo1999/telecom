@@ -304,10 +304,6 @@
   text-align: right;
 }
 
-/* =========================================================
-   TABLET (<= 768px)
-   Same desktop table, only spacing + font are reduced.
-   ========================================================= */
 @media (max-width: 768px) {
   .reports {
     padding: 14px;
@@ -425,12 +421,7 @@
   }
 }
 
-/* =========================================================
-   PHONE (<= 600px)
-   Still the real desktop-style table (no cards).
-   If the screen is too narrow, the table scrolls sideways
-   inside its own box, the page itself never moves.
-   ========================================================= */
+
 @media (max-width: 600px) {
   .reports {
     padding: 10px;
