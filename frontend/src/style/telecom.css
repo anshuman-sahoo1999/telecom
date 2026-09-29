@@ -1126,3 +1126,237 @@ top:0;
     gap: 4px 10px;
   }
 }
+
+
+/* =========================================================================
+   RESPONSIVE FIX  (Tablet + Mobile)  — Map + Sidebar/Hamburger
+   Desktop (>1100px) ko touch nahi kiya gaya. Ye block file ke END me rakhein
+   taaki upar ke purane media-query rules override ho jayein.
+   ========================================================================= */
+
+/* Desktop me overlay aur close button chhupe rahen */
+.sidebarOverlay { display: none; }
+.sidebarCloseBtn { display: none; }
+
+@media (max-width: 1100px) {
+
+  /* ---------- Page / main content ---------- */
+  .page { display: block; width: 100%; }
+
+  .mainContentContainer {
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    padding: 16px;
+    max-height: none;
+    overflow-y: visible;
+    overflow-x: hidden;
+  }
+
+  .container { flex-direction: column; gap: 18px; }
+
+  /* ---------- Hamburger button ---------- */
+  .menu-icon-container {
+    display: flex;
+    align-items: center;
+    justify-content: flex-start;
+  }
+  .menu-icon {
+    float: none;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    min-width: 44px;      /* touch friendly */
+    min-height: 44px;
+    padding: 0 10px;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .menu-icon span { flex-shrink: 0; }
+
+  /* ---------- Sidebar = slide-in drawer (header ke upar) ---------- */
+  .topMenu,
+  .topMenu.collapsed {
+    position: fixed;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    height: 100vh;
+    height: 100dvh;
+    width: min(280px, 82vw);
+    padding: 14px 12px 24px;
+    gap: 6px;
+    background: #0f172a;
+    border-right: 1px solid rgba(255, 255, 255, 0.08);
+    box-shadow: none;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    -webkit-overflow-scrolling: touch;
+    z-index: 10001;
+
+    /* band hone par poori tarah bahar + click/tab na ho */
+    transform: translateX(-105%);
+    visibility: hidden;
+    transition: transform .3s ease, visibility 0s linear .3s, box-shadow .3s ease;
+  }
+
+  .topMenu.expanded {
+    transform: translateX(0);
+    visibility: visible;
+    box-shadow: 8px 0 30px rgba(0, 0, 0, .35);
+    transition: transform .3s ease, visibility 0s, box-shadow .3s ease;
+  }
+
+  .sidebarCloseBtn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    align-self: flex-end;
+    flex-shrink: 0;
+    width: 36px;
+    height: 36px;
+    margin-bottom: 6px;
+    border: none;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.1);
+    color: #fff;
+    font-size: 16px;
+    cursor: pointer;
+  }
+  .sidebarCloseBtn:active { background: rgba(255, 255, 255, 0.22); }
+
+  .sidebarOverlay {
+    display: block;
+    position: fixed;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.45);
+    backdrop-filter: blur(2px);
+    -webkit-backdrop-filter: blur(2px);
+    z-index: 10000;
+  }
+
+  .menuBtn { width: 100%; font-size: 15px; padding: 12px 14px; }
+  .menuBtn:hover { transform: none; }         /* touch pe atakna band */
+  .menuBtn .menuIcon { flex-shrink: 0; }
+
+  /* ---------- MAP CARD (negative margin hacks hata diye) ---------- */
+  .mapContainer {
+    width: 100%;
+    padding: 56px 20px 20px;
+    border-radius: 14px;
+    overflow: hidden;
+  }
+
+  .mapTitleContainer {
+    font-size: 20px;
+    line-height: 1.3;
+    text-align: center;
+    margin-bottom: 8px;
+    padding: 0 8px;
+  }
+
+  /* compass: top-left, export: top-right — dono absolute, map ke upar float */
+  .mapTopBar { position: static; height: 0; width: 0; }
+  .resized-image {
+    position: absolute;
+    width: 84px;
+    left: 12px;
+    top: 12px;
+    opacity: .85;
+    pointer-events: none;
+  }
+  .export { top: 12px; right: 12px; }
+  .export button { margin-top: 0; padding: 8px 12px; font-size: 13px; }
+  .dropdown { right: 0; width: 120px; z-index: 20; }
+
+  /* map: proper aspect ratio, khali jagah nahi */
+  .mapBox {
+    width: 100%;
+    min-height: 0;
+    height: auto;
+    margin: 0;
+  }
+  .mapBox > svg {
+    display: block;
+    width: 100% !important;
+    height: auto !important;
+    aspect-ratio: 1000 / 600;
+    margin: 0;
+  }
+
+  /* legend (left) + logo (right) — map ke NEECHE, overlap nahi */
+  .mapFooter {
+    display: flex;
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px 16px;
+    width: 100%;
+    margin-top: 10px;
+  }
+  .mapLegend {
+    display: flex;
+    flex-direction: row;
+    flex-wrap: wrap;
+    gap: 8px 18px;
+    width: auto;
+    margin: 0;
+    padding: 0;
+    font-size: 14px;
+  }
+  .mapLogo { margin-left: auto; }
+  .mapLogo img {
+    position: static;
+    top: auto;
+    right: auto;
+    left: auto;
+    width: 110px;
+    height: auto;
+    display: block;
+  }
+
+  .panelCard, .sidePanel { width: 100%; }
+}
+
+/* ---------- Tablet (iPad Mini / Air / Pro 11) ---------- */
+@media (min-width: 769px) and (max-width: 1100px) {
+  .mapContainer { padding: 60px 28px 24px; }
+  .mapTitleContainer { font-size: 22px; }
+  .resized-image { width: 100px; left: 20px; top: 16px; }
+  .export { top: 18px; right: 20px; }
+  .mapLegend { font-size: 15px; }
+  .mapLogo img { width: 130px; }
+}
+
+/* ---------- Mobile ---------- */
+@media (max-width: 768px) {
+  .mainContentContainer { padding: 12px; gap: 16px; }
+
+  .mapContainer { padding: 52px 10px 14px; border-radius: 12px; }
+  .mapTitleContainer { font-size: 16px; margin-bottom: 4px; }
+
+  .resized-image { width: 58px; left: 8px; top: 40px; }
+  .export { top: 40px; right: 8px; }
+  .export button { padding: 6px 10px; font-size: 12px; border-radius: 6px; }
+
+  .mapFooter { margin-top: 6px; gap: 8px 10px; }
+  .mapLegend { flex-direction: column; flex-wrap: nowrap; gap: 6px; font-size: 12px; }
+  .greenDot, .redDot { width: 12px; height: 12px; flex-shrink: 0; }
+  .mapLogo img { width: 84px; }
+}
+
+/* Chhote phones */
+@media (max-width: 380px) {
+  .mapTitleContainer { font-size: 15px; }
+  .mapLegend { font-size: 11px; }
+  .mapLogo img { width: 72px; }
+}
+
+/* Touch devices: hover wali animation ka atakna band */
+@media (hover: none) {
+  .menu-icon:hover span,
+  .menu-icon:hover span.bar1 { margin-bottom: 3px; }
+  .menu-icon:hover span.bar1 { margin-top: 2px; }
+}
