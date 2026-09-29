@@ -111,6 +111,22 @@ export default function TelecomMap() {
     });
   }, []);
 
+  // Touch devices (tablet/mobile): tooltip atak jata tha. Map ke bahar tap ya scroll karne pe band ho jayega.
+  useEffect(() => {
+    if (!tooltip.visible) return undefined;
+    const hideTooltip = () => setTooltip({ visible: false, x: 0, y: 0, data: null });
+    const onTouchStart = (e) => {
+      if (e.target && e.target.closest && e.target.closest(".mapBox path")) return;
+      hideTooltip();
+    };
+    document.addEventListener("touchstart", onTouchStart, { passive: true });
+    window.addEventListener("scroll", hideTooltip, true);
+    return () => {
+      document.removeEventListener("touchstart", onTouchStart);
+      window.removeEventListener("scroll", hideTooltip, true);
+    };
+  }, [tooltip.visible]);
+
   const exportRef = useRef();
 
   const hasDataForState = (stateName) => {
@@ -739,12 +755,19 @@ export default function TelecomMap() {
       </div>
 
       <div className="mainContentContainer">
+        {/* Ek hi hamburger: band = ≡ , khula = ✕ (pehle active class ulti thi, isliye ≡ aur ✕ dono dikhte the) */}
         <div className="menu-icon-container">
-          <div className={`menu-icon ${menuOpen ? "" : "active"}`} onClick={() => setMenuOpen(!menuOpen)}>
-            <span className="bar1"></span>
-            <span className="bar2"></span>
-            <span className="bar3"></span>
-          </div>
+          <button
+            type="button"
+            className={`tmHamburger ${menuOpen ? "isOpen" : ""}`}
+            aria-label={menuOpen ? "Close menu" : "Open menu"}
+            aria-expanded={menuOpen}
+            onClick={() => setMenuOpen(!menuOpen)}
+          >
+            <span></span>
+            <span></span>
+            <span></span>
+          </button>
         </div>
 
         {activePage === "dashboard" && (
@@ -999,7 +1022,13 @@ export default function TelecomMap() {
       </div>
 
       {tooltip.visible && (
-        <div className="tooltipBox" style={window.innerWidth < 768 ? {} : { top: tooltip.y + 10, left: tooltip.x + 10 }}>
+        <div
+          className="tooltipBox"
+          style={window.innerWidth < 768 ? {} : {
+            top: Math.max(8, Math.min(tooltip.y + 10, window.innerHeight - 240)),
+            left: Math.max(8, Math.min(tooltip.x + 10, window.innerWidth - 340)),
+          }}
+        >
           {(() => {
             const stateData = mapReportData[tooltip.data?.state] || {};
             const totalJobsDelivered = Object.values(stateData).reduce((sum, val) => sum + Number(val || 0), 0);
