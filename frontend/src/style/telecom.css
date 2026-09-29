@@ -460,6 +460,7 @@ top:0;
   margin-top: 6px; 
   color: #64748b; 
   line-height: 1.4;
+  text-transform: none;
 }
 
 .kpiValueModern { 
@@ -1100,7 +1101,7 @@ top:0;
 /* KPI card: QC / OTP row should never overflow */
 .kpiQcOtpRow {
   flex-wrap: wrap;
-  gap: 4px 12px;
+  gap: 6px 8px;
 }
 
 /* ---- Tablet ---- */
