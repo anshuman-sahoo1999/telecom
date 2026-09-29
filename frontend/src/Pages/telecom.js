@@ -145,6 +145,21 @@ export default function TelecomMap() {
   const menuOpen = outletCtx.menuOpen ?? true;
   const setMenuOpen = outletCtx.setMenuOpen || (() => {});
 
+  // Mobile / tablet: page khulte hi sidebar band rahe (overlay drawer ki tarah)
+  useEffect(() => {
+    if (window.innerWidth <= 1100) setMenuOpen(false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Drawer khula ho to background scroll lock (sirf mobile/tablet)
+  useEffect(() => {
+    if (window.innerWidth <= 1100 && menuOpen) {
+      const prev = document.body.style.overflow;
+      document.body.style.overflow = "hidden";
+      return () => { document.body.style.overflow = prev; };
+    }
+  }, [menuOpen]);
+
   useEffect(() => {
     try {
       const user = JSON.parse(localStorage.getItem("user"));
@@ -415,44 +430,37 @@ export default function TelecomMap() {
         mapTitle.style.lineHeight = "1.3";
       }
 
-      const logoBox = clone.querySelector(".mapLogo");
       const logo = clone.querySelector(".mapLogo img");
-
-      if (logoBox && logo) {
-        if (isMobile) {
-          logoBox.style.display = "flex";
-          logoBox.style.justifyContent = "flex-end";
-          logoBox.style.width = "100%";
-          logo.style.width = "120px";
-          logo.style.height = "auto";
-          logo.style.position = "relative";
-          logo.style.left = "0";
-          logo.style.top = "-90px";
-        } else {
-          logo.style.width = "130px";
-          logo.style.height = "auto";
-          logo.style.position = "relative";
-          logo.style.left = "-120px";
-          logo.style.top = "-90px";
-        }
+      if (logo) {
+        logo.style.position = "static";
+        logo.style.width = "150px";
+        logo.style.height = "auto";
+        logo.style.top = "auto";
+        logo.style.left = "auto";
+        logo.style.right = "auto";
       }
+      const mapBoxEl = clone.querySelector(".mapBox");
+      if (mapBoxEl) {
+        mapBoxEl.style.width = "100%";
+        mapBoxEl.style.margin = "0";
+      }
+      const mapSvg = clone.querySelector(".mapBox svg");
+      if (mapSvg) mapSvg.style.height = "auto";
       const Legend = clone.querySelector(".mapLegend");
       if (Legend) {
-        Legend.style.fontSize = "16px";
+        Legend.style.fontSize = "18px";
         Legend.style.fontWeight = "700";
-        Legend.style.marginLeft = "90px";
+        Legend.style.flexDirection = "row";
+        Legend.style.margin = "0";
+        Legend.style.paddingLeft = "20px";
       }
       const compass = clone.querySelector(".resized-image");
       if (compass) {
-        if (isMobile) {
-          compass.style.width = "140px";
-          compass.style.marginTop = "-10px";
-          compass.style.marginLeft = "10px";
-        } else {
-          compass.style.width = "120px";
-          compass.style.height = "auto";
-          compass.style.marginTop = "40px";
-        }
+        compass.style.position = "absolute";
+        compass.style.width = "120px";
+        compass.style.height = "auto";
+        compass.style.left = "20px";
+        compass.style.top = "70px";
       }
       const exportBtn = clone.querySelector(".export");
       if (exportBtn) exportBtn.remove();
@@ -658,7 +666,9 @@ export default function TelecomMap() {
 
   return (
     <div className="page">
+      {menuOpen && <div className="sidebarOverlay" onClick={() => setMenuOpen(false)} />}
       <div className={`topMenu ${menuOpen ? "expanded" : "collapsed"}`}>
+        <button type="button" className="sidebarCloseBtn" aria-label="Close menu" onClick={() => setMenuOpen(false)}>✕</button>
         <button className={`menuBtn ${activePage === "dashboard" ? "active" : ""}`} onClick={() => { setActivePage("dashboard"); if (window.innerWidth <= 1100) setMenuOpen(false); }}><FaTachometerAlt className="menuIcon" />{menuOpen && "Dashboard"}</button>
         {/* Data Upload button — commented out (hidden from sidebar). To show it again: uncomment this AND add FaUpload back in the react-icons/fa import at the top.
         <button className={`menuBtn ${activePage === "workupdate" ? "active" : ""}`} onClick={() => { setActivePage("workupdate"); if (window.innerWidth <= 1100) setMenuOpen(false); }}><FaUpload className="menuIcon" />{menuOpen && "Data Upload"}</button>
