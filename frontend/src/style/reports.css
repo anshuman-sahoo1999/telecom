@@ -1,3 +1,6 @@
+/* =========================================================
+   MODAL
+   ========================================================= */
 .modalOverlay {
   position: fixed;
   inset: 0;
@@ -19,7 +22,7 @@
   overflow: hidden;
   display: flex;
   flex-direction: column;
-  box-shadow: 0 25px 70px rgba(0,0,0,0.35);
+  box-shadow: 0 25px 70px rgba(0, 0, 0, 0.35);
 }
 
 .modalHeader {
@@ -46,7 +49,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  background: rgba(255,255,255,0.2);
+  background: rgba(255, 255, 255, 0.2);
   font-size: 22px;
 }
 
@@ -69,7 +72,7 @@
 }
 
 .closeBtn {
-  background: rgba(255,255,255,0.15);
+  background: rgba(255, 255, 255, 0.15);
   border: none;
   color: #fff;
   width: 38px;
@@ -83,51 +86,19 @@
   transition: 0.2s;
 }
 
-
-
 .modalBody {
   padding: 10px;
-  overflow-y: auto;  
+  overflow-y: auto;
   flex: 1;
 }
 
-@media (max-width: 768px) {
-
-  .modalContent {
-    max-height: 95vh;
-  }
-
-  .modalHeader {
-    padding: 10px;
-  }
-
-  .statusMain {
-    font-size: 14px;
-  }
-
-  .statusIcon {
-    width: 40px;
-    height: 40px;
-    font-size: 18px;
-  }
-
-  .closeBtn {
-    width: 34px;
-    height: 34px;
-    font-size: 16px;
-   
-  }
-
-  .modalOverlay {
-  align-items: flex-start;
-  padding-top: 120px;   
-  padding-left: 20px;
-  padding-right: 20px;
-  padding-bottom: 20px;
-}
-}
+/* =========================================================
+   REPORTS PAGE - DESKTOP (this look is kept on tablet + mobile)
+   ========================================================= */
 .reports {
   width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
   padding: 22px;
   font-family: "Segoe UI", Arial, sans-serif;
   background: linear-gradient(135deg, #eef2ff, #f7f9fc);
@@ -139,8 +110,8 @@
   margin-bottom: 18px;
 }
 
-.month-select{
-  width: 100px;
+.month-select {
+  width: 130px;
   padding: 10px 14px;
   border-radius: 10px;
   border: 1px solid #d6dcff;
@@ -160,6 +131,7 @@
   display: flex;
   flex-direction: column;
   gap: 22px;
+  min-width: 0;
 }
 
 .empty {
@@ -169,16 +141,24 @@
   border-radius: 14px;
   color: #777;
   font-size: 15px;
-  box-shadow: 0 6px 18px rgba(0,0,0,0.06);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.06);
+}
+
+/* ---------- TABLE ---------- */
+.rpTableWrap {
+  width: 100%;
+  max-width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  border-radius: 14px;
+  background: #fff;
+  box-shadow: 0 8px 22px rgba(90, 120, 250, 0.12);
 }
 
 .reportTable {
   width: 100%;
   border-collapse: collapse;
   background: #ffffff;
-  border-radius: 14px;
-  overflow: hidden;
-  box-shadow: 0 8px 22px rgba(90, 120, 250, 0.12);
 }
 
 .reportTable thead {
@@ -191,6 +171,7 @@
   font-size: 15px;
   font-weight: 600;
   color: #fff;
+  white-space: nowrap;
 }
 
 .reportTable td {
@@ -198,11 +179,34 @@
   border-top: 1px solid #f1f3ff;
   font-size: 15px;
   color: #444;
+  vertical-align: middle;
+}
+
+.reportTable tbody tr:hover {
+  background: #f6f8ff;
+  transition: 0.2s;
+}
+
+.domain-main {
+  font-weight: 600;
+  color: #222;
+}
+
+.domain-sub {
+  font-size: 12px;
+  color: #64748b;
+  font-style: italic;
+  margin-top: 2px;
+}
+
+.job-main {
+  white-space: nowrap;
 }
 
 .highlight {
   font-weight: 600;
   color: #5b7cfa;
+  white-space: nowrap;
 }
 
 .totalRow td {
@@ -212,260 +216,18 @@
 }
 
 .totalRow .highlight {
-  color: #56921e;
   font-size: 16px;
 }
 
-.summaryWrap {
-  display: flex;
-  justify-content: flex-end;
-}
-
-.summaryBox {
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  background: linear-gradient(135deg, #ffffff, #f7f8ff);
-  padding: 16px;
-  border-radius: 16px;
-  min-width: 260px;
-  max-width: 320px;
-  box-shadow: 0 10px 25px rgba(91, 124, 250, 0.15);
-  border: 1px solid #eef1ff;
-}
-
-.iconBox {
-  width: 72px;
-  height: 72px;
-  border-radius: 16px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: linear-gradient(135deg, #10162e, #605685);
-  color: #fff;
-  font-size: 56px;
-}
-
-.summaryText p {
-  margin: 0;
-  font-size: 13px;
-  color: #666;
-}
-
-.summaryText h1 {
-  margin: 3px 0;
-  font-size: 38px;
-  color: #b31a1a;
-  font-weight: bolder;
-}
-
-.dateText {
-  font-size: 12px;
-  color: #2c2c2c;
-}
-
-.reportTable tbody tr:hover {
-  background: #f6f8ff;
-  transition: 0.2s;
-}
-.domain-sub {
-  font-size: 12px;
-  color: #6b7280;
-  margin-top: 2px;
-}
-
-@media (max-width: 768px) {
-  .reports {
-    padding: 14px;
-  }
-
-  .summaryWrap {
-    justify-content: center;
-  }
-
-  .summaryBox {
-    width: 100%;
-  }
-}
-
-@media (max-width: 768px) {
-
-  .modalContent {
-    height: auto;             
-    max-height: 95vh;
-    border-radius: 12px;
-  }
-
-  .modalHeader {
-    padding: 8px 12px;
-  }
-
-  .modalBody {
-    padding: 12px;
-    overflow-y: auto;
-  }
-
-  .reports {
-    padding: 10px;
-  }
-
-  .headerRight {
-    justify-content: center;
-  }
-
-  .month-select{
-    width: 100%;
-  }
-
-  /* ----- Tablet / large phone: real table, scrolls sideways only if needed ----- */
-  .rpTableWrap {
-    width: 100%;
-    overflow-x: auto;
-    -webkit-overflow-scrolling: touch;
-    border-radius: 12px;
-  }
-
-  .reportTable {
-    min-width: 620px;
-  }
-
-  .reportTable th,
-  .reportTable td {
-    font-size: 13px;
-    padding: 10px 12px;
-  }
-
-  .summaryWrap {
-    justify-content: center;
-  }
-
-  .summaryBox {
-    width: 100%;
-    padding: 14px;
-  }
-
-  .summaryText h1 {
-    font-size: 28px;   
-  }
-
-  .iconBox {
-    width: 60px;
-    height: 60px;
-    font-size: 42px;
-  }
-}
-
-
-/* ---- Phone only (600px and below): each row becomes a card ---- */
-@media (max-width: 600px) {
-  /* ----- Mobile: table rows become clean cards ----- */
-  .rpTableWrap {
-    width: 100%;
-    overflow: visible;
-    border-radius: 0;
-  }
-
-  .reportTable {
-    min-width: 0;
-  }
-
-  .reportTable,
-  .reportTable tbody,
-  .reportTable tr,
-  .reportTable td {
-    display: block;
-    width: 100%;
-  }
-
-  .reportTable {
-    background: transparent;
-    box-shadow: none;
-    border-radius: 0;
-    overflow: visible;
-  }
-
-  .reportTable thead {
-    display: none;
-  }
-
-  .reportTable tbody tr {
-    margin-bottom: 12px;
-    background: #ffffff;
-    border: 1px solid #e5e9ff;
-    border-radius: 12px;
-    overflow: hidden;
-    box-shadow: 0 4px 14px rgba(90, 120, 250, 0.10);
-  }
-
-  .reportTable td {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    gap: 12px;
-    padding: 10px 14px;
-    font-size: 13px;
-    text-align: right;
-    white-space: normal;
-    word-break: break-word;
-    border-top: 1px solid #f1f3ff;
-  }
-
-  .reportTable td:first-child {
-    border-top: none;
-  }
-
-  .reportTable td::before {
-    content: attr(data-label);
-    flex-shrink: 0;
-    text-align: left;
-    font-size: 12px;
-    font-weight: 600;
-    color: #5b7cfa;
-  }
-
-  .reportTable .cellValue {
-    text-align: right;
-  }
-
-  /* Total row card */
-  .reportTable tbody tr.totalRow {
-    background: #f3f6ff;
-    border-color: #d6dcff;
-  }
-
-  .reportTable .totalEmpty {
-    display: none;
-  }
-
-  .reportTable td.totalLabel {
-    justify-content: center;
-    font-size: 15px;
-    font-weight: 800;
-    color: #222;
-    border-top: none;
-  }
-
-  .reportTable td.totalLabel::before {
-    content: none;
-  }
-
-  .reportTable td.highlight {
-    font-size: 14px;
-  }
-}
-
-/* =========================================================
-   SUMMARY BOX (Jobs Delivered / Amdocs QC / OTP)
-   ========================================================= */
+/* ---------- SUMMARY BOX ---------- */
 .rpSummaryWrap {
   display: flex;
   justify-content: flex-end;
-  margin-top: 20px;
+  margin-top: 4px;
 }
 
 .rpSummaryBox {
   display: flex;
-  flex-wrap: wrap;
   align-items: center;
   gap: 18px;
   max-width: 100%;
@@ -496,9 +258,8 @@
 
 .rpStats {
   display: flex;
-  flex-wrap: wrap;
   align-items: center;
-  gap: 8px 16px;
+  gap: 16px;
 }
 
 .rpStat {
@@ -515,6 +276,7 @@
   font-size: 11px;
   font-weight: 600;
   color: #64748b;
+  white-space: nowrap;
 }
 
 .rpDivider {
@@ -530,10 +292,43 @@
   text-align: right;
 }
 
+/* =========================================================
+   TABLET (<= 768px)
+   Same desktop table, only spacing + font are reduced.
+   ========================================================= */
 @media (max-width: 768px) {
+  .reports {
+    padding: 14px;
+  }
+
+  .headerRight {
+    margin-bottom: 12px;
+  }
+
+  .reportsBox {
+    gap: 14px;
+  }
+
+  .reportTable th {
+    padding: 12px 10px;
+    font-size: 13px;
+  }
+
+  .reportTable td {
+    padding: 11px 10px;
+    font-size: 13px;
+  }
+
+  .domain-sub {
+    font-size: 11px;
+  }
+
+  .totalRow .highlight {
+    font-size: 14px;
+  }
+
   .rpSummaryWrap {
     justify-content: center;
-    margin-top: 14px;
   }
 
   .rpSummaryBox {
@@ -552,11 +347,10 @@
   }
 
   .rpSummaryBody {
-    flex: 1 1 200px;
+    flex: 1 1 auto;
   }
 
   .rpStats {
-    flex-wrap: nowrap;
     justify-content: space-around;
     gap: 6px;
   }
@@ -581,10 +375,121 @@
   .rpAsOn {
     text-align: center;
   }
-}
-@media (max-width: 768px) {
+
+  /* modal on tablet / mobile */
+  .modalOverlay {
+    align-items: flex-start;
+    padding: 120px 20px 20px 20px;
+  }
+
   .modalContent {
     max-height: calc(100vh - 140px);
     max-height: calc(100dvh - 140px);
+    border-radius: 12px;
+  }
+
+  .modalHeader {
+    padding: 10px;
+  }
+
+  .modalBody {
+    padding: 12px;
+  }
+
+  .statusMain {
+    font-size: 14px;
+  }
+
+  .statusIcon {
+    width: 40px;
+    height: 40px;
+    font-size: 18px;
+  }
+
+  .closeBtn {
+    width: 34px;
+    height: 34px;
+    font-size: 16px;
+  }
+}
+
+/* =========================================================
+   PHONE (<= 600px)
+   Still the real desktop-style table (no cards).
+   If the screen is too narrow, the table scrolls sideways
+   inside its own box, the page itself never moves.
+   ========================================================= */
+@media (max-width: 600px) {
+  .reports {
+    padding: 10px;
+  }
+
+  .month-select {
+    width: 130px;
+    padding: 8px 10px;
+    font-size: 13px;
+  }
+
+  .rpTableWrap {
+    border-radius: 12px;
+  }
+
+  .reportTable {
+    min-width: 560px;
+  }
+
+  .reportTable th {
+    padding: 10px 8px;
+    font-size: 12px;
+  }
+
+  .reportTable td {
+    padding: 9px 8px;
+    font-size: 12px;
+  }
+
+  .domain-sub {
+    font-size: 10px;
+  }
+
+  .totalRow .highlight {
+    font-size: 13px;
+  }
+
+  .rpSummaryBox {
+    padding: 12px 8px;
+    gap: 8px;
+  }
+
+  .rpSummaryIcon {
+    width: 40px;
+    height: 40px;
+    min-width: 40px;
+    font-size: 26px;
+  }
+
+  .rpStatValue {
+    font-size: 19px;
+  }
+
+  .rpStatLabel {
+    font-size: 9px;
+  }
+}
+
+/* Very small phones */
+@media (max-width: 380px) {
+  .reportTable {
+    min-width: 520px;
+  }
+
+  .reportTable th,
+  .reportTable td {
+    font-size: 11px;
+    padding: 8px 6px;
+  }
+
+  .rpSummaryIcon {
+    display: none;
   }
 }
