@@ -196,7 +196,6 @@ top:0;
   border-radius: 16px; 
   padding: 64px; 
   position: relative; 
- height: 820px; 
   box-shadow: 0 4px 20px rgba(0,0,0,0.05); 
   display: flex; 
   flex-direction: column; 
@@ -343,7 +342,7 @@ top:0;
   flex: 1.1; 
   display: flex; 
   flex-direction: column; 
-  gap: 10px; 
+  gap: 35px; 
 }
 
 .panelCard { 
@@ -949,15 +948,17 @@ top:0;
 /* =========================================================
    TOP FILTER BAR (Month / From Date / To Date / Reset)
    ========================================================= */
-.filterBar {
-  width: 100%;
-  max-width: 100%;
-  box-sizing: border-box;
-  overflow: hidden;
+.tmFilterBar {
   display: flex;
+  flex-direction: row;
   flex-wrap: wrap;
   align-items: flex-end;
-  gap: 14px;
+  gap: 16px;
+  flex: 0 0 auto;
+  width: 100%;
+  height: auto;
+  min-height: 0;
+  overflow: visible;
   padding: 16px 20px;
   background: #ffffff;
   border: 1px solid #e2e8f0;
@@ -965,62 +966,52 @@ top:0;
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.04);
 }
 
-.filterField {
+.tmFilterField {
   display: flex;
   flex-direction: column;
   gap: 6px;
+  width: 180px;
   min-width: 0;
 }
 
-.filterFieldMonth {
-  min-width: 200px;
+.tmFilterFieldMonth {
+  width: 240px;
 }
 
-.filterLabel {
+.tmFilterLabel {
+  display: block;
   font-size: 13px;
   font-weight: 700;
   color: #0f172a;
+  line-height: 1.2;
 }
 
-.filterSelect,
-.filterInput {
+.tmFilterSelect,
+.tmFilterInput {
   display: block;
   box-sizing: border-box;
   height: 40px;
+  min-height: 40px;
   min-width: 0;
-  max-width: 100%;
   width: 100%;
   padding: 0 12px;
+  margin: 0;
   font-size: 14px;
   font-weight: 500;
+  font-family: inherit;
   color: #1e293b;
-  background: #ffffff;
+  background-color: #ffffff;
   border: 1px solid #cbd5e1;
   border-radius: 8px;
   outline: none;
+  opacity: 1;
+  visibility: visible;
+}
+
+.tmFilterSelect {
   -webkit-appearance: none;
   appearance: none;
-  font-family: inherit;
-}
-
-.filterInput::-webkit-date-and-time-value {
-  text-align: left;
-  min-width: 0;
-}
-
-.filterInput::-webkit-datetime-edit {
-  padding: 0;
-  overflow: hidden;
-}
-
-.filterInput::-webkit-calendar-picker-indicator {
-  margin: 0;
-  padding: 0;
-  cursor: pointer;
-}
-
-.filterSelect {
-  padding-right: 32px;
+  padding-right: 34px;
   background-image:
     linear-gradient(45deg, transparent 50%, #64748b 50%),
     linear-gradient(135deg, #64748b 50%, transparent 50%);
@@ -1032,17 +1023,26 @@ top:0;
   cursor: pointer;
 }
 
-.filterSelect:focus,
-.filterInput:focus {
+.tmFilterInput {
+  cursor: pointer;
+}
+
+.tmFilterSelect:focus,
+.tmFilterInput:focus {
   border-color: #3b82f6;
   box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15);
 }
 
-.filterResetBtn {
+.tmFilterResetBtn {
+  display: block;
+  box-sizing: border-box;
   height: 40px;
-  padding: 0 24px;
+  min-height: 40px;
+  padding: 0 28px;
+  margin: 0;
   font-size: 14px;
   font-weight: 600;
+  font-family: inherit;
   color: #ffffff;
   background: #2563eb;
   border: none;
@@ -1052,12 +1052,12 @@ top:0;
   transition: all 0.2s ease;
 }
 
-.filterResetBtn:hover {
+.tmFilterResetBtn:hover {
   background: #1d4ed8;
   box-shadow: 0 4px 12px rgba(37, 99, 235, 0.35);
 }
 
-.filterResetBtn:active {
+.tmFilterResetBtn:active {
   transform: scale(0.98);
 }
 
@@ -1069,59 +1069,60 @@ top:0;
 
 /* ---- Tablet ---- */
 @media (max-width: 1100px) {
-  .filterBar {
+  .tmFilterBar {
     padding: 14px 16px;
+    gap: 14px;
+  }
+  .tmFilterField {
+    width: calc(33.333% - 10px);
+    flex: 1 1 150px;
+  }
+  .tmFilterFieldMonth {
+    width: auto;
+    flex: 1 1 220px;
   }
 }
 
 /* ---- Mobile ---- */
 @media (max-width: 768px) {
-  .filterBar {
+  .tmFilterBar {
     display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-columns: 1fr 1fr;
     gap: 12px;
     padding: 12px;
     border-radius: 12px;
   }
 
-  .filterField,
-  .filterFieldMonth {
-    min-width: 0;
+  .tmFilterField,
+  .tmFilterFieldMonth {
     width: 100%;
+    flex: none;
   }
 
-  .filterFieldMonth {
+  .tmFilterFieldMonth {
     grid-column: 1 / -1;
   }
 
-  .filterLabel {
+  .tmFilterLabel {
     font-size: 12px;
   }
 
-  .filterSelect,
-  .filterInput {
-    height: 40px;
+  .tmFilterSelect,
+  .tmFilterInput {
     font-size: 13px;
-    padding: 0 8px;
+    padding: 0 10px;
   }
 
-  .filterSelect {
+  .tmFilterSelect {
     padding-right: 30px;
   }
 
-  .filterResetBtn {
+  .tmFilterResetBtn {
     grid-column: 1 / -1;
     width: 100%;
-    height: 40px;
   }
 
   .kpiQcOtpRow {
     gap: 4px 10px;
-  }
-}
-
-@media (max-width: 360px) {
-  .filterBar {
-    grid-template-columns: minmax(0, 1fr);
   }
 }
