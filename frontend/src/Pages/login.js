@@ -36,8 +36,8 @@ const Login = () => {
 
       localStorage.setItem("user", JSON.stringify(res.data.user));
       localStorage.setItem("role", res.data.role);
-      localStorage.setItem("name", res.data.user.name);   // ✅ ADD THIS
-      localStorage.setItem("domain", res.data.domain);
+      localStorage.setItem("name", res.data.user.name);
+      localStorage.setItem("domain", res.data.domain ?? "");
 
       switch (res.data.role) {
         case "MASTER":
@@ -63,18 +63,18 @@ const Login = () => {
         default:
           navigate("/telecom");
       }
-    } catch (error) {
-      setError(error.response?.data?.message || "Login failed");
+    } catch (err) {
+      setError(err.response?.data?.message || "Login failed");
+    } finally {
+      setIsLoading(false);
     }
-
-    setIsLoading(false);
   };
 
   return (
     <div className="auth-page">
       <div className="auth-left">
         <div className="logo-box">
-          <img src="Image/img1.png" alt="logo" />
+          <img src="/Image/img1.png" alt="logo" />
         </div>
 
         <div className="left-content">
@@ -88,12 +88,11 @@ const Login = () => {
       <div
         className="auth-right"
         style={{
-          
-          backgroundImage: `url(${"/Image/img2.png"})`,
+          backgroundImage: `url("/Image/img2.png")`,
           backgroundRepeat: "no-repeat",
           backgroundPosition: "center bottom",
           backgroundSize: "contain",
-          backgroundColor: " #ffffff"
+          backgroundColor: "#ffffff",
         }}
       >
         <div className="auth-card">
