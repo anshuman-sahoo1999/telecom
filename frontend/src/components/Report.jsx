@@ -2,15 +2,18 @@ import { API_BASE_URL } from "../config";
 import React, { useEffect, useState } from "react";
 import axios from "axios";
 import "../style/reports.css";
+
 export default function Reports({ domain, states }) {
   const [data, setData] = useState([]);
   const [open, setOpen] = useState(false);
   const [selectedPeriod, setSelectedPeriod] = useState("");
   const [lastUpdateMap, setLastUpdateMap] = useState({});
+
   useEffect(() => {
     const timer = setTimeout(() => setOpen(true), 50);
     return () => clearTimeout(timer);
   }, []);
+
   // ================= REGION FUNCTION =================
   const getRegion = (state) => {
     const map = {
@@ -55,7 +58,34 @@ export default function Reports({ domain, states }) {
   const matchState = (item) =>
     !selectedStatesNorm.length || selectedStatesNorm.includes(norm(item.state));
 
-  // FETCH LAST UPDATE MAP
+  // Reads a "Jan-25" / "Jan,2025" style value and returns { month, fullYear } or null
+  const parseMonthValue = (m) => {
+    if (!m) return null;
+    const str = String(m);
+    const parts = str.includes(",") ? str.split(",") : str.split("-");
+    const month = parts[0]?.trim();
+    const year = parts[1]?.trim();
+    if (!month || !year) return null;
+    const fullYear = year.length === 2 ? `20${year}` : year;
+    return { month, fullYear };
+  };
+
+  // Picks the newest valid date out of a list of rows
+  const latestDateFromRows = (rows) => {
+    const dates = rows
+      .map(
+        (item) =>
+          item.updatedAt || item.lastUpdate || item.updated_at ||
+          item.last_update || item.date || item.createdAt
+      )
+      .filter(Boolean)
+      .map((d) => new Date(d))
+      .filter((d) => !isNaN(d.getTime()));
+    if (!dates.length) return null;
+    return new Date(Math.max(...dates.map((d) => d.getTime())));
+  };
+
+  // ================= FETCH LAST UPDATE MAP =================
   useEffect(() => {
     let cancelled = false;
     axios
@@ -97,40 +127,27 @@ export default function Reports({ domain, states }) {
     if (dates.length) {
       return new Date(Math.max(...dates.map((d) => d.getTime())));
     }
-    const fallbackDates = data
-      .map((item) => item.updatedAt || item.lastUpdate || item.updated_at || item.last_update || item.date || item.createdAt)
-      .filter(Boolean)
-      .map((d) => new Date(d))
-      .filter((d) => !isNaN(d.getTime()));
-    if (!fallbackDates.length) return null;
-    return new Date(Math.max(...fallbackDates.map((d) => d.getTime())));
+    return latestDateFromRows(data);
   })();
 
   const domainLastUpdate = (() => {
     const matchedKey = Object.keys(lastUpdateMap).find((k) => norm(k) === norm(domain));
     if (matchedKey && lastUpdateMap[matchedKey]) return lastUpdateMap[matchedKey];
-    const rows = data.filter((item) => norm(item.domain) === norm(domain));
-    const fallbackDates = rows
-      .map((item) => item.updatedAt || item.lastUpdate || item.updated_at || item.last_update || item.date || item.createdAt)
-      .filter(Boolean)
-      .map((d) => new Date(d))
-      .filter((d) => !isNaN(d.getTime()));
-    if (!fallbackDates.length) return null;
-    return new Date(Math.max(...fallbackDates.map((d) => d.getTime())));
+    return latestDateFromRows(data.filter((item) => norm(item.domain) === norm(domain)));
   })();
 
   const currentLastUpdate =
-    domain && domain !== "All"
-      ? domainLastUpdate
-      : overallLastUpdate;
+    domain && domain !== "All" ? domainLastUpdate : overallLastUpdate;
 
   const formattedLastUpdate = currentLastUpdate
     ? new Date(currentLastUpdate).toLocaleDateString("en-IN", {
-      day: "2-digit",
-      month: "short",
-      year: "numeric",
-    })
+        day: "2-digit",
+        month: "short",
+        year: "numeric",
+      })
     : "-";
+
+  // ================= FETCH DATA =================
   useEffect(() => {
     let cancelled = false;
     axios
@@ -146,9 +163,10 @@ export default function Reports({ domain, states }) {
       cancelled = true;
     };
   }, [domain, states]);
+
   const monthOrder = [
     "Jan", "Feb", "Mar", "Apr", "May", "Jun",
-    "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"
+    "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
   ];
 
   const monthYearOptions = Array.from(
@@ -157,14 +175,8 @@ export default function Reports({ domain, states }) {
         .filter((item) => matchDomain(item) && matchState(item))
         .flatMap((item) =>
           (Array.isArray(item.months) ? item.months : []).map((m) => {
-            if (!m) return null;
-            const parts = String(m).includes(",") ? String(m).split(",") : String(m).split("-");
-            const month = parts[0]?.trim();
-            const year = parts[1]?.trim();
-
-            if (!month || !year) return null;
-            const fullYear = year.length === 2 ? `20${year}` : year;
-            return `${month} ${fullYear}`;
+            const parsed = parseMonthValue(m);
+            return parsed ? `${parsed.month} ${parsed.fullYear}` : null;
           })
         )
         .filter(Boolean)
@@ -222,43 +234,25 @@ export default function Reports({ domain, states }) {
     return null;
   };
 
-  // ================= JOB FORMAT =================
-  const getJobData = () => {
-    return {
-      main: 1,
-    };
-  };
-
   // ================= FILTERED DATA =================
   const filteredData = data.filter((item) => {
     if (!matchDomain(item)) return false;
-
-    // Apply the states/markets filter passed in from the parent.
     if (!matchState(item)) return false;
 
-    const months = Array.isArray(item.months) ? item.months : [];
     if (selectedPeriod) {
+      const [selMonth, selYear] = selectedPeriod.split(" ");
+      const months = Array.isArray(item.months) ? item.months : [];
       return months.some((m) => {
-        if (!m) return false;
-        const parts = String(m).includes(",") ? String(m).split(",") : String(m).split("-");
-        const month = parts[0]?.trim();
-        const year = parts[1]?.trim();
-        if (!month || !year) return false;
-        const fullYear = year.length === 2 ? `20${year}` : year;
-
-        return (
-          month === selectedPeriod.split(" ")[0] &&
-          fullYear === selectedPeriod.split(" ")[1]
-        );
+        const parsed = parseMonthValue(m);
+        return parsed && parsed.month === selMonth && parsed.fullYear === selYear;
       });
     }
     return true;
   });
 
-  // ================= TOTAL JOBS =================
+  // ================= TOTALS =================
   const totalJobs = filteredData.length;
 
-  // ================= OVERALL QC / OTP (for summary boxes) =================
   const overallQc = (() => {
     const vals = filteredData
       .map((x) => parsePercent(x.amdocsQc || x.amdocs_qc))
@@ -273,9 +267,13 @@ export default function Reports({ domain, states }) {
     return Math.round((metCount / filteredData.length) * 100);
   })();
 
+  const qcText = overallQc !== null ? `${overallQc}%` : "0%";
+  const otpText = overallOtp !== null ? `${overallOtp}%` : "0%";
+  const qcTotalColor = getPerfColor(overallQc !== null ? overallQc : 0);
+  const otpTotalColor = getPerfColor(overallOtp !== null ? overallOtp : 0);
+
   return (
     <div className={`reports ${open ? "open" : "close"}`}>
-
       {/* ================= FILTER ================= */}
       <div className="headerRight">
         <select
@@ -284,8 +282,8 @@ export default function Reports({ domain, states }) {
           onChange={(e) => setSelectedPeriod(e.target.value)}
         >
           <option value="">All Months</option>
-          {monthYearOptions.map((p, i) => (
-            <option key={i} value={p}>
+          {monthYearOptions.map((p) => (
+            <option key={p} value={p}>
               {p}
             </option>
           ))}
@@ -294,83 +292,77 @@ export default function Reports({ domain, states }) {
 
       {/* ================= TABLE ================= */}
       <div className="reportsBox">
-
         {filteredData.length === 0 ? (
           <div className="empty">No data found</div>
         ) : (
           <>
             <div className="rpTableWrap">
-            <table className="reportTable">
-              <thead>
-                <tr>
-                  <th>Sl.No</th>
-                  <th>Domain</th>
-                  <th>Region</th>
-                  <th>Market Name</th>
-                  <th>No.of Job Delivered</th>
-                  <th>Amdocs QC</th>
-                  <th>OTP</th>
-                </tr>
-              </thead>
+              <table className="reportTable">
+                <thead>
+                  <tr>
+                    <th className="colSl">Sl.No</th>
+                    <th className="colDomain">Domain</th>
+                    <th className="colRegion">Region</th>
+                    <th className="colMarket">Market Name</th>
+                    <th className="colNum">No.of Job Delivered</th>
+                    <th className="colNum">Amdocs QC</th>
+                    <th className="colNum">OTP</th>
+                  </tr>
+                </thead>
 
-              <tbody>
+                <tbody>
+                  {filteredData.map((item, index) => {
+                    const qcVal = parsePercent(item.amdocsQc || item.amdocs_qc);
+                    const otpRaw =
+                      item.otp !== null && item.otp !== undefined && item.otp !== ""
+                        ? item.otp.toString()
+                        : "-";
+                    const qcColor = getPerfColor(qcVal !== null ? qcVal : 0);
+                    const otpColor = getPerfColor(getOtpPercent(item.otp));
 
-                {filteredData.map((item, index) => {
-                  const job = getJobData(item);
-                  const qcVal = parsePercent(item.amdocsQc || item.amdocs_qc);
-                  const otpRaw =
-                    item.otp !== null && item.otp !== undefined && item.otp !== ""
-                      ? item.otp.toString()
-                      : "-";
-                  const qcColor = getPerfColor(qcVal !== null ? qcVal : 0);
-                  const otpColor = getPerfColor(getOtpPercent(item.otp));
+                    return (
+                      <tr key={item._id || item.id || index}>
+                        <td>{index + 1}</td>
 
-                  return (
-                    <tr key={index}>
-                      <td data-label="Sl.No">{index + 1}</td>
+                        <td className="domain-cell">
+                          <div className="domain-main">{item.domain || "-"}</div>
+                          <div className="domain-sub">{item.job_type || "-"}</div>
+                        </td>
 
-                      <td className="domain-cell" data-label="Domain">
-                        <div className="cellValue">
-                          <div className="domain-main">
-                            {item.domain || "-"}
+                        <td>{item.region || getRegion(item.state)}</td>
+                        <td>{item.state}</td>
+
+                        <td className="job-cell">
+                          <div className="job-main">1</div>
+                        </td>
+
+                        <td className="job-cell">
+                          <div className="job-main" style={{ color: qcColor, fontWeight: 700 }}>
+                            {qcVal !== null ? `${qcVal}%` : "0%"}
                           </div>
+                        </td>
 
-                          {/* Domain ke neeche subDomain ki jagah ab job_type show hoga */}
-                          <div className="domain-sub" style={{ color: "#64748b", fontStyle: "italic" }}>
-                            {item.job_type || "-"}
+                        <td className="job-cell">
+                          <div className="job-main" style={{ color: otpColor, fontWeight: 700 }}>
+                            {otpRaw}
                           </div>
-                        </div>
-                      </td>
+                        </td>
+                      </tr>
+                    );
+                  })}
 
-                      <td data-label="Region">{item.region || getRegion(item.state)}</td>
-                      <td data-label="Market Name">{item.state}</td>
-
-                      <td className="job-cell" data-label="No.of Job Delivered">
-                        <div className="job-main">{job.main}</div>
-                      </td>
-
-                      <td className="job-cell" data-label="Amdocs QC">
-                        <div className="job-main" style={{ color: qcColor, fontWeight: 700 }}>{qcVal !== null ? `${qcVal}%` : "0%"}</div>
-                      </td>
-
-                      <td className="job-cell" data-label="OTP">
-                        <div className="job-main" style={{ color: otpColor, fontWeight: 700 }}>{otpRaw}</div>
-                      </td>
-                    </tr>
-                  );
-                })}
-                {/* TOTAL ROW */}
-                <tr className="totalRow">
-                  <td className="totalEmpty"></td>
-                  <td className="totalEmpty"></td>
-                  <td className="totalEmpty"></td>
-                  <td className="totalLabel">Total</td>
-                  <td className="highlight" data-label="No.of Job Delivered">{totalJobs}</td>
-                  <td className="highlight" data-label="Amdocs QC" style={{ color: getPerfColor(overallQc !== null ? overallQc : 0) }}>{overallQc !== null ? `${overallQc}%` : "0%"}</td>
-                  <td className="highlight" data-label="OTP" style={{ color: getPerfColor(overallOtp !== null ? overallOtp : 0) }}>{overallOtp !== null ? `${overallOtp}%` : "0%"}</td>
-                </tr>
-              </tbody>
-            </table>
+                  {/* TOTAL ROW */}
+                  <tr className="totalRow">
+                    <td className="totalEmpty"></td>
+                    <td className="totalEmpty"></td>
+                    <td className="totalEmpty"></td>
+                    <td className="totalLabel">Total</td>
+                    <td className="highlight">{totalJobs}</td>
+                    <td className="highlight" style={{ color: qcTotalColor }}>{qcText}</td>
+                    <td className="highlight" style={{ color: otpTotalColor }}>{otpText}</td>
+                  </tr>
+                </tbody>
+              </table>
             </div>
 
             {/* ================= SUMMARY ================= */}
@@ -388,15 +380,15 @@ export default function Reports({ domain, states }) {
                     </div>
                     <div className="rpDivider" />
                     <div className="rpStat">
-                      <div className="rpStatValue" style={{ color: getPerfColor(overallQc !== null ? overallQc : 0) }}>
-                        {overallQc !== null ? `${overallQc}%` : "0%"}
+                      <div className="rpStatValue" style={{ color: qcTotalColor }}>
+                        {qcText}
                       </div>
                       <div className="rpStatLabel">Amdocs QC</div>
                     </div>
                     <div className="rpDivider" />
                     <div className="rpStat">
-                      <div className="rpStatValue" style={{ color: getPerfColor(overallOtp !== null ? overallOtp : 0) }}>
-                        {overallOtp !== null ? `${overallOtp}%` : "0%"}
+                      <div className="rpStatValue" style={{ color: otpTotalColor }}>
+                        {otpText}
                       </div>
                       <div className="rpStatLabel">OTP</div>
                     </div>
