@@ -963,7 +963,7 @@ export default function TelecomMap() {
           })()}
           <div style={{ padding: "10px" }}>
             {Object.entries(mapReportData[tooltip.data?.state] || {})
-              .filter(([d, jobs]) => Number(jobs) > 0)
+              .filter(([, jobs]) => Number(jobs) > 0)
               .map(([d, jobs]) => {
                 const domainStat = stateDomainStatsMap[tooltip.data?.state]?.[d];
                 const qc = domainStat && domainStat.qcCount > 0 ? Math.round(domainStat.qcSum / domainStat.qcCount) : null;
