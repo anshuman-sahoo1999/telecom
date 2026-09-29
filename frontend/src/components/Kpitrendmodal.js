@@ -1,12 +1,19 @@
 import React, { useState, useMemo, useRef, useEffect } from "react";
-import { createPortal } from "react-dom";
 import {
   ResponsiveContainer, LineChart, Line, XAxis, YAxis, CartesianGrid,
   Tooltip, Legend, LabelList, ReferenceLine
 } from "recharts";
 import { FaDownload } from "react-icons/fa";
 import html2canvas from "html2canvas";
-import "../style/kpitrend.css";
+import "../style/kpiTrend.css";
+
+/* ======================================================
+   KPI TREND MODAL  (OTP / QC month-year wise line chart)
+   Props:
+     data     -> all work rows (allWorkData from Telecom page)
+     domains  -> list of domain names for the dropdown
+     onClose  -> function to close the popup
+====================================================== */
 
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
@@ -36,13 +43,6 @@ export default function KpiTrendModal({ data = [], domains = [], onClose }) {
   const [showExportMenu, setShowExportMenu] = useState(false);
   const chartRef = useRef(null);
   const currentYear = new Date().getFullYear();
-
-  // Lock background page scroll while popup is open
-  useEffect(() => {
-    const prev = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-    return () => { document.body.style.overflow = prev; };
-  }, []);
 
   // Close popup with Esc key
   useEffect(() => {
@@ -140,7 +140,7 @@ export default function KpiTrendModal({ data = [], domains = [], onClose }) {
     );
   };
 
-  return createPortal(
+  return (
     <div className="ktmOverlay" onClick={onClose}>
       <div className="ktmModal" onClick={(e) => { e.stopPropagation(); setShowExportMenu(false); }}>
         {/* ---------- Header ---------- */}
@@ -257,7 +257,6 @@ export default function KpiTrendModal({ data = [], domains = [], onClose }) {
           )}
         </div>
       </div>
-    </div>,
-    document.body
+    </div>
   );
 }
