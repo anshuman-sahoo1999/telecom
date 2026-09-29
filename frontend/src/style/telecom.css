@@ -424,7 +424,7 @@ top:0;
 }
 
 .kpiCardModern { 
-  padding: 20px; 
+  padding: 20px 16px; 
   border-radius: 14px; 
   background: #ffffff;
   border: 1px solid #e2e8f0; 
@@ -1100,8 +1100,9 @@ top:0;
 
 /* KPI card: QC / OTP row should never overflow */
 .kpiQcOtpRow {
-  flex-wrap: wrap;
-  gap: 6px 8px;
+  flex-wrap: nowrap !important;   /* QC and OTP always stay left-right in ONE line */
+  justify-content: space-between;
+  gap: 6px;
 }
 
 /* ---- Tablet ---- */
@@ -1160,7 +1161,7 @@ top:0;
   }
 
   .kpiQcOtpRow {
-    gap: 4px 10px;
+    gap: 6px;
   }
 }
 
