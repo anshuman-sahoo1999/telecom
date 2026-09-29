@@ -363,6 +363,38 @@ export default function TelecomMap() {
     return "#dc2626";
   };
 
+  // Box style for QC / OTP badge: light tinted background + border + text in the same colour family
+  const getPerfBoxStyle = (val) => {
+    const v = val === null || val === undefined || isNaN(val) ? 0 : val;
+    const color = getPerfColor(v);
+    const bg = v >= 90 ? "#dcfce7" : v >= 80 ? "#ffedd5" : "#fee2e2";
+    const border = v >= 90 ? "#86efac" : v >= 80 ? "#fdba74" : "#fca5a5";
+    return {
+      fontSize: "11px",
+      fontWeight: 700,
+      color,
+      background: bg,
+      border: `1px solid ${border}`,
+      borderRadius: "6px",
+      padding: "3px 8px",
+      whiteSpace: "nowrap",
+      display: "inline-block",
+    };
+  };
+
+  // "NOOF ASE" / "NO OF ASE" / "No.of ASE"  ->  "No.of ase"  (everything else small letters)
+  const formatUomLabel = (key) => {
+    const raw = String(key || "").trim();
+    if (!raw) return raw;
+    const m = raw.match(/^(no\.?\s*of|noof|number\s*of)\s*(.*)$/i);
+    if (m) {
+      const rest = m[2].trim().toLowerCase();
+      return rest ? `No.of ${rest}` : "No.of";
+    }
+    const low = raw.toLowerCase();
+    return low.charAt(0).toUpperCase() + low.slice(1);
+  };
+
   const resetDateFilters = () => {
     setSelectedMonth(null);
     setFromDate("");
@@ -680,7 +712,7 @@ export default function TelecomMap() {
               <div style={{ display: "flex", gap: 10, paddingLeft: 13, whiteSpace: "nowrap" }}>
                 <span style={{ color: "#2563eb" }}><b style={{ fontWeight: 800 }}>Job-</b> <b style={{ fontWeight: 800 }}>{p.value}</b></span>
                 <span style={{ color: getPerfColor(qc !== null && qc !== undefined ? qc : 0) }}><b style={{ fontWeight: 800 }}>QC-</b> <b style={{ fontWeight: 800 }}>{qc !== null && qc !== undefined ? `${qc}%` : "0%"}</b></span>
-                <span style={{ color: getPerfColor(otp, "#64748b") }}><b style={{ fontWeight: 800 }}>OTP-</b> <b style={{ fontWeight: 800 }}>{otp !== null && otp !== undefined ? `${otp}%` : "N/A"}</b></span>
+                <span style={{ color: getPerfColor(otp !== null && otp !== undefined ? otp : 0) }}><b style={{ fontWeight: 800 }}>OTP-</b> <b style={{ fontWeight: 800 }}>{otp !== null && otp !== undefined ? `${otp}%` : "0%"}</b></span>
               </div>
             </div>
           );
@@ -698,7 +730,7 @@ export default function TelecomMap() {
         <div style={{ fontWeight: 800, marginBottom: 4, fontSize: 12.5, color: "#0f172a" }}>{d.name}</div>
         <div style={{ color: "#2563eb" }}><b style={{ fontWeight: 800 }}>Job-</b> <b style={{ fontWeight: 800 }}>{d.jobs}</b> <span style={{ color: "#64748b", fontWeight: 600 }}>(<b style={{ fontWeight: 800 }}>{d.value}%</b>)</span></div>
         <div style={{ color: getPerfColor(d.qc !== null && d.qc !== undefined ? d.qc : 0) }}><b style={{ fontWeight: 800 }}>QC-</b> <b style={{ fontWeight: 800 }}>{d.qc !== null && d.qc !== undefined ? `${d.qc}%` : "0%"}</b></div>
-        <div style={{ color: getPerfColor(d.otp, "#64748b") }}><b style={{ fontWeight: 800 }}>OTP-</b> <b style={{ fontWeight: 800 }}>{d.otp !== null && d.otp !== undefined ? `${d.otp}%` : "N/A"}</b></div>
+        <div style={{ color: getPerfColor(d.otp !== null && d.otp !== undefined ? d.otp : 0) }}><b style={{ fontWeight: 800 }}>OTP-</b> <b style={{ fontWeight: 800 }}>{d.otp !== null && d.otp !== undefined ? `${d.otp}%` : "0%"}</b></div>
       </div>
     );
   };
@@ -803,15 +835,15 @@ export default function TelecomMap() {
                                 });
                               }
                             });
-                            return Object.entries(uomTotals).map(([key, value]) => `${key}: ${value}`).join(" | ");
+                            return Object.entries(uomTotals).map(([key, value]) => `${formatUomLabel(key)}: ${value}`).join(" | ");
                           })()}
                         </div>
-                        <div className="kpiQcOtpRow" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", margin: "4px 0" }}>
-                          <span style={{ fontSize: "11px", fontWeight: 700, color: getPerfColor(getDomainQcAvg(item.domain) ?? 0) }}>
+                        <div className="kpiQcOtpRow" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", margin: "8px 0 4px" }}>
+                          <span style={getPerfBoxStyle(getDomainQcAvg(item.domain) ?? 0)}>
                             Amdocs QC: {(() => { const v = getDomainQcAvg(item.domain); return v !== null ? `${v}%` : "0%"; })()}
                           </span>
-                          <span style={{ fontSize: "11px", fontWeight: 700, color: getPerfColor(getDomainOtpPercent(item.domain), "#64748b") }}>
-                            OTP: {(() => { const v = getDomainOtpPercent(item.domain); return v !== null ? `${v}%` : "N/A"; })()}
+                          <span style={getPerfBoxStyle(getDomainOtpPercent(item.domain) ?? 0)}>
+                            OTP: {(() => { const v = getDomainOtpPercent(item.domain); return v !== null ? `${v}%` : "0%"; })()}
                           </span>
                         </div>
                         <div className="kpiValueModern">{getDomainJobs(item.domain)}<span> Jobs</span></div>
@@ -1050,7 +1082,7 @@ export default function TelecomMap() {
                     </div>
                     <div style={{ display: "flex", justifyContent: "space-between", fontSize: "11px", fontWeight: "600" }}>
                       <span style={{ color: getPerfColor(qc !== null ? qc : 0) }}>QC: {qc !== null ? `${qc}%` : "0%"}</span>
-                      <span style={{ color: getPerfColor(otp, "#64748b") }}>OTP: {otp !== null && otp !== undefined ? `${otp}%` : "N/A"}</span>
+                      <span style={{ color: getPerfColor(otp !== null && otp !== undefined ? otp : 0) }}>OTP: {otp !== null && otp !== undefined ? `${otp}%` : "0%"}</span>
                     </div>
                   </div>
                 );
