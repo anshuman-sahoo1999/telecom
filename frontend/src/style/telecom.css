@@ -950,6 +950,10 @@ top:0;
    TOP FILTER BAR (Month / From Date / To Date / Reset)
    ========================================================= */
 .filterBar {
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+  overflow: hidden;
   display: flex;
   flex-wrap: wrap;
   align-items: flex-end;
@@ -980,8 +984,11 @@ top:0;
 
 .filterSelect,
 .filterInput {
+  display: block;
+  box-sizing: border-box;
   height: 40px;
   min-width: 0;
+  max-width: 100%;
   width: 100%;
   padding: 0 12px;
   font-size: 14px;
@@ -996,11 +1003,32 @@ top:0;
   font-family: inherit;
 }
 
+.filterInput::-webkit-date-and-time-value {
+  text-align: left;
+  min-width: 0;
+}
+
+.filterInput::-webkit-datetime-edit {
+  padding: 0;
+  overflow: hidden;
+}
+
+.filterInput::-webkit-calendar-picker-indicator {
+  margin: 0;
+  padding: 0;
+  cursor: pointer;
+}
+
 .filterSelect {
   padding-right: 32px;
-  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'><path fill='none' stroke='%2364748b' stroke-width='2' d='M1 1l5 5 5-5'/></svg>");
+  background-image:
+    linear-gradient(45deg, transparent 50%, #64748b 50%),
+    linear-gradient(135deg, #64748b 50%, transparent 50%);
+  background-position:
+    calc(100% - 18px) 17px,
+    calc(100% - 13px) 17px;
+  background-size: 5px 5px, 5px 5px;
   background-repeat: no-repeat;
-  background-position: right 12px center;
   cursor: pointer;
 }
 
@@ -1050,15 +1078,20 @@ top:0;
 @media (max-width: 768px) {
   .filterBar {
     display: grid;
-    grid-template-columns: 1fr 1fr;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 12px;
     padding: 12px;
     border-radius: 12px;
   }
 
+  .filterField,
+  .filterFieldMonth {
+    min-width: 0;
+    width: 100%;
+  }
+
   .filterFieldMonth {
     grid-column: 1 / -1;
-    min-width: 0;
   }
 
   .filterLabel {
@@ -1069,7 +1102,7 @@ top:0;
   .filterInput {
     height: 40px;
     font-size: 13px;
-    padding: 0 10px;
+    padding: 0 8px;
   }
 
   .filterSelect {
@@ -1084,5 +1117,11 @@ top:0;
 
   .kpiQcOtpRow {
     gap: 4px 10px;
+  }
+}
+
+@media (max-width: 360px) {
+  .filterBar {
+    grid-template-columns: minmax(0, 1fr);
   }
 }
