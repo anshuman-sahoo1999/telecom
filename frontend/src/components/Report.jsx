@@ -8,7 +8,8 @@ export default function Reports({ domain, states }) {
   const [selectedPeriod, setSelectedPeriod] = useState("");
   const [lastUpdateMap, setLastUpdateMap] = useState({});
   useEffect(() => {
-    setTimeout(() => setOpen(true), 50);
+    const timer = setTimeout(() => setOpen(true), 50);
+    return () => clearTimeout(timer);
   }, []);
   // ================= REGION FUNCTION =================
   const getRegion = (state) => {
@@ -47,8 +48,16 @@ export default function Reports({ domain, states }) {
     return [];
   })();
 
+  // Case-insensitive helpers so "ASE" / "Ase" and "Texas" / "texas" always match
+  const norm = (v) => (v === null || v === undefined ? "" : v.toString().trim().toLowerCase());
+  const selectedStatesNorm = selectedStates.map(norm);
+  const matchDomain = (item) => !domain || domain === "All" || norm(item.domain) === norm(domain);
+  const matchState = (item) =>
+    !selectedStatesNorm.length || selectedStatesNorm.includes(norm(item.state));
+
   // FETCH LAST UPDATE MAP
   useEffect(() => {
+    let cancelled = false;
     axios
       .get(`${API_BASE_URL}/api/work/domain-last-update`)
       .then((res) => {
@@ -69,12 +78,15 @@ export default function Reports({ domain, states }) {
             mapObj[domainKey] = dateVal;
           }
         });
-        setLastUpdateMap(mapObj);
+        if (!cancelled) setLastUpdateMap(mapObj);
       })
       .catch((err) => {
         console.log(err);
-        setLastUpdateMap({});
+        if (!cancelled) setLastUpdateMap({});
       });
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   const overallLastUpdate = (() => {
@@ -95,8 +107,9 @@ export default function Reports({ domain, states }) {
   })();
 
   const domainLastUpdate = (() => {
-    if (lastUpdateMap[domain]) return lastUpdateMap[domain];
-    const rows = data.filter((item) => item.domain === domain);
+    const matchedKey = Object.keys(lastUpdateMap).find((k) => norm(k) === norm(domain));
+    if (matchedKey && lastUpdateMap[matchedKey]) return lastUpdateMap[matchedKey];
+    const rows = data.filter((item) => norm(item.domain) === norm(domain));
     const fallbackDates = rows
       .map((item) => item.updatedAt || item.lastUpdate || item.updated_at || item.last_update || item.date || item.createdAt)
       .filter(Boolean)
@@ -119,11 +132,19 @@ export default function Reports({ domain, states }) {
     })
     : "-";
   useEffect(() => {
+    let cancelled = false;
     axios
       .get(`${API_BASE_URL}/api/work/all`)
       .then((res) => {
-        setData(res.data || []);
+        if (!cancelled) setData(Array.isArray(res.data) ? res.data : []);
+      })
+      .catch((err) => {
+        console.log(err);
+        if (!cancelled) setData([]);
       });
+    return () => {
+      cancelled = true;
+    };
   }, [domain, states]);
   const monthOrder = [
     "Jan", "Feb", "Mar", "Apr", "May", "Jun",
@@ -133,19 +154,11 @@ export default function Reports({ domain, states }) {
   const monthYearOptions = Array.from(
     new Set(
       data
-        .filter((item) => {
-          if (domain && domain !== "All") {
-            if (item.domain !== domain) return false;
-          }
-          if (selectedStates.length && !selectedStates.includes(item.state)) {
-            return false;
-          }
-          return true;
-        })
+        .filter((item) => matchDomain(item) && matchState(item))
         .flatMap((item) =>
-          (item.months || []).map((m) => {
+          (Array.isArray(item.months) ? item.months : []).map((m) => {
             if (!m) return null;
-            const parts = m.includes(",") ? m.split(",") : m.split("-");
+            const parts = String(m).includes(",") ? String(m).split(",") : String(m).split("-");
             const month = parts[0]?.trim();
             const year = parts[1]?.trim();
 
@@ -218,20 +231,16 @@ export default function Reports({ domain, states }) {
 
   // ================= FILTERED DATA =================
   const filteredData = data.filter((item) => {
-    if (domain && domain !== "All") {
-      if (item.domain !== domain) return false;
-    }
+    if (!matchDomain(item)) return false;
 
     // Apply the states/markets filter passed in from the parent.
-    if (selectedStates.length && !selectedStates.includes(item.state)) {
-      return false;
-    }
+    if (!matchState(item)) return false;
 
     const months = Array.isArray(item.months) ? item.months : [];
     if (selectedPeriod) {
       return months.some((m) => {
         if (!m) return false;
-        const parts = m.includes(",") ? m.split(",") : m.split("-");
+        const parts = String(m).includes(",") ? String(m).split(",") : String(m).split("-");
         const month = parts[0]?.trim();
         const year = parts[1]?.trim();
         if (!month || !year) return false;
@@ -290,6 +299,7 @@ export default function Reports({ domain, states }) {
           <div className="empty">No data found</div>
         ) : (
           <>
+            <div className="rpTableWrap">
             <table className="reportTable">
               <thead>
                 <tr>
@@ -317,31 +327,33 @@ export default function Reports({ domain, states }) {
 
                   return (
                     <tr key={index}>
-                      <td>{index + 1}</td>
+                      <td data-label="Sl.No">{index + 1}</td>
 
-                      <td className="domain-cell">
-                        <div className="domain-main">
-                          {item.domain || "-"}
-                        </div>
+                      <td className="domain-cell" data-label="Domain">
+                        <div className="cellValue">
+                          <div className="domain-main">
+                            {item.domain || "-"}
+                          </div>
 
-                        {/* Domain ke neeche subDomain ki jagah ab job_type show hoga */}
-                        <div className="domain-sub" style={{ color: "#64748b", fontStyle: "italic" }}>
-                          {item.job_type || "-"}
+                          {/* Domain ke neeche subDomain ki jagah ab job_type show hoga */}
+                          <div className="domain-sub" style={{ color: "#64748b", fontStyle: "italic" }}>
+                            {item.job_type || "-"}
+                          </div>
                         </div>
                       </td>
 
-                      <td>{item.region || getRegion(item.state)}</td>
-                      <td>{item.state}</td>
+                      <td data-label="Region">{item.region || getRegion(item.state)}</td>
+                      <td data-label="Market Name">{item.state}</td>
 
-                      <td className="job-cell">
+                      <td className="job-cell" data-label="No.of Job Delivered">
                         <div className="job-main">{job.main}</div>
                       </td>
 
-                      <td className="job-cell">
+                      <td className="job-cell" data-label="Amdocs QC">
                         <div className="job-main" style={{ color: qcColor, fontWeight: 700 }}>{qcVal !== null ? `${qcVal}%` : "0%"}</div>
                       </td>
 
-                      <td className="job-cell">
+                      <td className="job-cell" data-label="OTP">
                         <div className="job-main" style={{ color: otpColor, fontWeight: 700 }}>{otpRaw}</div>
                       </td>
                     </tr>
@@ -349,55 +361,47 @@ export default function Reports({ domain, states }) {
                 })}
                 {/* TOTAL ROW */}
                 <tr className="totalRow">
-                  <td></td>
-                  <td></td>
-                  <td></td>
-                  <td>Total</td>
-                  <td className="highlight">{totalJobs}</td>
-                  <td className="highlight" style={{ color: getPerfColor(overallQc !== null ? overallQc : 0) }}>{overallQc !== null ? `${overallQc}%` : "0%"}</td>
-                  <td className="highlight" style={{ color: getPerfColor(overallOtp !== null ? overallOtp : 0) }}>{overallOtp !== null ? `${overallOtp}%` : "0%"}</td>
+                  <td className="totalEmpty"></td>
+                  <td className="totalEmpty"></td>
+                  <td className="totalEmpty"></td>
+                  <td className="totalLabel">Total</td>
+                  <td className="highlight" data-label="No.of Job Delivered">{totalJobs}</td>
+                  <td className="highlight" data-label="Amdocs QC" style={{ color: getPerfColor(overallQc !== null ? overallQc : 0) }}>{overallQc !== null ? `${overallQc}%` : "0%"}</td>
+                  <td className="highlight" data-label="OTP" style={{ color: getPerfColor(overallOtp !== null ? overallOtp : 0) }}>{overallOtp !== null ? `${overallOtp}%` : "0%"}</td>
                 </tr>
               </tbody>
             </table>
+            </div>
 
             {/* ================= SUMMARY ================= */}
-            <div style={{ display: "flex", justifyContent: "flex-end", marginTop: "20px" }}>
-              <div
-                style={{display: "flex",flexWrap: "wrap",alignItems: "center",gap: "18px",maxWidth: "100%",boxSizing: "border-box",background: "#ffffff",border: "1px solid #e5e7eb",borderRadius: "16px",
-                  padding: "16px 26px",boxShadow: "0 4px 14px rgba(15, 23, 42, 0.06)",}}
-              >
-                <div
-                  style={{width: 64,height: 64,minWidth: 64,borderRadius: "14px", background: "linear-gradient(135deg, #3b82f6, #06b6d4)",
-                  display: "flex",alignItems: "center",justifyContent: "center",fontSize: 44,lineHeight: 1,}} >
-                  📶
-                </div>
+            <div className="rpSummaryWrap">
+              <div className="rpSummaryBox">
+                <div className="rpSummaryIcon">📶</div>
 
-                <div>
-                  <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: "8px 16px" }}>
-                    <div style={{ textAlign: "center" }}>
-                      <div style={{ fontSize: 30, fontWeight: 800, color: "#991b1b", lineHeight: 1.1 }}>
+                <div className="rpSummaryBody">
+                  <div className="rpStats">
+                    <div className="rpStat">
+                      <div className="rpStatValue" style={{ color: "#991b1b" }}>
                         {totalJobs}
                       </div>
-                      <div style={{ fontSize: 11, fontWeight: 600, color: "#64748b" }}>Jobs Delivered</div>
+                      <div className="rpStatLabel">Jobs Delivered</div>
                     </div>
-                    <div style={{ width: 1, height: 34, background: "#e2e8f0" }} />
-                    <div style={{ textAlign: "center" }}>
-                      <div style={{ fontSize: 30, fontWeight: 800, color: getPerfColor(overallQc !== null ? overallQc : 0), lineHeight: 1.1 }}>
+                    <div className="rpDivider" />
+                    <div className="rpStat">
+                      <div className="rpStatValue" style={{ color: getPerfColor(overallQc !== null ? overallQc : 0) }}>
                         {overallQc !== null ? `${overallQc}%` : "0%"}
                       </div>
-                      <div style={{ fontSize: 11, fontWeight: 600, color: "#64748b" }}>Amdocs QC</div>
+                      <div className="rpStatLabel">Amdocs QC</div>
                     </div>
-                    <div style={{ width: 1, height: 34, background: "#e2e8f0" }} />
-                    <div style={{ textAlign: "center" }}>
-                      <div style={{ fontSize: 30, fontWeight: 800, color: getPerfColor(overallOtp !== null ? overallOtp : 0), lineHeight: 1.1 }}>
+                    <div className="rpDivider" />
+                    <div className="rpStat">
+                      <div className="rpStatValue" style={{ color: getPerfColor(overallOtp !== null ? overallOtp : 0) }}>
                         {overallOtp !== null ? `${overallOtp}%` : "0%"}
                       </div>
-                      <div style={{ fontSize: 11, fontWeight: 600, color: "#64748b" }}>OTP</div>
+                      <div className="rpStatLabel">OTP</div>
                     </div>
                   </div>
-                  <div style={{ fontSize: 11, color: "#475569", marginTop: 6, textAlign: "right" }}>
-                    As on - {formattedLastUpdate}
-                  </div>
+                  <div className="rpAsOn">As on - {formattedLastUpdate}</div>
                 </div>
               </div>
             </div>
