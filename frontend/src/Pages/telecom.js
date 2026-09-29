@@ -25,6 +25,25 @@ import CapacityForecast from "../Pages/CapacityForecast";
 import JobHistory from "../Pages/JobHistory";
 import axios from "axios";
 
+/* ======================================
+   MODULE LEVEL HELPERS (component ke bahar — har render pe re-create nahi honge)
+====================================== */
+const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+const MONTH_KEYS = ["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"];
+
+const normalize = (d) => (d || "").toString().trim().toUpperCase();
+
+// "Jan,25" / "jan, 2025" / "January,25" -> { monthIdx, month, year }
+const parseMonthEntry = (m) => {
+  if (!m) return null;
+  const [mo, yr] = String(m).split(",");
+  const monthIdx = MONTH_KEYS.indexOf(String(mo || "").trim().slice(0, 3).toLowerCase());
+  if (monthIdx < 0) return null;
+  const y = String(yr || "").trim();
+  const fullYear = y.length === 2 ? Number(`20${y}`) : Number(y || new Date().getFullYear());
+  return { monthIdx, month: monthNames[monthIdx], year: fullYear };
+};
+
 export default function TelecomMap() {
   const [selectedKpiDomain, setSelectedKpiDomain] = useState(null);
   const [showKpiModal, setShowKpiModal] = useState(false);
@@ -34,15 +53,6 @@ export default function TelecomMap() {
     setSelectedKpiDomain(domain);
     setShowKpiModal(true);
   };
-
-  const handleStateHover = useCallback((stateName, evt) => {
-    setTooltip({
-      visible: true,
-      x: evt.clientX,
-      y: evt.clientY,
-      data: { state: stateName },
-    });
-  }, []);
 
   const monthsList = [
     "Jan", "Feb", "Mar", "Apr", "May", "Jun",
@@ -90,6 +100,16 @@ export default function TelecomMap() {
     y: 0,
     data: null,
   });
+
+  // FIX: setTooltip declare hone ke baad define kiya (pehle upar tha)
+  const handleStateHover = useCallback((stateName, evt) => {
+    setTooltip({
+      visible: true,
+      x: evt.clientX,
+      y: evt.clientY,
+      data: { state: stateName },
+    });
+  }, []);
 
   const exportRef = useRef();
 
@@ -158,6 +178,7 @@ export default function TelecomMap() {
       document.body.style.overflow = "hidden";
       return () => { document.body.style.overflow = prev; };
     }
+    return undefined;
   }, [menuOpen]);
 
   useEffect(() => {
@@ -169,33 +190,45 @@ export default function TelecomMap() {
     }
   }, []);
 
-  const fetchAllData = async () => {
-    try {
-      const workRes = await axios.get(`${API_BASE_URL}/api/work/all`);
-      const workArr = Array.isArray(workRes.data) ? workRes.data : [];
+  // FIX: teeno API calls independent — ek fail hone pe baaki data band nahi hoga
+  const fetchAllData = useCallback(async () => {
+    const [workRes, masterRes, stateMapRes] = await Promise.allSettled([
+      axios.get(`${API_BASE_URL}/api/work/all`),
+      axios.get(`${API_BASE_URL}/api/master`),
+      axios.get(`${API_BASE_URL}/api/work/state-wise-jobs`),
+    ]);
+
+    if (workRes.status === "fulfilled") {
+      const workArr = Array.isArray(workRes.value.data) ? workRes.value.data : [];
       setAllWorkData(workArr);
-      setCurrentFilterData(workArr);
-
-      const masterRes = await axios.get(`${API_BASE_URL}/api/master`);
-      const data = masterRes.data || {};
-      setDomains(Object.keys(data));
-
-      const stateMapRes = await axios.get(`${API_BASE_URL}/api/work/state-wise-jobs`);
-      setMapReportData(stateMapRes.data || {});
-    } catch (err) {
-      console.error("Error fetching dashboard data:", err);
+    } else {
+      console.error("Error fetching work data:", workRes.reason);
     }
-  };
+
+    if (masterRes.status === "fulfilled") {
+      const data = masterRes.value.data || {};
+      setDomains(Object.keys(data));
+    } else {
+      console.error("Error fetching master data:", masterRes.reason);
+    }
+
+    if (stateMapRes.status === "fulfilled") {
+      setMapReportData(stateMapRes.value.data || {});
+    } else {
+      console.error("Error fetching state-wise jobs:", stateMapRes.reason);
+    }
+  }, []);
 
   useEffect(() => {
     fetchAllData();
-  }, []);
+  }, [fetchAllData]);
 
   useEffect(() => {
     let filtered = [...allWorkData];
 
     if (selectedDomains.length > 0) {
-      filtered = filtered.filter(item => selectedDomains.includes(item.domain));
+      // FIX: domain case-insensitive compare (selectedDomains uppercase hote hain)
+      filtered = filtered.filter(item => selectedDomains.includes(normalize(item.domain)));
     }
 
     if (selectedSubDomains.length > 0) {
@@ -204,20 +237,17 @@ export default function TelecomMap() {
 
     if (selectedFilterStates.length > 0) {
       filtered = filtered.filter(item =>
-        item.state && selectedFilterStates.some(s => s.toLowerCase() === String(item.state).toLowerCase())
+        item.state && selectedFilterStates.some(s => s.toLowerCase() === String(item.state).trim().toLowerCase())
       );
     }
 
     if (selectedMonth?.month) {
+      const selIdx = MONTH_KEYS.indexOf(String(selectedMonth.month).trim().slice(0, 3).toLowerCase());
       filtered = filtered.filter(item =>
         (Array.isArray(item?.months) ? item.months : []).some(m => {
-          if (!m) return false;
-          const [month, year] = String(m || "").split(",");
-          const fullYear = year && year.length === 2 ? Number(`20${year}`) : Number(year || currentYear);
-          return (
-            month.toLowerCase() === selectedMonth.month.toLowerCase() &&
-            fullYear === selectedMonth.year
-          );
+          const p = parseMonthEntry(m);
+          if (!p) return false;
+          return p.monthIdx === selIdx && p.year === selectedMonth.year;
         })
       );
     }
@@ -229,13 +259,10 @@ export default function TelecomMap() {
       }
       filtered = filtered.filter(item =>
         (Array.isArray(item?.months) ? item.months : []).some(m => {
-          if (!m) return false;
-          const [month, year] = String(m || "").split(",");
-          const monthIdx = ["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"].indexOf(String(month || "").trim().slice(0, 3).toLowerCase());
-          if (monthIdx < 0) return false;
-          const yr = year && year.trim().length === 2 ? Number(`20${year.trim()}`) : Number(year || currentYear);
-          const monthStart = new Date(yr, monthIdx, 1);
-          const monthEnd = new Date(yr, monthIdx + 1, 0, 23, 59, 59);
+          const p = parseMonthEntry(m);
+          if (!p) return false;
+          const monthStart = new Date(p.year, p.monthIdx, 1);
+          const monthEnd = new Date(p.year, p.monthIdx + 1, 0, 23, 59, 59);
           if (rangeStart && monthEnd < rangeStart) return false;
           if (rangeEnd && monthStart > rangeEnd) return false;
           return true;
@@ -273,7 +300,7 @@ export default function TelecomMap() {
       window.removeEventListener("focus", handleFocus);
       document.removeEventListener("visibilitychange", handleVisibility);
     };
-  }, []);
+  }, [fetchAllData]);
 
   const [expandedDomains, setExpandedDomains] = useState({});
 
@@ -319,12 +346,13 @@ export default function TelecomMap() {
     setToDate("");
   };
 
+  // FIX: state name lowercase key se store hota hai (hasDataForState ki tarah case-insensitive)
   const stateJobsMap = useMemo(() => {
     const map = {};
     currentFilterData.forEach((item) => {
       if (!item.state) return;
-      const stateName = String(item.state).trim();
-      map[stateName] = (map[stateName] || 0) + Number(item.jobsDelivered || item.jobs_delivered || 0);
+      const stateKey = String(item.state).trim().toLowerCase();
+      map[stateKey] = (map[stateKey] || 0) + Number(item.jobsDelivered || item.jobs_delivered || 0);
     });
     return map;
   }, [currentFilterData]);
@@ -338,25 +366,25 @@ export default function TelecomMap() {
     const map = {};
     currentFilterData.forEach((item) => {
       if (!item.state) return;
-      const stateName = String(item.state).trim();
-      const domain = (item.domain || "").toString().trim().toUpperCase();
+      const stateKey = String(item.state).trim().toLowerCase();
+      const domain = normalize(item.domain);
       if (!domain) return;
-      if (!map[stateName]) map[stateName] = {};
-      if (!map[stateName][domain]) map[stateName][domain] = { jobs: 0, qcSum: 0, qcCount: 0, otp: 0, otpTotal: 0 };
-      map[stateName][domain].jobs += Number(item.jobsDelivered || item.jobs_delivered || 0);
+      if (!map[stateKey]) map[stateKey] = {};
+      if (!map[stateKey][domain]) map[stateKey][domain] = { jobs: 0, qcSum: 0, qcCount: 0, otp: 0, otpTotal: 0 };
+      map[stateKey][domain].jobs += Number(item.jobsDelivered || item.jobs_delivered || 0);
       const qcVal = parsePercent(item.amdocsQc || item.amdocs_qc);
       if (qcVal !== null) {
-        map[stateName][domain].qcSum += qcVal;
-        map[stateName][domain].qcCount += 1;
+        map[stateKey][domain].qcSum += qcVal;
+        map[stateKey][domain].qcCount += 1;
       }
-      map[stateName][domain].otpTotal += 1;
-      if (isOtpMet(item.otp)) map[stateName][domain].otp += 1;
+      map[stateKey][domain].otpTotal += 1;
+      if (isOtpMet(item.otp)) map[stateKey][domain].otp += 1;
     });
     return map;
   }, [currentFilterData]);
 
   const getStateColor = (stateName) => {
-    const totalJobs = stateJobsMap[stateName] || 0;
+    const totalJobs = stateJobsMap[String(stateName).trim().toLowerCase()] || 0;
     if (totalJobs === 0) return "#FFC491";
     const ratio = totalJobs / maxJobs;
     const colors = [
@@ -397,14 +425,28 @@ export default function TelecomMap() {
     return shortNames[stateName] || stateName.substring(0, 2).toUpperCase();
   };
 
+  const getFileNameDateTime = () => {
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = String(now.getMonth() + 1).padStart(2, "0");
+    const day = String(now.getDate()).padStart(2, "0");
+    let hours = now.getHours();
+    const minutes = String(now.getMinutes()).padStart(2, "0");
+    const seconds = String(now.getSeconds()).padStart(2, "0");
+    const ampm = hours >= 12 ? "PM" : "AM";
+    hours = hours % 12 || 12;
+    return `${year}-${month}-${day} at ${String(hours).padStart(2, "0")}.${minutes}.${seconds} ${ampm}`;
+  };
+
   const captureAndExport = async (type) => {
+    let clone = null;
     try {
       setIsExporting(true);
       setShowExport(false);
       await new Promise((res) => setTimeout(res, 200));
       const original = exportRef.current;
       if (!original) return;
-      const clone = original.cloneNode(true);
+      clone = original.cloneNode(true);
       const isMobile = window.innerWidth <= 768;
       const isTablet = window.innerWidth > 768 && window.innerWidth <= 1024;
       if (isMobile) {
@@ -446,13 +488,14 @@ export default function TelecomMap() {
       }
       const mapSvg = clone.querySelector(".mapBox svg");
       if (mapSvg) mapSvg.style.height = "auto";
-      const Legend = clone.querySelector(".mapLegend");
-      if (Legend) {
-        Legend.style.fontSize = "18px";
-        Legend.style.fontWeight = "700";
-        Legend.style.flexDirection = "row";
-        Legend.style.margin = "0";
-        Legend.style.paddingLeft = "20px";
+      // FIX: recharts ke Legend import se naam clash tha — rename kiya
+      const legendEl = clone.querySelector(".mapLegend");
+      if (legendEl) {
+        legendEl.style.fontSize = "18px";
+        legendEl.style.fontWeight = "700";
+        legendEl.style.flexDirection = "row";
+        legendEl.style.margin = "0";
+        legendEl.style.paddingLeft = "20px";
       }
       const compass = clone.querySelector(".resized-image");
       if (compass) {
@@ -470,7 +513,6 @@ export default function TelecomMap() {
         useCORS: true,
         backgroundColor: "#fff",
       });
-      document.body.removeChild(clone);
       const imgData = canvas.toDataURL("image/png");
       if (type === "pdf") {
         const pdf = new jsPDF("landscape", "mm", "a4");
@@ -495,11 +537,12 @@ export default function TelecomMap() {
     } catch (err) {
       console.error(err);
     } finally {
+      // FIX: error aane pe bhi clone DOM se remove hoga (pehle leak hota tha)
+      if (clone && clone.parentNode) clone.parentNode.removeChild(clone);
       setIsExporting(false);
     }
   };
 
-  const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
   const monthlyJobsMap = {};
   const monthlyQcMap = {};   // month -> year -> { sum, count }
   const monthlyOtpMap = {};  // month -> year -> met count
@@ -510,9 +553,11 @@ export default function TelecomMap() {
     const qcVal = parsePercent(item.amdocsQc || item.amdocs_qc);
     const otpMet = isOtpMet(item.otp);
     (Array.isArray(item.months) ? item.months : []).forEach((m) => {
-      if (!m) return;
-      const [month, year] = String(m || "").split(",");
-      const fullYear = year && year.length === 2 ? Number(`20${year}`) : Number(year || currentYear);
+      // FIX: month/year trim + 3-letter normalize, taaki "jan" / " Jan" / "January" bhi chart me aaye
+      const p = parseMonthEntry(m);
+      if (!p) return;
+      const month = p.month;
+      const fullYear = p.year;
 
       if (!monthlyJobsMap[month]) monthlyJobsMap[month] = {};
       if (!monthlyJobsMap[month][fullYear]) monthlyJobsMap[month][fullYear] = 0;
@@ -553,7 +598,7 @@ export default function TelecomMap() {
   const domainPieOtpTotalMap = {}; // domain -> total entries count
 
   currentFilterData.forEach((item) => {
-    const domain = (item.domain || "").toString().trim().toUpperCase();
+    const domain = normalize(item.domain);
     const jobs = Number(item.jobsDelivered || item.jobs_delivered || 0);
     if (!domain) return;
     domainPieDataMap[domain] = (domainPieDataMap[domain] || 0) + jobs;
@@ -581,10 +626,10 @@ export default function TelecomMap() {
       otp: domainPieOtpTotalMap[domain] > 0 ? Math.round(((domainPieOtpMap[domain] || 0) / domainPieOtpTotalMap[domain]) * 100) : null
     }));
 
-  const normalize = (d) => (d || "").toString().trim().toUpperCase();
   const masterDomains = (domains || []).map(normalize);
   const workDomains = allWorkData.map(x => normalize(x.domain));
-  const mergedDomains = [...new Set([...masterDomains, ...workDomains])];
+  // FIX: empty domain ("") ka khali KPI card / checkbox na bane
+  const mergedDomains = [...new Set([...masterDomains, ...workDomains])].filter(Boolean);
 
   const sortedDomainStats = mergedDomains.map(domain => ({
     domain,
@@ -606,19 +651,6 @@ export default function TelecomMap() {
     if (!rows.length) return null;
     const metCount = rows.filter((x) => isOtpMet(x.otp)).length;
     return Math.round((metCount / rows.length) * 100);
-  };
-
-  const getFileNameDateTime = () => {
-    const now = new Date();
-    const year = now.getFullYear();
-    const month = String(now.getMonth() + 1).padStart(2, "0");
-    const day = String(now.getDate()).padStart(2, "0");
-    let hours = now.getHours();
-    const minutes = String(now.getMinutes()).padStart(2, "0");
-    const seconds = String(now.getSeconds()).padStart(2, "0");
-    const ampm = hours >= 12 ? "PM" : "AM";
-    hours = hours % 12 || 12;
-    return `${year}-${month}-${day} at ${String(hours).padStart(2, "0")}.${minutes}.${seconds} ${ampm}`;
   };
 
   // Short, compact bar-chart tooltip: Job + QC% + OTP%
@@ -753,7 +785,8 @@ export default function TelecomMap() {
                             domainData.forEach((x) => {
                               let uom = x.uom || {};
                               if (typeof uom === "string") { try { uom = JSON.parse(uom); } catch { uom = {}; } }
-                              if (typeof uom === "object" && !Array.isArray(uom)) {
+                              // FIX: JSON.parse ka result null ho sakta hai — null check add kiya
+                              if (uom && typeof uom === "object" && !Array.isArray(uom)) {
                                 Object.entries(uom).forEach(([key, value]) => {
                                   if (!key || key === "undefined") return;
 
@@ -818,7 +851,7 @@ export default function TelecomMap() {
                             const centroid = geoCentroid(geo);
                             const projected = projection(centroid);
                             if (!projected) return null;
-                            let [x, y] = projected;
+                            const [x, y] = projected;
                             return (
                               <g key={`${geo.rsmKey}-label`}>
                                 <rect x={x - 14} y={y - 10} width="28" height="20" rx="5" fill={getLabelBgColor(name)} style={{ filter: "drop-shadow(0 3px 6px rgba(0,0,0,0.25))" }} />
@@ -866,8 +899,14 @@ export default function TelecomMap() {
                   <div className="scrollBox">
                     {mergedDomains.map(d => (
                       <div key={d} style={{ marginBottom: "12px" }}>
-                        <label style={{ cursor: "pointer", display: "flex", alignItems: "center" }} onClick={() => toggleExpand(d)}>
-                          <input type="checkbox" checked={selectedDomains.includes(d)} onChange={(e) => { e.stopPropagation(); toggleFilter(d, setSelectedDomains); }} />
+                        {/* FIX: label click ke saath checkbox ka synthetic click bhi bubble hota tha,
+                            isse toggleExpand 2 baar chalta tha (expand hota hi nahi tha).
+                            Ab sirf label/text click pe expand hoga, input ke click pe nahi. */}
+                        <label
+                          style={{ cursor: "pointer", display: "flex", alignItems: "center" }}
+                          onClick={(e) => { if (e.target.tagName !== "INPUT") toggleExpand(d); }}
+                        >
+                          <input type="checkbox" checked={selectedDomains.includes(d)} onChange={() => toggleFilter(d, setSelectedDomains)} />
                           <strong style={{ marginLeft: "8px" }}>{d}</strong>
                         </label>
                         {(expandedDomains[d] && subDomainsMap[d]) && (
@@ -975,7 +1014,8 @@ export default function TelecomMap() {
             {Object.entries(mapReportData[tooltip.data?.state] || {})
               .filter(([, jobs]) => Number(jobs) > 0)
               .map(([d, jobs]) => {
-                const domainStat = stateDomainStatsMap[tooltip.data?.state]?.[d];
+                // FIX: state key lowercase + domain uppercase se lookup (map ke keys yahi format me bane hain)
+                const domainStat = stateDomainStatsMap[String(tooltip.data?.state || "").trim().toLowerCase()]?.[normalize(d)];
                 const qc = domainStat && domainStat.qcCount > 0 ? Math.round(domainStat.qcSum / domainStat.qcCount) : null;
                 const otp = domainStat && domainStat.otpTotal > 0 ? Math.round((domainStat.otp / domainStat.otpTotal) * 100) : null;
                 return (
