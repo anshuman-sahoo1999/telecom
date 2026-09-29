@@ -216,7 +216,7 @@ export default function TelecomMap() {
         (Array.isArray(item?.months) ? item.months : []).some(m => {
           if (!m) return false;
           const [month, year] = String(m || "").split(",");
-          const monthIdx = monthsList.findIndex(x => x.toLowerCase() === String(month || "").trim().slice(0, 3).toLowerCase());
+          const monthIdx = ["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"].indexOf(String(month || "").trim().slice(0, 3).toLowerCase());
           if (monthIdx < 0) return false;
           const yr = year && year.trim().length === 2 ? Number(`20${year.trim()}`) : Number(year || currentYear);
           const monthStart = new Date(yr, monthIdx, 1);
