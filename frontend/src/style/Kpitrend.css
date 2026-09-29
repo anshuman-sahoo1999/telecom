@@ -1,0 +1,334 @@
+.kpiHeaderRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-bottom: 20px;
+}
+
+.kpiHeaderRow .kpiTitle {
+  margin-bottom: 0;
+}
+
+.kpiTrendBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 18px;
+  border: none;
+  border-radius: 10px;
+  background: linear-gradient(135deg, #2563eb, #1d4ed8);
+  color: #ffffff;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+  white-space: nowrap;
+  box-shadow: 0 4px 12px rgba(37, 99, 235, 0.3);
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.kpiTrendBtn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 18px rgba(37, 99, 235, 0.4);
+}
+
+.kpiTrendBtn:active {
+  transform: scale(0.98);
+}
+
+/* ---------- Popup ---------- */
+.ktmOverlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  z-index: 3000;
+}
+
+.ktmModal {
+  width: 100%;
+  max-width: 1000px;
+  max-height: 94vh;
+  overflow-y: auto;
+  background: #f8fafc;
+  border-radius: 16px;
+  box-shadow: 0 25px 60px rgba(0, 0, 0, 0.35);
+}
+
+.ktmHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 22px;
+  background: linear-gradient(135deg, #0f4a63, #1e3a8a);
+  color: #ffffff;
+  border-radius: 16px 16px 0 0;
+}
+
+.ktmHeaderLeft {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.ktmHeaderIcon {
+  width: 42px;
+  height: 42px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.18);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 22px;
+}
+
+.ktmHeaderSmall {
+  font-size: 12px;
+  opacity: 0.85;
+}
+
+.ktmHeaderMain {
+  font-size: 18px;
+  font-weight: 700;
+}
+
+.ktmCloseBtn {
+  width: 34px;
+  height: 34px;
+  border: none;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.2);
+  color: #ffffff;
+  font-size: 14px;
+  cursor: pointer;
+  transition: background 0.2s ease;
+}
+
+.ktmCloseBtn:hover {
+  background: rgba(239, 68, 68, 0.85);
+}
+
+/* ---------- Toolbar (domain dropdown) ---------- */
+.ktmToolbar {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 14px;
+  padding: 16px 22px 6px;
+}
+
+.ktmField {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 220px;
+}
+
+.ktmLabel {
+  font-size: 13px;
+  font-weight: 700;
+  color: #334155;
+}
+
+.ktmSelect {
+  height: 40px;
+  padding: 0 12px;
+  border: 1px solid #cbd5e1;
+  border-radius: 10px;
+  background: #ffffff;
+  font-size: 14px;
+  font-weight: 600;
+  color: #0f172a;
+  outline: none;
+  cursor: pointer;
+}
+
+.ktmSelect:focus {
+  border-color: #2563eb;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.15);
+}
+
+.ktmColorRule {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 14px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #475569;
+}
+
+.ktmRuleItem {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.ktmRuleItem i {
+  width: 12px;
+  height: 12px;
+  border-radius: 3px;
+  display: inline-block;
+}
+
+/* ---------- Chart card ---------- */
+.ktmChartCard {
+  margin: 12px 22px 22px;
+  padding: 18px 18px 12px;
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 14px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.04);
+}
+
+.ktmChartTop {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 6px;
+}
+
+.ktmChartTitle {
+  margin: 0;
+  font-size: 17px;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+/* ---------- Export icon + PNG / JPG menu ---------- */
+.ktmExport {
+  position: relative;
+}
+
+.ktmExportBtn {
+  width: 38px;
+  height: 38px;
+  border: 1px solid #cbd5e1;
+  border-radius: 10px;
+  background: #ffffff;
+  color: #334155;
+  font-size: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.ktmExportBtn:hover {
+  background: #2563eb;
+  border-color: #2563eb;
+  color: #ffffff;
+}
+
+.ktmExportMenu {
+  position: absolute;
+  top: 44px;
+  right: 0;
+  min-width: 90px;
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.18);
+  overflow: hidden;
+  z-index: 10;
+}
+
+.ktmExportMenu div {
+  padding: 10px 16px;
+  font-size: 13px;
+  font-weight: 700;
+  color: #0f172a;
+  cursor: pointer;
+}
+
+.ktmExportMenu div:hover {
+  background: #eff6ff;
+  color: #2563eb;
+}
+
+/* ---------- Tooltip ---------- */
+.ktmTooltip {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 8px 12px;
+  font-size: 12px;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.18);
+}
+
+.ktmTooltipTitle {
+  font-weight: 800;
+  margin-bottom: 4px;
+  color: #0f172a;
+}
+
+.ktmTooltipRow {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  line-height: 1.7;
+}
+
+.ktmDot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  display: inline-block;
+}
+
+.ktmEmpty {
+  padding: 70px 10px;
+  text-align: center;
+  font-size: 15px;
+  font-weight: 600;
+  color: #64748b;
+}
+
+/* ---------- Mobile ---------- */
+@media (max-width: 768px) {
+  .kpiHeaderRow {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .kpiTrendBtn {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .ktmOverlay {
+    padding: 8px;
+  }
+
+  .ktmHeader {
+    padding: 12px 14px;
+  }
+
+  .ktmHeaderMain {
+    font-size: 15px;
+  }
+
+  .ktmToolbar {
+    padding: 12px 14px 4px;
+  }
+
+  .ktmField {
+    width: 100%;
+  }
+
+  .ktmChartCard {
+    margin: 10px 12px 14px;
+    padding: 12px 8px 8px;
+  }
+
+  .ktmChartTitle {
+    font-size: 14px;
+  }
+}
