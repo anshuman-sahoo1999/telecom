@@ -707,23 +707,23 @@ export default function TelecomMap() {
 
         {activePage === "dashboard" && (
           <>
-            <div className="filterBar">
-              <div className="filterField filterFieldMonth">
-                <label className="filterLabel">Select Month & Year</label>
-                <select className="filterSelect" value={selectedMonth ? `${selectedMonth.month}-${selectedMonth.year}` : ""} onChange={(e) => { if (e.target.value) { const [month, year] = e.target.value.split("-"); setSelectedMonth({ month, year: Number(year) }); } else { setSelectedMonth(null); } }}>
+            <div className="tmFilterBar" style={{ flexShrink: 0, height: "auto", overflow: "visible" }}>
+              <div className="tmFilterField tmFilterFieldMonth">
+                <label className="tmFilterLabel">Select Month & Year</label>
+                <select className="tmFilterSelect" value={selectedMonth ? `${selectedMonth.month}-${selectedMonth.year}` : ""} onChange={(e) => { if (e.target.value) { const [month, year] = e.target.value.split("-"); setSelectedMonth({ month, year: Number(year) }); } else { setSelectedMonth(null); } }}>
                   <option value="">All Months</option>
                   {monthsList.map((m) => <option key={m} value={`${m}-${currentYear}`}>{m} - {currentYear}</option>)}
                 </select>
               </div>
-              <div className="filterField">
-                <label className="filterLabel">From Date</label>
-                <input type="date" className="filterInput" value={fromDate} max={toDate || undefined} onChange={(e) => setFromDate(e.target.value)} />
+              <div className="tmFilterField">
+                <label className="tmFilterLabel">From Date</label>
+                <input type="date" className="tmFilterInput" value={fromDate} max={toDate || undefined} onChange={(e) => setFromDate(e.target.value)} />
               </div>
-              <div className="filterField">
-                <label className="filterLabel">To Date</label>
-                <input type="date" className="filterInput" value={toDate} min={fromDate || undefined} onChange={(e) => setToDate(e.target.value)} />
+              <div className="tmFilterField">
+                <label className="tmFilterLabel">To Date</label>
+                <input type="date" className="tmFilterInput" value={toDate} min={fromDate || undefined} onChange={(e) => setToDate(e.target.value)} />
               </div>
-              <button type="button" className="filterResetBtn" onClick={resetDateFilters}>Reset</button>
+              <button type="button" className="tmFilterResetBtn" onClick={resetDateFilters}>Reset</button>
             </div>
 
             <div className="kpiContainer">
