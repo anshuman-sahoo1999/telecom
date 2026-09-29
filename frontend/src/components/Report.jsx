@@ -187,11 +187,32 @@ export default function Reports({ domain, states }) {
     return null;
   };
 
+  // QC / OTP colour rule: 90-100% green, 80-90% orange, below 80% red
+  const getPerfColor = (val, fallback = "#444") => {
+    if (val === null || val === undefined || isNaN(val)) return fallback;
+    if (val >= 90) return "#16a34a";
+    if (val >= 80) return "#d97706";
+    return "#dc2626";
+  };
+
+  // Converts a single row's OTP value into a percentage so it can be coloured.
+  // Numbers / percentages are used as they are; Yes/No style values become 100 / 0.
+  const getOtpPercent = (val) => {
+    if (val === null || val === undefined || val === "") return null;
+    const str = val.toString().trim();
+    if (str !== "" && !isNaN(parseFloat(str.replace("%", "")))) {
+      return parsePercent(str);
+    }
+    const met = isOtpMet(str);
+    if (met === true) return 100;
+    if (met === false) return 0;
+    return null;
+  };
+
   // ================= JOB FORMAT =================
-  const getJobData = (item) => {
+  const getJobData = () => {
     return {
       main: 1,
-      sub: `Jobs Delivered`,
     };
   };
 
@@ -291,6 +312,8 @@ export default function Reports({ domain, states }) {
                     item.otp !== null && item.otp !== undefined && item.otp !== ""
                       ? item.otp.toString()
                       : "-";
+                  const qcColor = getPerfColor(qcVal !== null ? qcVal : 0);
+                  const otpColor = getPerfColor(getOtpPercent(item.otp));
 
                   return (
                     <tr key={index}>
@@ -312,17 +335,14 @@ export default function Reports({ domain, states }) {
 
                       <td className="job-cell">
                         <div className="job-main">{job.main}</div>
-                        <div className="job-sub">{job.sub}</div>
                       </td>
 
                       <td className="job-cell">
-                        <div className="job-main">{qcVal !== null ? `${qcVal}%` : "0%"}</div>
-                        <div className="job-sub">QC</div>
+                        <div className="job-main" style={{ color: qcColor, fontWeight: 700 }}>{qcVal !== null ? `${qcVal}%` : "0%"}</div>
                       </td>
 
                       <td className="job-cell">
-                        <div className="job-main">{otpRaw}</div>
-                        <div className="job-sub">OTP</div>
+                        <div className="job-main" style={{ color: otpColor, fontWeight: 700 }}>{otpRaw}</div>
                       </td>
                     </tr>
                   );
@@ -334,8 +354,8 @@ export default function Reports({ domain, states }) {
                   <td></td>
                   <td>Total</td>
                   <td className="highlight">{totalJobs}</td>
-                  <td className="highlight">{overallQc !== null ? `${overallQc}%` : "0%"}</td>
-                  <td className="highlight">{overallOtp !== null ? `${overallOtp}%` : "0%"}</td>
+                  <td className="highlight" style={{ color: getPerfColor(overallQc !== null ? overallQc : 0) }}>{overallQc !== null ? `${overallQc}%` : "0%"}</td>
+                  <td className="highlight" style={{ color: getPerfColor(overallOtp !== null ? overallOtp : 0) }}>{overallOtp !== null ? `${overallOtp}%` : "0%"}</td>
                 </tr>
               </tbody>
             </table>
@@ -362,14 +382,14 @@ export default function Reports({ domain, states }) {
                     </div>
                     <div style={{ width: 1, height: 34, background: "#e2e8f0" }} />
                     <div style={{ textAlign: "center" }}>
-                      <div style={{ fontSize: 30, fontWeight: 800, color: "#991b1b", lineHeight: 1.1 }}>
+                      <div style={{ fontSize: 30, fontWeight: 800, color: getPerfColor(overallQc !== null ? overallQc : 0), lineHeight: 1.1 }}>
                         {overallQc !== null ? `${overallQc}%` : "0%"}
                       </div>
                       <div style={{ fontSize: 11, fontWeight: 600, color: "#64748b" }}>Amdocs QC</div>
                     </div>
                     <div style={{ width: 1, height: 34, background: "#e2e8f0" }} />
                     <div style={{ textAlign: "center" }}>
-                      <div style={{ fontSize: 30, fontWeight: 800, color: "#991b1b", lineHeight: 1.1 }}>
+                      <div style={{ fontSize: 30, fontWeight: 800, color: getPerfColor(overallOtp !== null ? overallOtp : 0), lineHeight: 1.1 }}>
                         {overallOtp !== null ? `${overallOtp}%` : "0%"}
                       </div>
                       <div style={{ fontSize: 11, fontWeight: 600, color: "#64748b" }}>OTP</div>
