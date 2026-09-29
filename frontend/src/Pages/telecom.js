@@ -51,6 +51,8 @@ export default function TelecomMap() {
   const currentYear = new Date().getFullYear();
 
   const [selectedMonth, setSelectedMonth] = useState(null);
+  const [fromDate, setFromDate] = useState("");
+  const [toDate, setToDate] = useState("");
   const [activePage, setActivePage] = useState("dashboard");
 
   useEffect(() => {
@@ -204,12 +206,35 @@ export default function TelecomMap() {
         })
       );
     }
+    if (fromDate || toDate) {
+      let rangeStart = fromDate ? new Date(`${fromDate}T00:00:00`) : null;
+      let rangeEnd = toDate ? new Date(`${toDate}T23:59:59`) : null;
+      if (rangeStart && rangeEnd && rangeStart > rangeEnd) {
+        [rangeStart, rangeEnd] = [rangeEnd, rangeStart];
+      }
+      filtered = filtered.filter(item =>
+        (Array.isArray(item?.months) ? item.months : []).some(m => {
+          if (!m) return false;
+          const [month, year] = String(m || "").split(",");
+          const monthIdx = monthsList.findIndex(x => x.toLowerCase() === String(month || "").trim().slice(0, 3).toLowerCase());
+          if (monthIdx < 0) return false;
+          const yr = year && year.trim().length === 2 ? Number(`20${year.trim()}`) : Number(year || currentYear);
+          const monthStart = new Date(yr, monthIdx, 1);
+          const monthEnd = new Date(yr, monthIdx + 1, 0, 23, 59, 59);
+          if (rangeStart && monthEnd < rangeStart) return false;
+          if (rangeEnd && monthStart > rangeEnd) return false;
+          return true;
+        })
+      );
+    }
     setCurrentFilterData(filtered);
   }, [
     selectedDomains,
     selectedSubDomains,
     selectedFilterStates,
     selectedMonth,
+    fromDate,
+    toDate,
     allWorkData,
     currentYear
   ]);
@@ -263,6 +288,20 @@ export default function TelecomMap() {
     if (["no", "n", "not met", "false", "fail", "failed", "0"].includes(str)) return false;
     const num = parseFloat(str.replace("%", ""));
     return !isNaN(num) && num > 0;
+  };
+
+  // QC / OTP colour rule: 90-100% green, 80-90% orange, below 80% red
+  const getPerfColor = (val, fallback = "#64748b") => {
+    if (val === null || val === undefined || isNaN(val)) return fallback;
+    if (val >= 90) return "#16a34a";
+    if (val >= 80) return "#d97706";
+    return "#dc2626";
+  };
+
+  const resetDateFilters = () => {
+    setSelectedMonth(null);
+    setFromDate("");
+    setToDate("");
   };
 
   const stateJobsMap = useMemo(() => {
@@ -593,8 +632,8 @@ export default function TelecomMap() {
               </div>
               <div style={{ display: "flex", gap: 10, paddingLeft: 13, whiteSpace: "nowrap" }}>
                 <span style={{ color: "#2563eb" }}><b style={{ fontWeight: 800 }}>Job-</b> <b style={{ fontWeight: 800 }}>{p.value}</b></span>
-                <span style={{ color: "#059669" }}><b style={{ fontWeight: 800 }}>QC-</b> <b style={{ fontWeight: 800 }}>{qc !== null && qc !== undefined ? `${qc}%` : "0%"}</b></span>
-                <span style={{ color: "#d97706" }}><b style={{ fontWeight: 800 }}>OTP-</b> <b style={{ fontWeight: 800 }}>{otp !== null && otp !== undefined ? `${otp}%` : "N/A"}</b></span>
+                <span style={{ color: getPerfColor(qc !== null && qc !== undefined ? qc : 0) }}><b style={{ fontWeight: 800 }}>QC-</b> <b style={{ fontWeight: 800 }}>{qc !== null && qc !== undefined ? `${qc}%` : "0%"}</b></span>
+                <span style={{ color: getPerfColor(otp, "#64748b") }}><b style={{ fontWeight: 800 }}>OTP-</b> <b style={{ fontWeight: 800 }}>{otp !== null && otp !== undefined ? `${otp}%` : "N/A"}</b></span>
               </div>
             </div>
           );
@@ -611,8 +650,8 @@ export default function TelecomMap() {
       <div style={{ background: "#ffffff", border: "1px solid #e2e8f0", borderRadius: 8, padding: "8px 11px", fontSize: 11.5, lineHeight: 1.7, boxShadow: "0 4px 14px rgba(0,0,0,0.18)" }}>
         <div style={{ fontWeight: 800, marginBottom: 4, fontSize: 12.5, color: "#0f172a" }}>{d.name}</div>
         <div style={{ color: "#2563eb" }}><b style={{ fontWeight: 800 }}>Job-</b> <b style={{ fontWeight: 800 }}>{d.jobs}</b> <span style={{ color: "#64748b", fontWeight: 600 }}>(<b style={{ fontWeight: 800 }}>{d.value}%</b>)</span></div>
-        <div style={{ color: "#059669" }}><b style={{ fontWeight: 800 }}>QC-</b> <b style={{ fontWeight: 800 }}>{d.qc !== null && d.qc !== undefined ? `${d.qc}%` : "0%"}</b></div>
-        <div style={{ color: "#d97706" }}><b style={{ fontWeight: 800 }}>OTP-</b> <b style={{ fontWeight: 800 }}>{d.otp !== null && d.otp !== undefined ? `${d.otp}%` : "N/A"}</b></div>
+        <div style={{ color: getPerfColor(d.qc !== null && d.qc !== undefined ? d.qc : 0) }}><b style={{ fontWeight: 800 }}>QC-</b> <b style={{ fontWeight: 800 }}>{d.qc !== null && d.qc !== undefined ? `${d.qc}%` : "0%"}</b></div>
+        <div style={{ color: getPerfColor(d.otp, "#64748b") }}><b style={{ fontWeight: 800 }}>OTP-</b> <b style={{ fontWeight: 800 }}>{d.otp !== null && d.otp !== undefined ? `${d.otp}%` : "N/A"}</b></div>
       </div>
     );
   };
@@ -668,6 +707,25 @@ export default function TelecomMap() {
 
         {activePage === "dashboard" && (
           <>
+            <div className="filterBar">
+              <div className="filterField filterFieldMonth">
+                <label className="filterLabel">Select Month & Year</label>
+                <select className="filterSelect" value={selectedMonth ? `${selectedMonth.month}-${selectedMonth.year}` : ""} onChange={(e) => { if (e.target.value) { const [month, year] = e.target.value.split("-"); setSelectedMonth({ month, year: Number(year) }); } else { setSelectedMonth(null); } }}>
+                  <option value="">All Months</option>
+                  {monthsList.map((m) => <option key={m} value={`${m}-${currentYear}`}>{m} - {currentYear}</option>)}
+                </select>
+              </div>
+              <div className="filterField">
+                <label className="filterLabel">From Date</label>
+                <input type="date" className="filterInput" value={fromDate} max={toDate || undefined} onChange={(e) => setFromDate(e.target.value)} />
+              </div>
+              <div className="filterField">
+                <label className="filterLabel">To Date</label>
+                <input type="date" className="filterInput" value={toDate} min={fromDate || undefined} onChange={(e) => setToDate(e.target.value)} />
+              </div>
+              <button type="button" className="filterResetBtn" onClick={resetDateFilters}>Reset</button>
+            </div>
+
             <div className="kpiContainer">
               <h2 className="kpiTitle">📊 KPI - Job Delivery / Amdocs QC / OTP Summary</h2>
               <div className="kpiGridModern">
@@ -702,10 +760,10 @@ export default function TelecomMap() {
                           })()}
                         </div>
                         <div className="kpiQcOtpRow" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", margin: "4px 0" }}>
-                          <span style={{ fontSize: "11px", fontWeight: 700, color: "#0f766e" }}>
+                          <span style={{ fontSize: "11px", fontWeight: 700, color: getPerfColor(getDomainQcAvg(item.domain) ?? 0) }}>
                             Amdocs QC: {(() => { const v = getDomainQcAvg(item.domain); return v !== null ? `${v}%` : "0%"; })()}
                           </span>
-                          <span style={{ fontSize: "11px", fontWeight: 700, color: "#b45309" }}>
+                          <span style={{ fontSize: "11px", fontWeight: 700, color: getPerfColor(getDomainOtpPercent(item.domain), "#64748b") }}>
                             OTP: {(() => { const v = getDomainOtpPercent(item.domain); return v !== null ? `${v}%` : "N/A"; })()}
                           </span>
                         </div>
@@ -816,15 +874,6 @@ export default function TelecomMap() {
                     ))}
                   </div>
                 </div>
-                <div className="panelCard">
-                  <h4 className="panelCard1">Select Month & Year</h4>
-                  <div className="dropdown-group">
-                    <select className="dropdown" value={selectedMonth ? `${selectedMonth.month}-${selectedMonth.year}` : ""} onChange={(e) => { if (e.target.value) { const [month, year] = e.target.value.split("-"); setSelectedMonth({ month, year: Number(year) }); } else { setSelectedMonth(null); } }}>
-                      <option value="">All Months</option>
-                      {monthsList.map((m) => <option key={m} value={`${m}-${currentYear}`}>{m} - {currentYear}</option>)}
-                    </select>
-                  </div>
-                </div>
               </div>
             </div>
 
@@ -926,8 +975,8 @@ export default function TelecomMap() {
                       <span style={{ color: "#16a34a", fontWeight: "700" }}>{jobs} Jobs</span>
                     </div>
                     <div style={{ display: "flex", justifyContent: "space-between", fontSize: "11px", fontWeight: "600" }}>
-                      <span style={{ color: "#0f766e" }}>QC: {qc !== null ? `${qc}%` : "0%"}</span>
-                      <span style={{ color: "#b45309" }}>OTP: {otp !== null && otp !== undefined ? `${otp}%` : "N/A"}</span>
+                      <span style={{ color: getPerfColor(qc !== null ? qc : 0) }}>QC: {qc !== null ? `${qc}%` : "0%"}</span>
+                      <span style={{ color: getPerfColor(otp, "#64748b") }}>OTP: {otp !== null && otp !== undefined ? `${otp}%` : "N/A"}</span>
                     </div>
                   </div>
                 );
