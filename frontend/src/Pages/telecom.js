@@ -23,12 +23,14 @@ import TimesheetManagement from "../Pages/TimesheetManagement";
 import MasterDomainCreation from "../Pages/MasterDomainCreation";
 import CapacityForecast from "../Pages/CapacityForecast";
 import JobHistory from "../Pages/JobHistory";
+import KpiTrendModal from "../components/KpiTrendModal.js";
 import axios from "axios";
 
 export default function TelecomMap() {
   const [selectedKpiDomain, setSelectedKpiDomain] = useState(null);
   const [showKpiModal, setShowKpiModal] = useState(false);
   const [expandedJobMenu, setExpandedJobMenu] = useState(false);
+  const [showTrendModal, setShowTrendModal] = useState(false);
 
   const handleKpiReport = (domain) => {
     setSelectedKpiDomain(domain);
@@ -370,15 +372,16 @@ export default function TelecomMap() {
     const bg = v >= 90 ? "#dcfce7" : v >= 80 ? "#ffedd5" : "#fee2e2";
     const border = v >= 90 ? "#86efac" : v >= 80 ? "#fdba74" : "#fca5a5";
     return {
-      fontSize: "11px",
+      fontSize: "10.5px",
       fontWeight: 700,
       color,
       background: bg,
       border: `1px solid ${border}`,
       borderRadius: "6px",
-      padding: "3px 8px",
+      padding: "3px 6px",
       whiteSpace: "nowrap",
       display: "inline-block",
+      flex: "0 0 auto",
     };
   };
 
@@ -806,7 +809,10 @@ export default function TelecomMap() {
             </div>
 
             <div className="kpiContainer">
-              <h2 className="kpiTitle">📊 KPI - Job Delivery / Amdocs QC / OTP Summary</h2>
+              <div className="kpiHeaderRow">
+                <h2 className="kpiTitle">📊 KPI - Job Delivery / Amdocs QC / OTP Summary</h2>
+                <button type="button" className="kpiTrendBtn" onClick={() => setShowTrendModal(true)}>📈 OTP / QC Trend</button>
+              </div>
               <div className="kpiGridModern">
                 {sortedDomainStats.map((item) => {
                   const color = domainColors[item.domain] || "#6366f1";
@@ -838,7 +844,7 @@ export default function TelecomMap() {
                             return Object.entries(uomTotals).map(([key, value]) => `${formatUomLabel(key)}: ${value}`).join(" | ");
                           })()}
                         </div>
-                        <div className="kpiQcOtpRow" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", margin: "8px 0 4px" }}>
+                        <div className="kpiQcOtpRow" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "nowrap", gap: "6px", margin: "8px 0 4px" }}>
                           <span style={getPerfBoxStyle(getDomainQcAvg(item.domain) ?? 0)}>
                             Amdocs QC: {(() => { const v = getDomainQcAvg(item.domain); return v !== null ? `${v}%` : "0%"; })()}
                           </span>
@@ -1089,6 +1095,10 @@ export default function TelecomMap() {
               })}
           </div>
         </div>
+      )}
+
+      {showTrendModal && (
+        <KpiTrendModal data={allWorkData} domains={mergedDomains} onClose={() => setShowTrendModal(false)} />
       )}
 
       {showKpiModal && (
