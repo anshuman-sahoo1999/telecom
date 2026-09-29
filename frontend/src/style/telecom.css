@@ -1360,3 +1360,61 @@ top:0;
   .menu-icon:hover span.bar1 { margin-bottom: 3px; }
   .menu-icon:hover span.bar1 { margin-top: 2px; }
 }
+
+
+/* =========================================================================
+   HAMBURGER — Header me, USER ICON ke NEECHE (sirf tablet + mobile)
+   Position adjust karni ho to sirf neeche ke 2 variables badlein:
+     --hb-top   : screen ke top se kitna neeche (user icon ke just niche)
+     --hb-right : screen ke right se kitna andar
+   ========================================================================= */
+@media (max-width: 1100px) {
+  :root {
+    --hb-top: 130px;     /* tablet */
+    --hb-right: 16px;
+  }
+
+  .menu-icon-container {
+    position: fixed;
+    top: var(--hb-top);
+    right: var(--hb-right);
+    left: auto;
+    z-index: 9000;       /* header ke upar, drawer/overlay (10000+) ke neeche */
+    width: 40px;
+    height: 40px;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .menu-icon {
+    float: none;
+    width: 40px;
+    height: 40px;
+    min-width: 40px;
+    min-height: 40px;
+    padding: 0;
+    align-items: center;
+    justify-content: center;
+    border-radius: 10px;
+  }
+  .menu-icon span {
+    width: 22px;
+    height: 3px;
+    margin-bottom: 4px;
+    box-shadow: none;
+    background: #0f172a;
+  }
+  .menu-icon span.bar3 { margin-bottom: 0; }
+  .menu-icon.active .bar1 { transform: rotate(0deg) translateY(7px); }
+  .menu-icon.active .bar3 { transform: rotate(-90deg) translateX(7px); }
+}
+
+@media (max-width: 768px) {
+  :root {
+    --hb-top: 212px;     /* mobile: avatar (user icon) ke just niche */
+    --hb-right: 14px;
+  }
+}
