@@ -25,25 +25,6 @@ import CapacityForecast from "../Pages/CapacityForecast";
 import JobHistory from "../Pages/JobHistory";
 import axios from "axios";
 
-/* ======================================
-   MODULE LEVEL HELPERS (component ke bahar — har render pe re-create nahi honge)
-====================================== */
-const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-const MONTH_KEYS = ["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"];
-
-const normalize = (d) => (d || "").toString().trim().toUpperCase();
-
-// "Jan,25" / "jan, 2025" / "January,25" -> { monthIdx, month, year }
-const parseMonthEntry = (m) => {
-  if (!m) return null;
-  const [mo, yr] = String(m).split(",");
-  const monthIdx = MONTH_KEYS.indexOf(String(mo || "").trim().slice(0, 3).toLowerCase());
-  if (monthIdx < 0) return null;
-  const y = String(yr || "").trim();
-  const fullYear = y.length === 2 ? Number(`20${y}`) : Number(y || new Date().getFullYear());
-  return { monthIdx, month: monthNames[monthIdx], year: fullYear };
-};
-
 export default function TelecomMap() {
   const [selectedKpiDomain, setSelectedKpiDomain] = useState(null);
   const [showKpiModal, setShowKpiModal] = useState(false);
@@ -53,6 +34,15 @@ export default function TelecomMap() {
     setSelectedKpiDomain(domain);
     setShowKpiModal(true);
   };
+
+  const handleStateHover = useCallback((stateName, evt) => {
+    setTooltip({
+      visible: true,
+      x: evt.clientX,
+      y: evt.clientY,
+      data: { state: stateName },
+    });
+  }, []);
 
   const monthsList = [
     "Jan", "Feb", "Mar", "Apr", "May", "Jun",
@@ -101,33 +91,72 @@ export default function TelecomMap() {
     data: null,
   });
 
-  // FIX: setTooltip declare hone ke baad define kiya (pehle upar tha)
-  const handleStateHover = useCallback((stateName, evt) => {
-    setTooltip({
-      visible: true,
-      x: evt.clientX,
-      y: evt.clientY,
-      data: { state: stateName },
-    });
+  const exportRef = useRef();
+  const mapBoxRef = useRef(null);
+  const pointerTypeRef = useRef("mouse");
+
+  // ---- Responsive helpers (tablet / mobile map) ----
+  const [viewportWidth, setViewportWidth] = useState(
+    typeof window !== "undefined" ? window.innerWidth : 1200
+  );
+  const [mapWidth, setMapWidth] = useState(1000);
+
+  useEffect(() => {
+    const onResize = () => setViewportWidth(window.innerWidth);
+    window.addEventListener("resize", onResize);
+    window.addEventListener("orientationchange", onResize);
+    return () => {
+      window.removeEventListener("resize", onResize);
+      window.removeEventListener("orientationchange", onResize);
+    };
   }, []);
 
-  // Touch devices (tablet/mobile): tooltip atak jata tha. Map ke bahar tap ya scroll karne pe band ho jayega.
+  // Track the real rendered width of the map so state labels can stay readable
   useEffect(() => {
-    if (!tooltip.visible) return undefined;
-    const hideTooltip = () => setTooltip({ visible: false, x: 0, y: 0, data: null });
-    const onTouchStart = (e) => {
-      if (e.target && e.target.closest && e.target.closest(".mapBox path")) return;
-      hideTooltip();
+    const el = mapBoxRef.current;
+    if (!el || typeof ResizeObserver === "undefined") return;
+    const ro = new ResizeObserver((entries) => {
+      const w = entries[0]?.contentRect?.width;
+      if (w) setMapWidth((prev) => (Math.abs(prev - w) > 1 ? w : prev));
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [activePage]);
+
+  const isCompact = viewportWidth <= 1100;          // tablet + mobile
+  const isPhone = viewportWidth <= 600;             // phones
+  const isCoarsePointer =
+    typeof window !== "undefined" &&
+    !!window.matchMedia &&
+    window.matchMedia("(pointer: coarse)").matches;
+  const isSheetTooltip = viewportWidth <= 768 || isCoarsePointer; // bottom-sheet tooltip
+
+  // Tap on a state (touch / pen): show details, tap again to close
+  const handleStateTap = (stateName, evt) => {
+    setTooltip((prev) =>
+      prev.visible && prev.data?.state === stateName
+        ? { visible: false, x: 0, y: 0, data: null }
+        : { visible: true, x: evt.clientX, y: evt.clientY, data: { state: stateName } }
+    );
+  };
+
+  // Touch: tap anywhere outside the map / tooltip closes the tooltip
+  useEffect(() => {
+    if (!tooltip.visible) return;
+    const onDown = (e) => {
+      if (e.pointerType === "mouse") return;
+      const t = e.target;
+      if (t && t.closest && (t.closest(".tooltipBox") || t.closest(".mapBox path"))) return;
+      setTooltip({ visible: false, x: 0, y: 0, data: null });
     };
-    document.addEventListener("touchstart", onTouchStart, { passive: true });
-    window.addEventListener("scroll", hideTooltip, true);
-    return () => {
-      document.removeEventListener("touchstart", onTouchStart);
-      window.removeEventListener("scroll", hideTooltip, true);
-    };
+    document.addEventListener("pointerdown", onDown);
+    return () => document.removeEventListener("pointerdown", onDown);
   }, [tooltip.visible]);
 
-  const exportRef = useRef();
+  // On small screens the map is scaled down: enlarge labels a bit and hide the tiny crowded NE ones
+  const CROWDED_LABELS = ["Rhode Island", "Connecticut", "New Jersey", "Delaware", "Maryland", "District of Columbia", "Vermont", "New Hampshire", "Massachusetts"];
+  const mapScale = Math.max(mapWidth, 1) / 1000;
+  const labelK = isCompact && !isExporting ? Math.min(1.9, Math.max(1, 9 / (11 * mapScale))) : 1;
 
   const hasDataForState = (stateName) => {
     return currentFilterData.some(item => item.state && String(item.state).trim().toLowerCase() === stateName.trim().toLowerCase());
@@ -181,22 +210,6 @@ export default function TelecomMap() {
   const menuOpen = outletCtx.menuOpen ?? true;
   const setMenuOpen = outletCtx.setMenuOpen || (() => {});
 
-  // Mobile / tablet: page khulte hi sidebar band rahe (overlay drawer ki tarah)
-  useEffect(() => {
-    if (window.innerWidth <= 1100) setMenuOpen(false);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  // Drawer khula ho to background scroll lock (sirf mobile/tablet)
-  useEffect(() => {
-    if (window.innerWidth <= 1100 && menuOpen) {
-      const prev = document.body.style.overflow;
-      document.body.style.overflow = "hidden";
-      return () => { document.body.style.overflow = prev; };
-    }
-    return undefined;
-  }, [menuOpen]);
-
   useEffect(() => {
     try {
       const user = JSON.parse(localStorage.getItem("user"));
@@ -206,45 +219,33 @@ export default function TelecomMap() {
     }
   }, []);
 
-  // FIX: teeno API calls independent — ek fail hone pe baaki data band nahi hoga
-  const fetchAllData = useCallback(async () => {
-    const [workRes, masterRes, stateMapRes] = await Promise.allSettled([
-      axios.get(`${API_BASE_URL}/api/work/all`),
-      axios.get(`${API_BASE_URL}/api/master`),
-      axios.get(`${API_BASE_URL}/api/work/state-wise-jobs`),
-    ]);
-
-    if (workRes.status === "fulfilled") {
-      const workArr = Array.isArray(workRes.value.data) ? workRes.value.data : [];
+  const fetchAllData = async () => {
+    try {
+      const workRes = await axios.get(`${API_BASE_URL}/api/work/all`);
+      const workArr = Array.isArray(workRes.data) ? workRes.data : [];
       setAllWorkData(workArr);
-    } else {
-      console.error("Error fetching work data:", workRes.reason);
-    }
+      setCurrentFilterData(workArr);
 
-    if (masterRes.status === "fulfilled") {
-      const data = masterRes.value.data || {};
+      const masterRes = await axios.get(`${API_BASE_URL}/api/master`);
+      const data = masterRes.data || {};
       setDomains(Object.keys(data));
-    } else {
-      console.error("Error fetching master data:", masterRes.reason);
-    }
 
-    if (stateMapRes.status === "fulfilled") {
-      setMapReportData(stateMapRes.value.data || {});
-    } else {
-      console.error("Error fetching state-wise jobs:", stateMapRes.reason);
+      const stateMapRes = await axios.get(`${API_BASE_URL}/api/work/state-wise-jobs`);
+      setMapReportData(stateMapRes.data || {});
+    } catch (err) {
+      console.error("Error fetching dashboard data:", err);
     }
-  }, []);
+  };
 
   useEffect(() => {
     fetchAllData();
-  }, [fetchAllData]);
+  }, []);
 
   useEffect(() => {
     let filtered = [...allWorkData];
 
     if (selectedDomains.length > 0) {
-      // FIX: domain case-insensitive compare (selectedDomains uppercase hote hain)
-      filtered = filtered.filter(item => selectedDomains.includes(normalize(item.domain)));
+      filtered = filtered.filter(item => selectedDomains.includes(item.domain));
     }
 
     if (selectedSubDomains.length > 0) {
@@ -253,17 +254,20 @@ export default function TelecomMap() {
 
     if (selectedFilterStates.length > 0) {
       filtered = filtered.filter(item =>
-        item.state && selectedFilterStates.some(s => s.toLowerCase() === String(item.state).trim().toLowerCase())
+        item.state && selectedFilterStates.some(s => s.toLowerCase() === String(item.state).toLowerCase())
       );
     }
 
     if (selectedMonth?.month) {
-      const selIdx = MONTH_KEYS.indexOf(String(selectedMonth.month).trim().slice(0, 3).toLowerCase());
       filtered = filtered.filter(item =>
         (Array.isArray(item?.months) ? item.months : []).some(m => {
-          const p = parseMonthEntry(m);
-          if (!p) return false;
-          return p.monthIdx === selIdx && p.year === selectedMonth.year;
+          if (!m) return false;
+          const [month, year] = String(m || "").split(",");
+          const fullYear = year && year.length === 2 ? Number(`20${year}`) : Number(year || currentYear);
+          return (
+            month.toLowerCase() === selectedMonth.month.toLowerCase() &&
+            fullYear === selectedMonth.year
+          );
         })
       );
     }
@@ -275,10 +279,13 @@ export default function TelecomMap() {
       }
       filtered = filtered.filter(item =>
         (Array.isArray(item?.months) ? item.months : []).some(m => {
-          const p = parseMonthEntry(m);
-          if (!p) return false;
-          const monthStart = new Date(p.year, p.monthIdx, 1);
-          const monthEnd = new Date(p.year, p.monthIdx + 1, 0, 23, 59, 59);
+          if (!m) return false;
+          const [month, year] = String(m || "").split(",");
+          const monthIdx = ["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"].indexOf(String(month || "").trim().slice(0, 3).toLowerCase());
+          if (monthIdx < 0) return false;
+          const yr = year && year.trim().length === 2 ? Number(`20${year.trim()}`) : Number(year || currentYear);
+          const monthStart = new Date(yr, monthIdx, 1);
+          const monthEnd = new Date(yr, monthIdx + 1, 0, 23, 59, 59);
           if (rangeStart && monthEnd < rangeStart) return false;
           if (rangeEnd && monthStart > rangeEnd) return false;
           return true;
@@ -316,7 +323,7 @@ export default function TelecomMap() {
       window.removeEventListener("focus", handleFocus);
       document.removeEventListener("visibilitychange", handleVisibility);
     };
-  }, [fetchAllData]);
+  }, []);
 
   const [expandedDomains, setExpandedDomains] = useState({});
 
@@ -362,13 +369,12 @@ export default function TelecomMap() {
     setToDate("");
   };
 
-  // FIX: state name lowercase key se store hota hai (hasDataForState ki tarah case-insensitive)
   const stateJobsMap = useMemo(() => {
     const map = {};
     currentFilterData.forEach((item) => {
       if (!item.state) return;
-      const stateKey = String(item.state).trim().toLowerCase();
-      map[stateKey] = (map[stateKey] || 0) + Number(item.jobsDelivered || item.jobs_delivered || 0);
+      const stateName = String(item.state).trim();
+      map[stateName] = (map[stateName] || 0) + Number(item.jobsDelivered || item.jobs_delivered || 0);
     });
     return map;
   }, [currentFilterData]);
@@ -382,25 +388,25 @@ export default function TelecomMap() {
     const map = {};
     currentFilterData.forEach((item) => {
       if (!item.state) return;
-      const stateKey = String(item.state).trim().toLowerCase();
-      const domain = normalize(item.domain);
+      const stateName = String(item.state).trim();
+      const domain = (item.domain || "").toString().trim().toUpperCase();
       if (!domain) return;
-      if (!map[stateKey]) map[stateKey] = {};
-      if (!map[stateKey][domain]) map[stateKey][domain] = { jobs: 0, qcSum: 0, qcCount: 0, otp: 0, otpTotal: 0 };
-      map[stateKey][domain].jobs += Number(item.jobsDelivered || item.jobs_delivered || 0);
+      if (!map[stateName]) map[stateName] = {};
+      if (!map[stateName][domain]) map[stateName][domain] = { jobs: 0, qcSum: 0, qcCount: 0, otp: 0, otpTotal: 0 };
+      map[stateName][domain].jobs += Number(item.jobsDelivered || item.jobs_delivered || 0);
       const qcVal = parsePercent(item.amdocsQc || item.amdocs_qc);
       if (qcVal !== null) {
-        map[stateKey][domain].qcSum += qcVal;
-        map[stateKey][domain].qcCount += 1;
+        map[stateName][domain].qcSum += qcVal;
+        map[stateName][domain].qcCount += 1;
       }
-      map[stateKey][domain].otpTotal += 1;
-      if (isOtpMet(item.otp)) map[stateKey][domain].otp += 1;
+      map[stateName][domain].otpTotal += 1;
+      if (isOtpMet(item.otp)) map[stateName][domain].otp += 1;
     });
     return map;
   }, [currentFilterData]);
 
   const getStateColor = (stateName) => {
-    const totalJobs = stateJobsMap[String(stateName).trim().toLowerCase()] || 0;
+    const totalJobs = stateJobsMap[stateName] || 0;
     if (totalJobs === 0) return "#FFC491";
     const ratio = totalJobs / maxJobs;
     const colors = [
@@ -441,34 +447,18 @@ export default function TelecomMap() {
     return shortNames[stateName] || stateName.substring(0, 2).toUpperCase();
   };
 
-  const getFileNameDateTime = () => {
-    const now = new Date();
-    const year = now.getFullYear();
-    const month = String(now.getMonth() + 1).padStart(2, "0");
-    const day = String(now.getDate()).padStart(2, "0");
-    let hours = now.getHours();
-    const minutes = String(now.getMinutes()).padStart(2, "0");
-    const seconds = String(now.getSeconds()).padStart(2, "0");
-    const ampm = hours >= 12 ? "PM" : "AM";
-    hours = hours % 12 || 12;
-    return `${year}-${month}-${day} at ${String(hours).padStart(2, "0")}.${minutes}.${seconds} ${ampm}`;
-  };
-
   const captureAndExport = async (type) => {
-    let clone = null;
     try {
       setIsExporting(true);
       setShowExport(false);
       await new Promise((res) => setTimeout(res, 200));
       const original = exportRef.current;
       if (!original) return;
-      clone = original.cloneNode(true);
-      const isMobile = window.innerWidth <= 768;
-      const isTablet = window.innerWidth > 768 && window.innerWidth <= 1024;
-      if (isMobile) {
-        clone.style.width = "890px";
-      } else if (isTablet) {
-        clone.style.width = "968px";
+      const clone = original.cloneNode(true);
+      const isCompactExport = window.innerWidth <= 1100; // tablet + mobile
+      if (isCompactExport) {
+        clone.classList.add("exporting"); // fixed clean layout defined in telecom.css
+        clone.style.width = "1000px";
       } else {
         clone.style.width = "1100px";
       }
@@ -488,38 +478,28 @@ export default function TelecomMap() {
         mapTitle.style.lineHeight = "1.3";
       }
 
-      const logo = clone.querySelector(".mapLogo img");
-      if (logo) {
-        logo.style.position = "static";
-        logo.style.width = "150px";
-        logo.style.height = "auto";
-        logo.style.top = "auto";
-        logo.style.left = "auto";
-        logo.style.right = "auto";
-      }
-      const mapBoxEl = clone.querySelector(".mapBox");
-      if (mapBoxEl) {
-        mapBoxEl.style.width = "100%";
-        mapBoxEl.style.margin = "0";
-      }
-      const mapSvg = clone.querySelector(".mapBox svg");
-      if (mapSvg) mapSvg.style.height = "auto";
-      // FIX: recharts ke Legend import se naam clash tha — rename kiya
-      const legendEl = clone.querySelector(".mapLegend");
-      if (legendEl) {
-        legendEl.style.fontSize = "18px";
-        legendEl.style.fontWeight = "700";
-        legendEl.style.flexDirection = "row";
-        legendEl.style.margin = "0";
-        legendEl.style.paddingLeft = "20px";
-      }
-      const compass = clone.querySelector(".resized-image");
-      if (compass) {
-        compass.style.position = "absolute";
-        compass.style.width = "120px";
-        compass.style.height = "auto";
-        compass.style.left = "20px";
-        compass.style.top = "70px";
+      if (!isCompactExport) {
+        const logoBox = clone.querySelector(".mapLogo");
+        const logo = clone.querySelector(".mapLogo img");
+        if (logoBox && logo) {
+          logo.style.width = "130px";
+          logo.style.height = "auto";
+          logo.style.position = "relative";
+          logo.style.left = "-120px";
+          logo.style.top = "-90px";
+        }
+        const Legend = clone.querySelector(".mapLegend");
+        if (Legend) {
+          Legend.style.fontSize = "16px";
+          Legend.style.fontWeight = "700";
+          Legend.style.marginLeft = "90px";
+        }
+        const compass = clone.querySelector(".resized-image");
+        if (compass) {
+          compass.style.width = "120px";
+          compass.style.height = "auto";
+          compass.style.marginTop = "40px";
+        }
       }
       const exportBtn = clone.querySelector(".export");
       if (exportBtn) exportBtn.remove();
@@ -529,6 +509,7 @@ export default function TelecomMap() {
         useCORS: true,
         backgroundColor: "#fff",
       });
+      document.body.removeChild(clone);
       const imgData = canvas.toDataURL("image/png");
       if (type === "pdf") {
         const pdf = new jsPDF("landscape", "mm", "a4");
@@ -553,12 +534,11 @@ export default function TelecomMap() {
     } catch (err) {
       console.error(err);
     } finally {
-      // FIX: error aane pe bhi clone DOM se remove hoga (pehle leak hota tha)
-      if (clone && clone.parentNode) clone.parentNode.removeChild(clone);
       setIsExporting(false);
     }
   };
 
+  const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
   const monthlyJobsMap = {};
   const monthlyQcMap = {};   // month -> year -> { sum, count }
   const monthlyOtpMap = {};  // month -> year -> met count
@@ -569,11 +549,9 @@ export default function TelecomMap() {
     const qcVal = parsePercent(item.amdocsQc || item.amdocs_qc);
     const otpMet = isOtpMet(item.otp);
     (Array.isArray(item.months) ? item.months : []).forEach((m) => {
-      // FIX: month/year trim + 3-letter normalize, taaki "jan" / " Jan" / "January" bhi chart me aaye
-      const p = parseMonthEntry(m);
-      if (!p) return;
-      const month = p.month;
-      const fullYear = p.year;
+      if (!m) return;
+      const [month, year] = String(m || "").split(",");
+      const fullYear = year && year.length === 2 ? Number(`20${year}`) : Number(year || currentYear);
 
       if (!monthlyJobsMap[month]) monthlyJobsMap[month] = {};
       if (!monthlyJobsMap[month][fullYear]) monthlyJobsMap[month][fullYear] = 0;
@@ -614,7 +592,7 @@ export default function TelecomMap() {
   const domainPieOtpTotalMap = {}; // domain -> total entries count
 
   currentFilterData.forEach((item) => {
-    const domain = normalize(item.domain);
+    const domain = (item.domain || "").toString().trim().toUpperCase();
     const jobs = Number(item.jobsDelivered || item.jobs_delivered || 0);
     if (!domain) return;
     domainPieDataMap[domain] = (domainPieDataMap[domain] || 0) + jobs;
@@ -642,10 +620,10 @@ export default function TelecomMap() {
       otp: domainPieOtpTotalMap[domain] > 0 ? Math.round(((domainPieOtpMap[domain] || 0) / domainPieOtpTotalMap[domain]) * 100) : null
     }));
 
+  const normalize = (d) => (d || "").toString().trim().toUpperCase();
   const masterDomains = (domains || []).map(normalize);
   const workDomains = allWorkData.map(x => normalize(x.domain));
-  // FIX: empty domain ("") ka khali KPI card / checkbox na bane
-  const mergedDomains = [...new Set([...masterDomains, ...workDomains])].filter(Boolean);
+  const mergedDomains = [...new Set([...masterDomains, ...workDomains])];
 
   const sortedDomainStats = mergedDomains.map(domain => ({
     domain,
@@ -667,6 +645,19 @@ export default function TelecomMap() {
     if (!rows.length) return null;
     const metCount = rows.filter((x) => isOtpMet(x.otp)).length;
     return Math.round((metCount / rows.length) * 100);
+  };
+
+  const getFileNameDateTime = () => {
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = String(now.getMonth() + 1).padStart(2, "0");
+    const day = String(now.getDate()).padStart(2, "0");
+    let hours = now.getHours();
+    const minutes = String(now.getMinutes()).padStart(2, "0");
+    const seconds = String(now.getSeconds()).padStart(2, "0");
+    const ampm = hours >= 12 ? "PM" : "AM";
+    hours = hours % 12 || 12;
+    return `${year}-${month}-${day} at ${String(hours).padStart(2, "0")}.${minutes}.${seconds} ${ampm}`;
   };
 
   // Short, compact bar-chart tooltip: Job + QC% + OTP%
@@ -714,9 +705,7 @@ export default function TelecomMap() {
 
   return (
     <div className="page">
-      {menuOpen && <div className="sidebarOverlay" onClick={() => setMenuOpen(false)} />}
       <div className={`topMenu ${menuOpen ? "expanded" : "collapsed"}`}>
-        <button type="button" className="sidebarCloseBtn" aria-label="Close menu" onClick={() => setMenuOpen(false)}>✕</button>
         <button className={`menuBtn ${activePage === "dashboard" ? "active" : ""}`} onClick={() => { setActivePage("dashboard"); if (window.innerWidth <= 1100) setMenuOpen(false); }}><FaTachometerAlt className="menuIcon" />{menuOpen && "Dashboard"}</button>
         {/* Data Upload button — commented out (hidden from sidebar). To show it again: uncomment this AND add FaUpload back in the react-icons/fa import at the top.
         <button className={`menuBtn ${activePage === "workupdate" ? "active" : ""}`} onClick={() => { setActivePage("workupdate"); if (window.innerWidth <= 1100) setMenuOpen(false); }}><FaUpload className="menuIcon" />{menuOpen && "Data Upload"}</button>
@@ -755,19 +744,12 @@ export default function TelecomMap() {
       </div>
 
       <div className="mainContentContainer">
-        {/* Ek hi hamburger: band = ≡ , khula = ✕ (pehle active class ulti thi, isliye ≡ aur ✕ dono dikhte the) */}
         <div className="menu-icon-container">
-          <button
-            type="button"
-            className={`tmHamburger ${menuOpen ? "isOpen" : ""}`}
-            aria-label={menuOpen ? "Close menu" : "Open menu"}
-            aria-expanded={menuOpen}
-            onClick={() => setMenuOpen(!menuOpen)}
-          >
-            <span></span>
-            <span></span>
-            <span></span>
-          </button>
+          <div className={`menu-icon ${menuOpen ? "" : "active"}`} onClick={() => setMenuOpen(!menuOpen)}>
+            <span className="bar1"></span>
+            <span className="bar2"></span>
+            <span className="bar3"></span>
+          </div>
         </div>
 
         {activePage === "dashboard" && (
@@ -808,8 +790,7 @@ export default function TelecomMap() {
                             domainData.forEach((x) => {
                               let uom = x.uom || {};
                               if (typeof uom === "string") { try { uom = JSON.parse(uom); } catch { uom = {}; } }
-                              // FIX: JSON.parse ka result null ho sakta hai — null check add kiya
-                              if (uom && typeof uom === "object" && !Array.isArray(uom)) {
+                              if (typeof uom === "object" && !Array.isArray(uom)) {
                                 Object.entries(uom).forEach(([key, value]) => {
                                   if (!key || key === "undefined") return;
 
@@ -857,28 +838,43 @@ export default function TelecomMap() {
                     </div>
                   )}
                 </div>
-                <div className="mapBox">
-                  <ComposableMap projection="geoAlbersUsa" width={1000} height={600} style={{ width: "100%", height: "100%" }}>
+                <div className="mapBox" ref={mapBoxRef}>
+                  <ComposableMap className="usMap" projection="geoAlbersUsa" width={1000} height={600} style={{ width: "100%", height: "100%" }}>
                     <Geographies geography={geoData}>
                       {({ geographies, projection }) => (
                         <>
                           {geographies.map((geo) => {
                             const name = geo.properties.name;
                             return (
-                              <Geography key={geo.rsmKey} geography={geo} fill={getStateColor(name)} stroke="#2B2727" strokeWidth={0.8} style={{ default: { outline: "none" }, hover: { outline: "none", stroke: "#64748b", strokeWidth: 1.5 }, pressed: { outline: "none" } }} onMouseEnter={(evt) => handleStateHover(name, evt)} onMouseMove={(evt) => setTooltip((prev) => ({ ...prev, x: evt.clientX, y: evt.clientY }))} onMouseLeave={() => setTooltip({ visible: false, x: 0, y: 0, data: null })} />
+                              <Geography
+                                key={geo.rsmKey}
+                                geography={geo}
+                                fill={getStateColor(name)}
+                                stroke="#2B2727"
+                                strokeWidth={isCompact && !isExporting ? 0.7 : 0.8}
+                                vectorEffect={isCompact && !isExporting ? "non-scaling-stroke" : undefined}
+                                style={{ default: { outline: "none" }, hover: { outline: "none", stroke: "#64748b", strokeWidth: isCompact && !isExporting ? 1.4 : 1.5 }, pressed: { outline: "none" } }}
+                                onPointerDown={(evt) => { pointerTypeRef.current = evt.pointerType; }}
+                                onPointerEnter={(evt) => { if (evt.pointerType === "mouse") handleStateHover(name, evt); }}
+                                onPointerMove={(evt) => { if (evt.pointerType === "mouse") setTooltip((prev) => ({ ...prev, x: evt.clientX, y: evt.clientY })); }}
+                                onPointerLeave={(evt) => { if (evt.pointerType === "mouse") setTooltip({ visible: false, x: 0, y: 0, data: null }); }}
+                                onClick={(evt) => { if (pointerTypeRef.current !== "mouse") handleStateTap(name, evt); }}
+                              />
                             );
                           })}
                           {geographies.map((geo) => {
                             const name = geo.properties.name;
+                            if (isPhone && !isExporting && CROWDED_LABELS.includes(name)) return null;
                             const shortName = getShortStateName(name);
                             const centroid = geoCentroid(geo);
                             const projected = projection(centroid);
                             if (!projected) return null;
-                            const [x, y] = projected;
+                            let [x, y] = projected;
+                            const k = labelK;
                             return (
-                              <g key={`${geo.rsmKey}-label`}>
-                                <rect x={x - 14} y={y - 10} width="28" height="20" rx="5" fill={getLabelBgColor(name)} style={{ filter: "drop-shadow(0 3px 6px rgba(0,0,0,0.25))" }} />
-                                <text x={x} y={y + 1} textAnchor="middle" dominantBaseline="middle" style={{ fontSize: "11px", fontWeight: "700", fill: getLabelTextColor(), pointerEvents: "none", fontFamily: "Arial" }}>{shortName}</text>
+                              <g key={`${geo.rsmKey}-label`} style={{ pointerEvents: "none" }}>
+                                <rect x={x - 14 * k} y={y - 10 * k} width={28 * k} height={20 * k} rx={5 * k} fill={getLabelBgColor(name)} style={{ filter: "drop-shadow(0 3px 6px rgba(0,0,0,0.25))" }} />
+                                <text x={x} y={y + 1 * k} textAnchor="middle" dominantBaseline="middle" style={{ fontSize: `${11 * k}px`, fontWeight: "700", fill: getLabelTextColor(), pointerEvents: "none", fontFamily: "Arial" }}>{shortName}</text>
                               </g>
                             );
                           })}
@@ -922,14 +918,8 @@ export default function TelecomMap() {
                   <div className="scrollBox">
                     {mergedDomains.map(d => (
                       <div key={d} style={{ marginBottom: "12px" }}>
-                        {/* FIX: label click ke saath checkbox ka synthetic click bhi bubble hota tha,
-                            isse toggleExpand 2 baar chalta tha (expand hota hi nahi tha).
-                            Ab sirf label/text click pe expand hoga, input ke click pe nahi. */}
-                        <label
-                          style={{ cursor: "pointer", display: "flex", alignItems: "center" }}
-                          onClick={(e) => { if (e.target.tagName !== "INPUT") toggleExpand(d); }}
-                        >
-                          <input type="checkbox" checked={selectedDomains.includes(d)} onChange={() => toggleFilter(d, setSelectedDomains)} />
+                        <label style={{ cursor: "pointer", display: "flex", alignItems: "center" }} onClick={() => toggleExpand(d)}>
+                          <input type="checkbox" checked={selectedDomains.includes(d)} onChange={(e) => { e.stopPropagation(); toggleFilter(d, setSelectedDomains); }} />
                           <strong style={{ marginLeft: "8px" }}>{d}</strong>
                         </label>
                         {(expandedDomains[d] && subDomainsMap[d]) && (
@@ -1023,11 +1013,14 @@ export default function TelecomMap() {
 
       {tooltip.visible && (
         <div
-          className="tooltipBox"
-          style={window.innerWidth < 768 ? {} : {
-            top: Math.max(8, Math.min(tooltip.y + 10, window.innerHeight - 240)),
-            left: Math.max(8, Math.min(tooltip.x + 10, window.innerWidth - 340)),
-          }}
+          className={`tooltipBox${isSheetTooltip ? " tooltipSheet" : ""}`}
+          style={
+            isSheetTooltip
+              ? undefined
+              : isCompact
+                ? { top: Math.max(8, Math.min(tooltip.y + 10, window.innerHeight - 280)), left: Math.max(8, Math.min(tooltip.x + 10, window.innerWidth - 300)) }
+                : { top: tooltip.y + 10, left: tooltip.x + 10 }
+          }
         >
           {(() => {
             const stateData = mapReportData[tooltip.data?.state] || {};
@@ -1035,7 +1028,10 @@ export default function TelecomMap() {
             return (
               <div style={{ display: "flex", justifyContent: "space-between", padding: "10px", background: "#f1f5f9", fontWeight: "700" }}>
                 <div style={{ fontSize: "14px", color: "#0f4a63" }}>{getRegionByState(tooltip.data?.state)} - {tooltip.data?.state}</div>
-                <div style={{ fontSize: "12px", color: "#166534", fontWeight: "700" }}>{totalJobsDelivered > 0 ? `Total Jobs: ${totalJobsDelivered}` : "N/A"}</div>
+                <div style={{ fontSize: "12px", color: "#166534", fontWeight: "700", marginLeft: "auto", whiteSpace: "nowrap" }}>{totalJobsDelivered > 0 ? `Total Jobs: ${totalJobsDelivered}` : "N/A"}</div>
+                {isSheetTooltip && (
+                  <button type="button" className="tooltipClose" aria-label="Close" onClick={() => setTooltip({ visible: false, x: 0, y: 0, data: null })}>✕</button>
+                )}
               </div>
             );
           })()}
@@ -1043,8 +1039,7 @@ export default function TelecomMap() {
             {Object.entries(mapReportData[tooltip.data?.state] || {})
               .filter(([, jobs]) => Number(jobs) > 0)
               .map(([d, jobs]) => {
-                // FIX: state key lowercase + domain uppercase se lookup (map ke keys yahi format me bane hain)
-                const domainStat = stateDomainStatsMap[String(tooltip.data?.state || "").trim().toLowerCase()]?.[normalize(d)];
+                const domainStat = stateDomainStatsMap[tooltip.data?.state]?.[d];
                 const qc = domainStat && domainStat.qcCount > 0 ? Math.round(domainStat.qcSum / domainStat.qcCount) : null;
                 const otp = domainStat && domainStat.otpTotal > 0 ? Math.round((domainStat.otp / domainStat.otpTotal) * 100) : null;
                 return (
