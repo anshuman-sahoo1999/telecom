@@ -317,9 +317,56 @@
     width: 100%;
   }
 
+  /* ----- Tablet / large phone: real table, scrolls sideways only if needed ----- */
+  .rpTableWrap {
+    width: 100%;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    border-radius: 12px;
+  }
+
+  .reportTable {
+    min-width: 620px;
+  }
+
+  .reportTable th,
+  .reportTable td {
+    font-size: 13px;
+    padding: 10px 12px;
+  }
+
+  .summaryWrap {
+    justify-content: center;
+  }
+
+  .summaryBox {
+    width: 100%;
+    padding: 14px;
+  }
+
+  .summaryText h1 {
+    font-size: 28px;   
+  }
+
+  .iconBox {
+    width: 60px;
+    height: 60px;
+    font-size: 42px;
+  }
+}
+
+
+/* ---- Phone only (600px and below): each row becomes a card ---- */
+@media (max-width: 600px) {
   /* ----- Mobile: table rows become clean cards ----- */
   .rpTableWrap {
     width: 100%;
+    overflow: visible;
+    border-radius: 0;
+  }
+
+  .reportTable {
+    min-width: 0;
   }
 
   .reportTable,
@@ -405,27 +452,7 @@
   .reportTable td.highlight {
     font-size: 14px;
   }
-
-  .summaryWrap {
-    justify-content: center;
-  }
-
-  .summaryBox {
-    width: 100%;
-    padding: 14px;
-  }
-
-  .summaryText h1 {
-    font-size: 28px;   
-  }
-
-  .iconBox {
-    width: 60px;
-    height: 60px;
-    font-size: 42px;
-  }
 }
-
 
 /* =========================================================
    SUMMARY BOX (Jobs Delivered / Amdocs QC / OTP)
@@ -553,5 +580,11 @@
 
   .rpAsOn {
     text-align: center;
+  }
+}
+@media (max-width: 768px) {
+  .modalContent {
+    max-height: calc(100vh - 140px);
+    max-height: calc(100dvh - 140px);
   }
 }
