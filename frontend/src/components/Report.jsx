@@ -363,7 +363,7 @@ export default function Reports({ domain, states }) {
             {/* ================= SUMMARY ================= */}
             <div style={{ display: "flex", justifyContent: "flex-end", marginTop: "20px" }}>
               <div
-                style={{display: "flex",alignItems: "center",gap: "18px",background: "#ffffff",border: "1px solid #e5e7eb",borderRadius: "16px",
+                style={{display: "flex",flexWrap: "wrap",alignItems: "center",gap: "18px",maxWidth: "100%",boxSizing: "border-box",background: "#ffffff",border: "1px solid #e5e7eb",borderRadius: "16px",
                   padding: "16px 26px",boxShadow: "0 4px 14px rgba(15, 23, 42, 0.06)",}}
               >
                 <div
@@ -373,7 +373,7 @@ export default function Reports({ domain, states }) {
                 </div>
 
                 <div>
-                  <div style={{ display: "flex", alignItems: "center", gap: "16px" }}>
+                  <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: "8px 16px" }}>
                     <div style={{ textAlign: "center" }}>
                       <div style={{ fontSize: 30, fontWeight: 800, color: "#991b1b", lineHeight: 1.1 }}>
                         {totalJobs}
