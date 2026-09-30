@@ -275,8 +275,14 @@ const Login = () => {
 
         <div className="live-stats">
           <div className="live-stats-header">
-            <span className="live-dot" />
-            <h3>Live Portal Progress Statistics</h3>
+            {/* LIVE badge: red pill + left me blinking point */}
+            <div className="live-badge">
+              <span className="live-badge-ring">
+                <span className="live-badge-dot" />
+              </span>
+              <span className="live-badge-text">LIVE</span>
+            </div>
+            <h3>Live Progress Summary</h3>
           </div>
 
           <div className="live-stats-controls">
