@@ -1,16 +1,19 @@
-import React, { useState, useMemo, useRef, useEffect } from "react";
+import React, { useState, useMemo, useRef, useEffect, useCallback } from "react";
 import {
   ResponsiveContainer, LineChart, Line, XAxis, YAxis, CartesianGrid,
-  Tooltip, Legend, LabelList, ReferenceLine
+  Tooltip, LabelList
 } from "recharts";
-import { FaDownload } from "react-icons/fa";
+import { FaDownload, FaTimes } from "react-icons/fa";
 import html2canvas from "html2canvas";
 import "../style/kpitrend.css";
 
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-
-const QC_COLOR = "#2563eb";  
-const OTP_COLOR = "#111827";  
+const QC_COLOR = "#2563eb";
+const OTP_COLOR = "#111827";
+const SERIES = [
+  { key: "QC", name: "Amdocs QC %", color: QC_COLOR },
+  { key: "OTP", name: "OTP %", color: OTP_COLOR },
+];
 
 const normalize = (d) => (d ?? "").toString().trim().toUpperCase();
 
@@ -22,7 +25,7 @@ const parsePercent = (val) => {
   const num = parseFloat(val.toString().replace("%", "").trim());
   if (isNaN(num)) return null;
   const pct = num > 0 && num <= 1 ? num * 100 : num; // 0.95 -> 95
-  return Math.min(100, Math.max(0, Math.round(pct)));  // 0-100 ke beech rakho
+  return Math.min(100, Math.max(0, Math.round(pct))); // 0-100 ke beech rakho
 };
 
 const isOtpMet = (val) => {
@@ -33,6 +36,7 @@ const isOtpMet = (val) => {
   const num = parseFloat(str.replace("%", ""));
   return !isNaN(num) && num > 0;
 };
+
 const parseMonthYear = (m, fallbackYear) => {
   const match = String(m).trim().match(/^([A-Za-z]{3,})\W*(\d{2,4})?$/);
   if (!match) return null;
@@ -46,10 +50,12 @@ const parseMonthYear = (m, fallbackYear) => {
 
 const TrendTooltip = ({ active, payload, label }) => {
   if (!active || !payload || !payload.length) return null;
+  const rows = payload.filter((p) => p.value !== null && p.value !== undefined);
+  if (!rows.length) return null;
   return (
     <div className="ktmTooltip">
       <div className="ktmTooltipTitle">{label}</div>
-      {payload.map((p) => (
+      {rows.map((p) => (
         <div key={p.dataKey} className="ktmTooltipRow">
           <span className="ktmDot" style={{ background: p.color }}></span>
           <span>{p.name}:</span>
@@ -61,72 +67,108 @@ const TrendTooltip = ({ active, payload, label }) => {
 };
 
 export default function KpiTrendModal({ data = [], domains = [], onClose }) {
-  const [selectedDomain, setSelectedDomain] = useState("ALL");
-  const [showExportMenu, setShowExportMenu] = useState(false);
-  const chartRef = useRef(null);
   const currentYear = new Date().getFullYear();
 
-  // Duplicate domains hata do (React key warning + double option se bachne ke liye)
-  const domainList = useMemo(
-    () => Array.from(new Set((domains || []).filter(Boolean))),
-    [domains]
-  );
+  const [selectedDomain, setSelectedDomain] = useState("ALL");
+  const [selectedYear, setSelectedYear] = useState(String(currentYear));
+  const [showExportMenu, setShowExportMenu] = useState(false);
+  const [exporting, setExporting] = useState(false);
+  const chartRef = useRef(null);
+  const closeBtnRef = useRef(null);
 
-  // Close popup with Esc key
+  const handleClose = useCallback(() => {
+    if (typeof onClose === "function") onClose();
+  }, [onClose]);
+  const domainList = useMemo(() => {
+    const seen = new Set();
+    const list = [];
+    (Array.isArray(domains) ? domains : []).forEach((d) => {
+      const key = normalize(d);
+      if (!key || seen.has(key)) return;
+      seen.add(key);
+      list.push(String(d).trim());
+    });
+    return list;
+  }, [domains]);
+
+  const yearList = useMemo(() => {
+    const set = new Set([currentYear]);
+    (Array.isArray(data) ? data : []).forEach((item) => {
+      (Array.isArray(item?.months) ? item.months : []).forEach((m) => {
+        if (!m) return;
+        const parsed = parseMonthYear(m, currentYear);
+        if (parsed) set.add(parsed.year);
+      });
+    });
+    return Array.from(set).sort((a, b) => a - b).map(String);
+  }, [data, currentYear]);
+
+  const activeYear = yearList.includes(selectedYear) ? selectedYear : String(currentYear);
   useEffect(() => {
-    const onKey = (e) => { if (e.key === "Escape") onClose && onClose(); };
+    const onKey = (e) => {
+      if (e.key !== "Escape") return;
+      if (showExportMenu) setShowExportMenu(false);
+      else handleClose();
+    };
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
-  }, [onClose]);
+  }, [handleClose, showExportMenu]);
+  
+  useEffect(() => {
+    const prevOverflow = document.body.style.overflow;
+    const prevFocus = document.activeElement;
+    document.body.style.overflow = "hidden";
+    if (closeBtnRef.current) closeBtnRef.current.focus();
+    return () => {
+      document.body.style.overflow = prevOverflow;
+      if (prevFocus && typeof prevFocus.focus === "function") prevFocus.focus();
+    };
+  }, []);
 
-  // Month-Year wise QC % and OTP %
   const chartData = useMemo(() => {
-    const bucket = {}; // key -> { year, monthIdx, qcSum, qcCount, otpMet, total }
+    const yearNum = Number(activeYear);
+    const bucket = {}; 
     const wanted = normalize(selectedDomain);
 
     (Array.isArray(data) ? data : []).forEach((item) => {
       if (!item) return;
-      // FIX: dono side normalize, taaki case/space mismatch na ho
       if (selectedDomain !== "ALL" && normalize(item.domain) !== wanted) return;
 
-      // FIX: 0 value ko bhi valid maana jaye (|| se 0 gayab ho jata tha)
-      const qcVal = parsePercent(firstFilled(item.amdocsQc, item.amdocs_qc));
+      const qcVal = parsePercent(firstFilled(item.amdocsQc, item.amdocs_qc)); 
       const otpMet = isOtpMet(item.otp);
-
-      // FIX: ek row me same month duplicate ho to sirf ek baar count ho
-      const seen = new Set();
+      const seen = new Set(); 
 
       (Array.isArray(item.months) ? item.months : []).forEach((m) => {
         if (!m) return;
         const parsed = parseMonthYear(m, currentYear);
-        if (!parsed) return;
-        const { monthIdx, year } = parsed;
-        const key = `${year}-${String(monthIdx).padStart(2, "0")}`;
-        if (seen.has(key)) return;
-        seen.add(key);
+        if (!parsed || parsed.year !== yearNum) return;
+        const { monthIdx } = parsed;
+        if (seen.has(monthIdx)) return;
+        seen.add(monthIdx);
 
-        if (!bucket[key]) bucket[key] = { year, monthIdx, qcSum: 0, qcCount: 0, otpMet: 0, total: 0 };
+        if (!bucket[monthIdx]) bucket[monthIdx] = { qcSum: 0, qcCount: 0, otpMet: 0, total: 0 };
         if (qcVal !== null) {
-          bucket[key].qcSum += qcVal;
-          bucket[key].qcCount += 1;
+          bucket[monthIdx].qcSum += qcVal;
+          bucket[monthIdx].qcCount += 1;
         }
-        bucket[key].total += 1;
-        if (otpMet) bucket[key].otpMet += 1;
+        bucket[monthIdx].total += 1;
+        if (otpMet) bucket[monthIdx].otpMet += 1;
       });
     });
 
-    return Object.keys(bucket)
-      .sort()
-      .map((key) => {
-        const b = bucket[key];
-        return {
-          label: `${MONTHS[b.monthIdx]} ${b.year}`,
-          QC: b.qcCount > 0 ? Math.round(b.qcSum / b.qcCount) : 0,       // no QC -> 0%
-          OTP: b.total > 0 ? Math.round((b.otpMet / b.total) * 100) : 0, // no OTP -> 0%
-        };
-      });
-  }, [data, selectedDomain, currentYear]);
 
+    return MONTHS.map((month, idx) => {
+      const b = bucket[idx];
+      if (!b) return { label: month, QC: null, OTP: null };
+      return {
+        label: month,
+        QC: b.qcCount > 0 ? Math.round(b.qcSum / b.qcCount) : 0,
+        OTP: b.total > 0 ? Math.round((b.otpMet / b.total) * 100) : 0,
+      };
+    });
+  }, [data, selectedDomain, activeYear, currentYear]);
+
+  const hasData = chartData.some((r) => r.QC !== null || r.OTP !== null);
   const domainTitle = selectedDomain === "ALL" ? "All Domains" : selectedDomain;
 
   const getFileNameDateTime = () => {
@@ -138,53 +180,95 @@ export default function KpiTrendModal({ data = [], domains = [], onClose }) {
   // Download chart as PNG / JPG
   const exportChart = async (type) => {
     setShowExportMenu(false);
-    if (!chartRef.current) return;
+    if (!chartRef.current || exporting) return;
+    setExporting(true);
     try {
-      await new Promise((res) => setTimeout(res, 150)); // menu band hone ka wait
+      await new Promise((res) => setTimeout(res, 150)); 
       const canvas = await html2canvas(chartRef.current, {
         scale: 2,
         useCORS: true,
+        logging: false,
         backgroundColor: "#ffffff",
         ignoreElements: (el) => el.hasAttribute && el.hasAttribute("data-export-ignore"),
       });
       const mime = type === "jpg" ? "image/jpeg" : "image/png";
-      // FIX: filename me / \ : * ? " < > | jaise invalid characters hatao
       const safeTitle = domainTitle.replace(/[\\/:*?"<>|]/g, "-");
       const link = document.createElement("a");
       link.href = canvas.toDataURL(mime, 0.95);
-      link.download = `KPI Trend ${safeTitle} ${getFileNameDateTime()}.${type}`;
+      link.download = `KPI Trend ${safeTitle} ${activeYear} ${getFileNameDateTime()}.${type}`;
       document.body.appendChild(link); // kuch browsers me zaroori
       link.click();
       document.body.removeChild(link);
     } catch (err) {
       console.error("Trend chart export failed:", err);
+    } finally {
+      setExporting(false);
     }
   };
 
-  const xTilt = chartData.length > 6;
+  const renderPointLabel = (seriesKey, color) => (props) => {
+    const { x, y, value, index } = props;
+    if (x === null || x === undefined || y === null || y === undefined) return null;
+    if (value === null || value === undefined) return null;
+    const row = chartData[index];
+    if (!row) return null;
+    const other = seriesKey === "QC" ? row.OTP : row.QC;
+    const above =
+      other === null || other === undefined || value > other || (value === other && seriesKey === "QC");
+    return (
+      <text
+        x={x}
+        y={above ? y - 11 : y + 19}
+        textAnchor="middle"
+        fontSize={11}
+        fontWeight={700}
+        fill={color}
+        stroke="#ffffff"
+        strokeWidth={3}
+        paintOrder="stroke"
+      >
+        {`${value}%`}
+      </text>
+    );
+  };
 
   return (
-    <div className="ktmOverlay" onClick={onClose}>
+    <div
+      className="ktmOverlay"
+      onMouseDown={(e) => {
+
+        if (e.target === e.currentTarget) handleClose();
+      }}
+    >
       <div
         className="ktmModal"
         role="dialog"
         aria-modal="true"
         aria-label="KPI Trend"
-        onClick={(e) => { e.stopPropagation(); setShowExportMenu(false); }}
+        onClick={() => setShowExportMenu(false)}
       >
         {/* ---------- Header ---------- */}
         <div className="ktmHeader">
           <div className="ktmHeaderLeft">
-            <div className="ktmHeaderIcon">📈</div>
-            <div>
+            <div className="ktmHeaderIcon" aria-hidden="true">📈</div>
+            <div className="ktmHeaderText">
               <div className="ktmHeaderSmall">KPI Trend</div>
-              <div className="ktmHeaderMain">OTP / Amdocs QC - Month & Year Wise</div>
+              <div className="ktmHeaderMain">OTP / Amdocs QC</div>
             </div>
           </div>
-          <button type="button" className="ktmCloseBtn" onClick={onClose} aria-label="Close">✖</button>
+          <button
+            type="button"
+            ref={closeBtnRef}
+            className="ktmCloseBtn"
+            onClick={handleClose}
+            aria-label="Close"
+            title="Close"
+          >
+            <FaTimes />
+          </button>
         </div>
 
-        {/* ---------- Domain dropdown ---------- */}
+        {/* ---------- Domain + Year dropdown ---------- */}
         <div className="ktmToolbar">
           <div className="ktmField">
             <label className="ktmLabel" htmlFor="ktmDomainSelect">Select Domain</label>
@@ -196,94 +280,103 @@ export default function KpiTrendModal({ data = [], domains = [], onClose }) {
             >
               <option value="ALL">All Domains</option>
               {domainList.map((d) => (
-                <option key={d} value={d}>{d}</option>
+                <option key={normalize(d)} value={d}>{d}</option>
               ))}
             </select>
           </div>
-          <div className="ktmColorRule">
-            <span className="ktmRuleItem"><i style={{ background: "#16a34a" }}></i>90-100%</span>
-            <span className="ktmRuleItem"><i style={{ background: "#d97706" }}></i>80-90%</span>
-            <span className="ktmRuleItem"><i style={{ background: "#dc2626" }}></i>Below 80%</span>
+          <div className="ktmField">
+            <label className="ktmLabel" htmlFor="ktmYearSelect">Select Year</label>
+            <select
+              id="ktmYearSelect"
+              className="ktmSelect"
+              value={activeYear}
+              onChange={(e) => setSelectedYear(e.target.value)}
+            >
+              {yearList.map((y) => (
+                <option key={y} value={y}>{y}</option>
+              ))}
+            </select>
           </div>
         </div>
 
         {/* ---------- Chart card (this whole box is exported) ---------- */}
         <div className="ktmChartCard" ref={chartRef}>
           <div className="ktmChartTop">
-            <h3 className="ktmChartTitle">{domainTitle} - OTP & Amdocs QC (%)</h3>
+            <h3 className="ktmChartTitle">
+              {domainTitle} - OTP &amp; Amdocs QC (%) - {activeYear}
+            </h3>
 
-            {/* Export icon (not included in the downloaded image) */}
+            {/* Export icon (downloaded image me nahi aayega) */}
             <div className="ktmExport" data-export-ignore="true" onClick={(e) => e.stopPropagation()}>
               <button
                 type="button"
                 className="ktmExportBtn"
                 title="Download chart"
                 aria-label="Download chart"
+                aria-haspopup="menu"
+                aria-expanded={showExportMenu}
+                disabled={exporting || !hasData}
                 onClick={() => setShowExportMenu((v) => !v)}
               >
                 <FaDownload />
               </button>
               {showExportMenu && (
-                <div className="ktmExportMenu">
-                  <div onClick={() => exportChart("png")}>PNG</div>
-                  <div onClick={() => exportChart("jpg")}>JPG</div>
+                <div className="ktmExportMenu" role="menu">
+                  <button type="button" role="menuitem" onClick={() => exportChart("png")}>PNG</button>
+                  <button type="button" role="menuitem" onClick={() => exportChart("jpg")}>JPG</button>
                 </div>
               )}
             </div>
           </div>
 
-          {chartData.length === 0 ? (
-            <div className="ktmEmpty">No data available for {domainTitle}</div>
+          {/* Legend: graph ki lines ke colour ke hisaab se (downloaded image me bhi aayega) */}
+          <div className="ktmLegend">
+            {SERIES.map((s) => (
+              <span key={s.key} className="ktmLegendItem">
+                <span className="ktmLegendLine" style={{ background: s.color }}>
+                  <span className="ktmLegendDot" style={{ background: s.color }}></span>
+                </span>
+                {s.name}
+              </span>
+            ))}
+          </div>
+
+          {!hasData ? (
+            <div className="ktmEmpty">No data available for {domainTitle} in {activeYear}</div>
           ) : (
-            <ResponsiveContainer width="100%" height={380}>
-              <LineChart data={chartData} margin={{ top: 28, right: 30, left: 0, bottom: 10 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
-                <XAxis
-                  dataKey="label"
-                  interval={0}
-                  angle={xTilt ? -35 : 0}
-                  textAnchor={xTilt ? "end" : "middle"}
-                  height={xTilt ? 70 : 40}
-                  tick={{ fontSize: 12, fill: "#334155" }}
-                  label={{ value: "Month - Year", position: "insideBottom", offset: xTilt ? -2 : -6, fontSize: 12, fill: "#64748b" }}
-                />
-                <YAxis
-                  domain={[0, 100]}
-                  ticks={[0, 20, 40, 60, 80, 100]}
-                  tickFormatter={(v) => `${v}%`}
-                  tick={{ fontSize: 12, fill: "#334155" }}
-                  label={{ value: "Percentage (%)", angle: -90, position: "insideLeft", offset: 10, fontSize: 12, fill: "#64748b" }}
-                />
-                <ReferenceLine y={90} stroke="#16a34a" strokeDasharray="5 4" strokeOpacity={0.6} />
-                <ReferenceLine y={80} stroke="#d97706" strokeDasharray="5 4" strokeOpacity={0.6} />
-                <Tooltip content={<TrendTooltip />} />
-                <Legend verticalAlign="top" height={36} iconType="plainline" wrapperStyle={{ fontSize: 13, fontWeight: 700 }} />
-                <Line
-                  type="monotone"
-                  dataKey="QC"
-                  name="Amdocs QC %"
-                  stroke={QC_COLOR}
-                  strokeWidth={3}
-                  dot={{ r: 5, fill: QC_COLOR, stroke: "#fff", strokeWidth: 2 }}
-                  activeDot={{ r: 7 }}
-                  isAnimationActive={false}
-                >
-                  <LabelList dataKey="QC" position="top" formatter={(v) => `${v}%`} style={{ fontSize: 11, fontWeight: 700, fill: QC_COLOR }} />
-                </Line>
-                <Line
-                  type="monotone"
-                  dataKey="OTP"
-                  name="OTP %"
-                  stroke={OTP_COLOR}
-                  strokeWidth={3}
-                  dot={{ r: 5, fill: OTP_COLOR, stroke: "#fff", strokeWidth: 2 }}
-                  activeDot={{ r: 7 }}
-                  isAnimationActive={false}
-                >
-                  <LabelList dataKey="OTP" position="bottom" formatter={(v) => `${v}%`} style={{ fontSize: 11, fontWeight: 700, fill: OTP_COLOR }} />
-                </Line>
-              </LineChart>
-            </ResponsiveContainer>
+            <div className="ktmChartBox">
+              <ResponsiveContainer width="100%" height="100%">
+                <LineChart data={chartData} margin={{ top: 22, right: 24, left: 24, bottom: 6 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+                  <XAxis
+                    dataKey="label"
+                    interval={0}
+                    height={44}
+                    tick={{ fontSize: 12, fill: "#334155" }}
+                    label={{ value: `Month - ${activeYear}`, position: "insideBottom", offset: -4, fontSize: 12, fill: "#64748b" }}
+                  />
+                  {/* Y axis hidden (dikhega nahi) — par scale 0-100 fixed rehta hai, isliye graph sahi banta hai */}
+                  <YAxis hide domain={[0, 100]} padding={{ top: 6, bottom: 16 }} />
+                  <Tooltip content={<TrendTooltip />} />
+                  {SERIES.map((s) => (
+                    <Line
+                      key={s.key}
+                      type="monotone"
+                      dataKey={s.key}
+                      name={s.name}
+                      stroke={s.color}
+                      strokeWidth={3}
+                      connectNulls={false}
+                      dot={{ r: 5, fill: s.color, stroke: "#fff", strokeWidth: 2 }}
+                      activeDot={{ r: 7 }}
+                      isAnimationActive={false}
+                    >
+                      <LabelList dataKey={s.key} content={renderPointLabel(s.key, s.color)} />
+                    </Line>
+                  ))}
+                </LineChart>
+              </ResponsiveContainer>
+            </div>
           )}
         </div>
       </div>
