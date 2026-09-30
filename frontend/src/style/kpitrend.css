@@ -22,47 +22,68 @@
   color: #ffffff;
   font-size: 14px;
   font-weight: 700;
+  font-family: inherit;
+  line-height: 1.2;
   cursor: pointer;
   white-space: nowrap;
   box-shadow: 0 4px 12px rgba(37, 99, 235, 0.3);
   transition: transform 0.2s ease, box-shadow 0.2s ease;
 }
 
-.kpiTrendBtn:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 8px 18px rgba(37, 99, 235, 0.4);
+/* Hover effect sirf mouse wale devices par (touch par "sticky hover" nahi hoga) */
+@media (hover: hover) {
+  .kpiTrendBtn:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 18px rgba(37, 99, 235, 0.4);
+  }
 }
 
 .kpiTrendBtn:active {
   transform: scale(0.98);
 }
 
+.kpiTrendBtn:focus-visible,
+.ktmCloseBtn:focus-visible,
+.ktmExportBtn:focus-visible {
+  outline: 3px solid rgba(37, 99, 235, 0.45);
+  outline-offset: 2px;
+}
+
 /* ---------- Popup ---------- */
 .ktmOverlay {
   position: fixed;
   inset: 0;
-  background: rgba(15, 23, 42, 0.6);
   display: flex;
   align-items: center;
   justify-content: center;
   padding: 16px;
+  background: rgba(15, 23, 42, 0.6);
+  overflow: hidden;
   z-index: 99999;
 }
 
 .ktmModal {
   width: 100%;
   max-width: 1000px;
-  max-height: 94vh;
+  max-height: 94vh;   /* fallback */
+  max-height: 94dvh;  /* mobile browser toolbar ke saath sahi height */
+  overflow-x: hidden;
   overflow-y: auto;
+  overscroll-behavior: contain; /* modal scroll hone par peeche ka page scroll nahi hoga */
   background: #f8fafc;
   border-radius: 16px;
   box-shadow: 0 25px 60px rgba(0, 0, 0, 0.35);
 }
 
+/* Header scroll karte waqt upar chipka rahe */
 .ktmHeader {
+  position: sticky;
+  top: 0;
+  z-index: 20;
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 12px;
   padding: 16px 22px;
   background: linear-gradient(135deg, #0f4a63, #1e3a8a);
   color: #ffffff;
@@ -73,9 +94,11 @@
   display: flex;
   align-items: center;
   gap: 14px;
+  min-width: 0; /* lamba text overflow na kare */
 }
 
 .ktmHeaderIcon {
+  flex-shrink: 0;
   width: 42px;
   height: 42px;
   border-radius: 12px;
@@ -94,16 +117,20 @@
 .ktmHeaderMain {
   font-size: 18px;
   font-weight: 700;
+  overflow-wrap: anywhere;
 }
 
 .ktmCloseBtn {
+  flex-shrink: 0;
   width: 34px;
   height: 34px;
+  padding: 0;
   border: none;
   border-radius: 50%;
   background: rgba(255, 255, 255, 0.2);
   color: #ffffff;
   font-size: 14px;
+  line-height: 1;
   cursor: pointer;
   transition: background 0.2s ease;
 }
@@ -126,7 +153,7 @@
   display: flex;
   flex-direction: column;
   gap: 6px;
-  min-width: 220px;
+  min-width: min(220px, 100%); /* chhoti screen par overflow nahi hoga */
 }
 
 .ktmLabel {
@@ -136,11 +163,14 @@
 }
 
 .ktmSelect {
+  width: 100%;
+  max-width: 100%;
   height: 40px;
   padding: 0 12px;
   border: 1px solid #cbd5e1;
   border-radius: 10px;
   background: #ffffff;
+  font-family: inherit;
   font-size: 14px;
   font-weight: 600;
   color: #0f172a;
@@ -148,7 +178,7 @@
   cursor: pointer;
 }
 
-.ktmSelect:focus {
+.ktmSelect:focus-visible {
   border-color: #2563eb;
   box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.15);
 }
@@ -170,6 +200,7 @@
 }
 
 .ktmRuleItem i {
+  flex-shrink: 0;
   width: 12px;
   height: 12px;
   border-radius: 3px;
@@ -195,20 +226,24 @@
 }
 
 .ktmChartTitle {
+  min-width: 0;
   margin: 0;
   font-size: 17px;
   font-weight: 700;
   color: #0f172a;
+  overflow-wrap: anywhere;
 }
 
 /* ---------- Export icon + PNG / JPG menu ---------- */
 .ktmExport {
   position: relative;
+  flex-shrink: 0;
 }
 
 .ktmExportBtn {
   width: 38px;
   height: 38px;
+  padding: 0;
   border: 1px solid #cbd5e1;
   border-radius: 10px;
   background: #ffffff;
@@ -218,13 +253,15 @@
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  transition: all 0.2s ease;
+  transition: background 0.2s ease, border-color 0.2s ease, color 0.2s ease;
 }
 
-.ktmExportBtn:hover {
-  background: #2563eb;
-  border-color: #2563eb;
-  color: #ffffff;
+@media (hover: hover) {
+  .ktmExportBtn:hover {
+    background: #2563eb;
+    border-color: #2563eb;
+    color: #ffffff;
+  }
 }
 
 .ktmExportMenu {
@@ -246,6 +283,7 @@
   font-weight: 700;
   color: #0f172a;
   cursor: pointer;
+  user-select: none;
 }
 
 .ktmExportMenu div:hover {
@@ -277,6 +315,7 @@
 }
 
 .ktmDot {
+  flex-shrink: 0;
   width: 9px;
   height: 9px;
   border-radius: 50%;
@@ -311,6 +350,12 @@
     padding: 12px 14px;
   }
 
+  .ktmHeaderIcon {
+    width: 36px;
+    height: 36px;
+    font-size: 18px;
+  }
+
   .ktmHeaderMain {
     font-size: 15px;
   }
@@ -330,5 +375,14 @@
 
   .ktmChartTitle {
     font-size: 14px;
+  }
+}
+
+/* Jinhone "reduce motion" on kiya hai unke liye animations band */
+@media (prefers-reduced-motion: reduce) {
+  .kpiTrendBtn,
+  .ktmCloseBtn,
+  .ktmExportBtn {
+    transition: none;
   }
 }
