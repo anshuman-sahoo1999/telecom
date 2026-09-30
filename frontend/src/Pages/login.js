@@ -21,8 +21,11 @@ const DOMAIN_COLORS = {
   JPA: "#f97316",
 };
 
-
+const DEFAULT_DOMAIN_COLOR = "#6366f1";
+const NEUTRAL_COLOR = "#cbd5e1";
 const COLS = 4;
+const REFRESH_MS = 60000;
+const REQUEST_TIMEOUT_MS = 15000;
 
 const parseMonthEntry = (m, fallbackYear) => {
   if (!m) return null;
@@ -40,9 +43,11 @@ const getJobs = (item) => Number(firstFilled(item?.jobsDelivered, item?.jobs_del
 
 const parsePercent = (val) => {
   if (val === null || val === undefined || val === "") return null;
-  const num = parseFloat(val.toString().replace("%", "").trim());
+  const str = val.toString().trim();
+  const num = parseFloat(str.replace("%", ""));
   if (isNaN(num)) return null;
-  const pct = num > 0 && num <= 1 ? num * 100 : num;
+  const hasPercentSign = str.includes("%");
+  const pct = !hasPercentSign && num > 0 && num <= 1 ? num * 100 : num;
   return Math.min(100, Math.max(0, Math.round(pct)));
 };
 
@@ -57,14 +62,14 @@ const isOtpMet = (val) => {
   return !isNaN(num) && num > 0;
 };
 
-
 const getPerfColor = (val) => {
-  if (val === null || val === undefined || isNaN(val)) return "#cbd5e1";
+  if (val === null || val === undefined || isNaN(val)) return NEUTRAL_COLOR;
   if (val >= 90) return "#4ade80";
   if (val >= 80) return "#fbbf24";
   return "#f87171";
 };
 
+const formatPercent = (val) => (val !== null && val !== undefined ? `${val}%` : "--");
 
 // Previous 2 months + current month (oldest -> current)
 // Sep => Jul, Aug, Sep | Oct => Aug, Sep, Oct | Nov => Sep, Oct, Nov
@@ -106,6 +111,19 @@ const formatLastUpdated = (d) => {
   return `${day} ${month} ${year} at ${pad2(hour)}:${minute} ${period} Hrs`;
 };
 
+
+const extractDomainNames = (data) => {
+  if (!data) return [];
+  if (Array.isArray(data)) {
+    return data
+      .map((x) => (typeof x === "object" && x !== null ? x.domain ?? x.name : x))
+      .map(normalize)
+      .filter(Boolean);
+  }
+  if (typeof data === "object") return Object.keys(data).map(normalize).filter(Boolean);
+  return [];
+};
+
 const Login = () => {
   const navigate = useNavigate();
 
@@ -126,11 +144,13 @@ const Login = () => {
 
   useEffect(() => {
     let alive = true;
+    const controller = new AbortController();
 
     const loadStats = async () => {
+      const opts = { signal: controller.signal, timeout: REQUEST_TIMEOUT_MS };
       const [workRes, masterRes] = await Promise.allSettled([
-        axios.get(`${API_BASE_URL}/api/work/all`),
-        axios.get(`${API_BASE_URL}/api/master`),
+        axios.get(`${API_BASE_URL}/api/work/all`, opts),
+        axios.get(`${API_BASE_URL}/api/master`, opts),
       ]);
       if (!alive) return;
 
@@ -138,22 +158,24 @@ const Login = () => {
         setWorkData(Array.isArray(workRes.value.data) ? workRes.value.data : []);
       }
       if (masterRes.status === "fulfilled") {
-        setMasterDomains(Object.keys(masterRes.value.data || {}));
+        setMasterDomains(extractDomainNames(masterRes.value.data));
       }
+      // Work data is the core of the panel: show error only if it never loaded
       setStatsError(workRes.status === "rejected" && masterRes.status === "rejected");
       setStatsLoading(false);
     };
 
     loadStats();
-    const timer = setInterval(loadStats, 60000); // har 1 minute me live refresh
+    const timer = setInterval(loadStats, REFRESH_MS);
     return () => {
       alive = false;
+      controller.abort();
       clearInterval(timer);
     };
   }, []);
 
   const monthTabs = getMonthTabs();
-  const currentTab = monthTabs[monthTabs.length - 1]; // current month (last tab)
+  const currentTab = monthTabs[monthTabs.length - 1]; 
   const activeTab = monthTabs.find((t) => t.key === selectedKey) || currentTab;
 
   const domainRows = useMemo(() => {
@@ -161,7 +183,7 @@ const Login = () => {
     const map = {};
 
     workData.forEach((item) => {
-      const domain = normalize(item.domain);
+      const domain = normalize(item?.domain);
       if (!domain) return;
 
       const inMonth = (Array.isArray(item?.months) ? item.months : []).some((m) => {
@@ -182,14 +204,14 @@ const Login = () => {
     });
 
     const names = [
-      ...new Set([...masterDomains.map(normalize), ...workData.map((x) => normalize(x.domain))]),
+      ...new Set([...masterDomains, ...workData.map((x) => normalize(x?.domain))]),
     ].filter(Boolean);
 
     return names.map((name) => {
       const s = map[name];
       return {
         name,
-        color: DOMAIN_COLORS[name] || "#6366f1",
+        color: DOMAIN_COLORS[name] || DEFAULT_DOMAIN_COLOR,
         jobs: s ? s.jobs : 0,
         qc: s && s.qcCount > 0 ? Math.round(s.qcSum / s.qcCount) : null,
         otp: s && s.total > 0 ? Math.round((s.otpMet / s.total) * 100) : null,
@@ -197,11 +219,20 @@ const Login = () => {
     });
   }, [workData, masterDomains, activeTab.idx, activeTab.year]);
 
-  // Report.js wali logic: sab records me se latest updated_at / created_at
+
   const lastUpdated = useMemo(() => {
     let latest = null;
     workData.forEach((item) => {
-      const d = parseDate(firstFilled(item?.updated_at, item?.updatedAt, item?.updated_on, item?.modified_at, item?.created_at, item?.createdAt));
+      const d = parseDate(
+        firstFilled(
+          item?.updated_at,
+          item?.updatedAt,
+          item?.updated_on,
+          item?.modified_at,
+          item?.created_at,
+          item?.createdAt
+        )
+      );
       if (d && (!latest || d > latest)) latest = d;
     });
     return latest;
@@ -210,57 +241,63 @@ const Login = () => {
   /* ---------- Login ---------- */
   const handleLogin = async (e) => {
     e.preventDefault();
+    if (isLoading) return;
     setIsLoading(true);
     setError("");
 
     try {
-      const finalEmail = email.includes("@")
-        ? email.trim()
-        : `${email.trim()}${emailDomain}`;
+      const trimmed = email.trim();
+      const finalEmail = trimmed.includes("@") ? trimmed : `${trimmed}${emailDomain}`;
 
       const res = await axios.post(
         `${API_BASE_URL}/api/auth/login`,
-        {
-          login_id: finalEmail,
-          password,
-        }
+        { login_id: finalEmail, password },
+        { timeout: REQUEST_TIMEOUT_MS }
       );
 
-      localStorage.setItem("user", JSON.stringify(res.data.user));
-      localStorage.setItem("role", res.data.role);
-      localStorage.setItem("name", res.data.user.name);
-      localStorage.setItem("domain", res.data.domain ?? "");
+      const { user, role, domain } = res.data || {};
+      if (!user || !role) {
+        throw new Error("Invalid response from server");
+      }
 
-      switch (res.data.role) {
+      localStorage.setItem("user", JSON.stringify(user));
+      localStorage.setItem("role", role);
+      localStorage.setItem("name", user.name ?? "");
+      localStorage.setItem("domain", domain ?? "");
+
+      switch (String(role).toUpperCase()) {
         case "MASTER":
           navigate("/master-dashboard");
           break;
-
-        case "Admin":
+        case "ADMIN":
           navigate("/admin-dashboard/telecom");
           break;
-
         case "MIS":
           navigate("/mis-dashboard/telecom");
           break;
-
-        case "TeamLead":
+        case "TEAMLEAD":
           navigate("/teamlead-dashboard/telecom");
           break;
-
-        case "TeamMember":
+        case "TEAMMEMBER":
           navigate("/teammember-dashboard");
           break;
-
         default:
           navigate("/telecom");
       }
     } catch (err) {
-      setError(err.response?.data?.message || "Login failed");
+      if (err.response) {
+        setError(err.response.data?.message || "Login failed");
+      } else if (err.request) {
+        setError("Unable to reach the server. Please check your connection and try again.");
+      } else {
+        setError(err.message || "Login failed");
+      }
     } finally {
       setIsLoading(false);
     }
   };
+
+  const lastRow = Math.floor((domainRows.length - 1) / COLS);
 
   return (
     <div className="auth-page">
@@ -268,14 +305,12 @@ const Login = () => {
       <div className="auth-left">
         <div className="left-content">
           <h1>Welcome Telecom Work Status</h1>
-          <p>
-            Manage telecom users, plans, billing, and services in one system.
-          </p>
+          <p>Manage telecom users, plans, billing, and services in one system.</p>
         </div>
 
         <div className="live-stats">
           <div className="live-stats-header">
-            {/* LIVE badge: red pill + left me blinking point */}
+            {/* LIVE badge: red pill + blinking dot on the left */}
             <div className="live-badge">
               <span className="live-badge-ring">
                 <span className="live-badge-dot" />
@@ -307,7 +342,7 @@ const Login = () => {
 
           <div className="live-domain-grid">
             {statsLoading && <div className="live-msg">Loading data...</div>}
-            {!statsLoading && statsError && <div className="live-msg">Data available nahi hai</div>}
+            {!statsLoading && statsError && <div className="live-msg">Data not available</div>}
             {!statsLoading && !statsError && domainRows.length === 0 && (
               <div className="live-msg">No domains found</div>
             )}
@@ -315,7 +350,6 @@ const Login = () => {
             {!statsLoading &&
               !statsError &&
               domainRows.map((d, i) => {
-                const lastRow = Math.floor((domainRows.length - 1) / COLS);
                 const isLastInRow = i % COLS === COLS - 1;
                 const isVeryLast = i === domainRows.length - 1;
                 const cls = [
@@ -333,8 +367,8 @@ const Login = () => {
                       <span> Jobs</span>
                     </div>
                     <div className="live-domain-metrics">
-                      <span style={{ color: getPerfColor(d.qc ?? 0) }}>QC: {d.qc !== null ? `${d.qc}%` : "0%"}</span>
-                      <span style={{ color: getPerfColor(d.otp ?? 0) }}>OTP: {d.otp !== null ? `${d.otp}%` : "0%"}</span>
+                      <span style={{ color: getPerfColor(d.qc) }}>QC: {formatPercent(d.qc)}</span>
+                      <span style={{ color: getPerfColor(d.otp) }}>OTP: {formatPercent(d.otp)}</span>
                     </div>
                   </div>
                 );
@@ -361,7 +395,7 @@ const Login = () => {
           <h2>Login</h2>
           <p>Enter your email and password</p>
 
-          <form onSubmit={handleLogin} autoComplete="off">
+          <form onSubmit={handleLogin}>
             {/* Email Box */}
             <div className="email-input-group">
               <input
@@ -370,7 +404,8 @@ const Login = () => {
                 placeholder="Email..."
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                autoComplete="off"
+                autoComplete="username"
+                aria-label="Email"
                 required
               />
 
@@ -378,6 +413,7 @@ const Login = () => {
                 className="email-domain-select"
                 value={emailDomain}
                 onChange={(e) => setEmailDomain(e.target.value)}
+                aria-label="Email domain"
               >
                 <option value="@ecometrix.co.in">@ecometrix.co.in</option>
                 <option value="@gmail.com">@gmail.com</option>
@@ -395,19 +431,33 @@ const Login = () => {
                 placeholder="Password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                autoComplete="new-password"
+                autoComplete="current-password"
+                aria-label="Password"
                 required
               />
 
               <span
                 className="password-eye"
-                onClick={() => setShowPassword(!showPassword)}
+                role="button"
+                tabIndex={0}
+                aria-label={showPassword ? "Hide password" : "Show password"}
+                onClick={() => setShowPassword((prev) => !prev)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || e.key === " ") {
+                    e.preventDefault();
+                    setShowPassword((prev) => !prev);
+                  }
+                }}
               >
                 {showPassword ? <FaEyeSlash /> : <FaEye />}
               </span>
             </div>
 
-            {error && <p className="error">{error}</p>}
+            {error && (
+              <p className="error" role="alert">
+                {error}
+              </p>
+            )}
 
             <button type="submit" disabled={isLoading}>
               {isLoading ? "Logging in..." : "Login"}
