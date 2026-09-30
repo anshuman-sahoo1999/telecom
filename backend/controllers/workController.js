@@ -13,8 +13,6 @@ const clean = (v) => {
 
 const normalize = (v) => clean(v).toUpperCase();
 
-// db.query ko Promise bana diya, taaki delete/update me har query ka
-// khatam hone ka wait kar sakein (pehle fire-and-forget tha).
 const query = (sql, params = []) =>
   new Promise((resolve, reject) => {
     db.query(sql, params, (err, result) => (err ? reject(err) : resolve(result)));
@@ -52,10 +50,6 @@ const parseMonthsInput = (months) => {
   return cleanMonthArray(arr);
 };
 
-// Sirf wahi job_creation rows hatao jinki work_updates me ab koi row nahi bachi.
-// (Agar same Job ID ki doosri work row abhi bhi hai to job_creation ko mat chhuo.)
-// Note: dono tables ko SQL me aapas me compare nahi karte (collation mismatch ka
-// khatra), balki Job IDs parameter ke roop me bhej kar Node me match karte hain.
 const removeOrphanJobCreation = async (jobIds) => {
   const ids = [...new Set((jobIds || []).map(clean).filter(isRealJobId))];
   if (ids.length === 0) return;
@@ -148,10 +142,19 @@ const formatDateToMMDDYYYY = (dateVal) => {
 /* ======================================
    PERCENTAGE FORMATTER FOR QC
 ====================================== */
+const isZeroValue = (v) => {
+  if (v === null || v === undefined || v === false) return false;
+  const s = v.toString().trim().replace(/%$/, "").trim();
+  return s !== "" && !isNaN(Number(s)) && Number(s) === 0;
+};
+
+const cleanOtp = (v) => (isZeroValue(v) ? "" : clean(v));
+
 const formatPercentage = (value) => {
   if (value === null || value === undefined || value === "") return "";
   let str = value.toString().trim();
   if (str === "") return "";
+  if (isZeroValue(str)) return "";
   if (str.endsWith("%")) return str;
 
   let num = Number(str);
@@ -380,6 +383,12 @@ const helperSyncToJobCreation = (data) => {
     const newJobId = clean(data.cleanJobId);
     if (!newJobId || newJobId === "-") return resolve();
     const cleanSingleM = formatMonth(data.month);
+    data = {
+      ...data,
+      otp: cleanOtp(data.otp),
+      amdocsQc: blankIfZero(data.amdocsQc),
+      internalQc: blankIfZero(data.internalQc)
+    };
 
     const checkSql = `
       SELECT id, jobId FROM job_creation 
@@ -512,7 +521,7 @@ const importExcel = async (req, res) => {
             const jobType = normalize(findValueInRow(row, ["Job Type", "job_type", "job-type"]));
             const jobIdVal = clean(findValueInRow(row, ["Job ID", "job_id", "jobId", "job-id"]));
             
-            const otpVal = clean(findValueInRow(row, ["OTP"]));
+            const otpVal = cleanOtp(findValueInRow(row, ["OTP"]));
             const currentStatusVal = clean(findValueInRow(row, ["Current Status", "current_status", "current-status"]));
             const productionEngineersVal = clean(findValueInRow(row, ["Production Engineers", "production_engineers"]));
             const qcEngineersVal = clean(findValueInRow(row, ["QC Engineers", "qc_engineers"]));
@@ -736,7 +745,6 @@ const importExcel = async (req, res) => {
 /* ======================================
    SMALL HELPERS FOR CREATE / UPDATE
 ====================================== */
-// Body se pehli defined value lo (snake_case ya camelCase dono chalein)
 const pick = (obj, ...keys) => {
   for (const k of keys) {
     if (obj && obj[k] !== undefined) return obj[k];
@@ -839,7 +847,7 @@ const createWork = async (req, res) => {
           clean(state),
           clean(county),
           hasUom ? JSON.stringify(uomObj) : null,
-          clean(otp),
+          cleanOtp(otp),
           clean(current_status),
           clean(flatText(production_engineers)),
           clean(flatText(qc_engineers)),
@@ -868,7 +876,7 @@ const createWork = async (req, res) => {
           clean(state),
           clean(county),
           JSON.stringify(hasUom ? uomObj : {}),
-          clean(otp),
+          cleanOtp(otp),
           clean(current_status),
           clean(flatText(production_engineers)),
           clean(flatText(qc_engineers)),
@@ -892,7 +900,7 @@ const createWork = async (req, res) => {
       receiveDate: formattedReceiveDate,
       ecdDate: formattedEcdDate,
       submissionDate: formattedSubmissionDate,
-      otp: clean(otp),
+      otp: cleanOtp(otp),
       amdocsQc: formattedAmdocsQc,
       internalQc: formattedInternalQc
     });
@@ -965,12 +973,18 @@ const updateWork = async (req, res) => {
   if (has(current_status)) setCol("current_status", clean(current_status));
   if (has(production_engineers)) setCol("production_engineers", clean(production_engineers));
   if (has(qc_engineers)) setCol("qc_engineers", clean(qc_engineers));
-  if (has(otp)) setCol("otp", clean(otp));
+  if (has(otp)) setCol("otp", cleanOtp(otp));
 
   const formattedInternalQc = has(internal_qc) ? formatPercentage(internal_qc) : "";
   const formattedAmdocsQc = has(amdocs_qc) ? formatPercentage(amdocs_qc) : "";
   if (has(internal_qc)) setCol("internal_qc", formattedInternalQc);
   if (has(amdocs_qc)) setCol("amdocs_qc", formattedAmdocsQc);
+
+  // OTP / QC jaanbujh kar khaali (ya 0) bheje to job_creation me bhi blank ho
+  const clearedTextCols = [];
+  if (has(otp) && cleanOtp(otp) === "") clearedTextCols.push("otp");
+  if (has(amdocs_qc) && formattedAmdocsQc === "") clearedTextCols.push("amdocsQc");
+  if (has(internal_qc) && formattedInternalQc === "") clearedTextCols.push("internalQc");
 
   const clearedDateCols = []; // job_creation me bhi clear karne wali date columns
   const dateVals = { receiveDate: null, ecdDate: null, submissionDate: null };
@@ -1041,6 +1055,13 @@ const updateWork = async (req, res) => {
         );
       }
 
+      for (const col of clearedTextCols) {
+        await query(
+          `UPDATE job_creation SET ${col} = '' WHERE TRIM(jobId) = TRIM(?)`,
+          [newJobId]
+        );
+      }
+
       await helperSyncToJobCreation({
         domain: has(domain) ? normalize(domain) : "",
         market: clean(state) || clean(region),
@@ -1049,7 +1070,7 @@ const updateWork = async (req, res) => {
         receiveDate: dateVals.receiveDate,
         ecdDate: dateVals.ecdDate,
         submissionDate: dateVals.submissionDate,
-        otp: has(otp) ? clean(otp) : "",
+        otp: has(otp) ? cleanOtp(otp) : "",
         amdocsQc: formattedAmdocsQc,
         internalQc: formattedInternalQc
       });
@@ -1084,6 +1105,9 @@ const regionForState = (state) => {
   return "";
 };
 
+// DB me pehle se jo 0 / 0% saved hai wo bhi screen par blank dikhe
+const blankIfZero = (v) => (isZeroValue(v) ? "" : v);
+
 const mapWorkRow = (row) => {
   const { jc_month, jc_receive, jc_ecd, jc_submission, ...work } = row;
 
@@ -1111,6 +1135,9 @@ const mapWorkRow = (row) => {
     month: displayMonth,
     months: monthsArr,
     uom: safeParseJson(work.uom, {}),
+    otp: blankIfZero(work.otp),
+    amdocs_qc: blankIfZero(work.amdocs_qc),
+    internal_qc: blankIfZero(work.internal_qc),
     receive_date: formatDateToMMDDYYYY(dateOf(work.receive_date, jc_receive)),
     ecd_date: formatDateToMMDDYYYY(dateOf(work.ecd_date, jc_ecd)),
     submission_date: formatDateToMMDDYYYY(dateOf(work.submission_date, jc_submission)),
@@ -1169,6 +1196,9 @@ const getFileData = (req, res) => {
       const { created_at, updated_at, file_name, id, ...rest } = row;
       return {
         ...rest,
+        otp: blankIfZero(rest.otp),
+        amdocs_qc: blankIfZero(rest.amdocs_qc),
+        internal_qc: blankIfZero(rest.internal_qc),
         receive_date: formatDateToMMDDYYYY(rest.receive_date),
         ecd_date: formatDateToMMDDYYYY(rest.ecd_date),
         submission_date: formatDateToMMDDYYYY(rest.submission_date)
@@ -1204,6 +1234,9 @@ const getMonthWiseReport = (req, res) => {
     if (err) return res.status(500).json([]);
     const formatted = rows.map(r => ({
       ...r,
+      otp: blankIfZero(r.otp),
+      amdocs_qc: blankIfZero(r.amdocs_qc),
+      internal_qc: blankIfZero(r.internal_qc),
       receive_date: formatDateToMMDDYYYY(r.receive_date),
       ecd_date: formatDateToMMDDYYYY(r.ecd_date),
       submission_date: formatDateToMMDDYYYY(r.submission_date)
