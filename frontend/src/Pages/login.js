@@ -5,9 +5,6 @@ import { FaEye, FaEyeSlash } from "react-icons/fa";
 import { API_BASE_URL } from "../config";
 import "../style/login.css";
 
-/* ======================================
-   Telecom dashboard wale hi helpers (same calculation)
-====================================== */
 const MONTH_NAMES = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 const MONTH_KEYS = MONTH_NAMES.map((m) => m.toLowerCase());
 const normalize = (d) => (d ?? "").toString().trim().toUpperCase();
@@ -57,7 +54,7 @@ const isOtpMet = (val) => {
   return !isNaN(num) && num > 0;
 };
 
-// Dark background par dikhne wale colours
+
 const getPerfColor = (val) => {
   if (val === null || val === undefined || isNaN(val)) return "#cbd5e1";
   if (val >= 90) return "#4ade80";
@@ -65,7 +62,7 @@ const getPerfColor = (val) => {
   return "#f87171";
 };
 
-// Current month se shuru hokar 3 month (Nov me: Nov, Dec, Jan -> year auto 2027)
+
 const getMonthTabs = () => {
   const now = new Date();
   return [0, 1, 2].map((i) => {
@@ -79,15 +76,28 @@ const getMonthTabs = () => {
   });
 };
 
-// "22 Sep 2026 at 04:38 PM Hrs"
+const parseDate = (d) => {
+  if (!d) return null;
+  if (d instanceof Date) return isNaN(d.getTime()) ? null : d;
+  const parsed = new Date(d);
+  return isNaN(parsed.getTime()) ? null : parsed;
+};
+
+
 const formatLastUpdated = (d) => {
   if (!d) return "--";
-  const day = String(d.getDate()).padStart(2, "0");
-  let hours = d.getHours();
-  const minutes = String(d.getMinutes()).padStart(2, "0");
-  const ampm = hours >= 12 ? "PM" : "AM";
-  hours = hours % 12 || 12;
-  return `${day} ${MONTH_NAMES[d.getMonth()]} ${d.getFullYear()} at ${String(hours).padStart(2, "0")}:${minutes} ${ampm} Hrs`;
+  const parts = new Intl.DateTimeFormat("en-IN", {
+    timeZone: "Asia/Kolkata",
+    day: "2-digit",
+    month: "numeric",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: true,
+  }).formatToParts(d);
+  const get = (type) => parts.find((p) => p.type === type)?.value || "";
+  const monthLabel = MONTH_NAMES[Number(get("month")) - 1] || "";
+  return `${get("day")} ${monthLabel} ${get("year")} at ${get("hour")}:${get("minute")} ${get("dayPeriod").toUpperCase()} Hrs`;
 };
 
 const Login = () => {
@@ -107,7 +117,6 @@ const Login = () => {
   const [statsLoading, setStatsLoading] = useState(true);
   const [statsError, setStatsError] = useState(false);
   const [selectedKey, setSelectedKey] = useState(null);
-  const [lastUpdated, setLastUpdated] = useState(null);
 
   useEffect(() => {
     let alive = true;
@@ -126,9 +135,6 @@ const Login = () => {
         setMasterDomains(Object.keys(masterRes.value.data || {}));
       }
       setStatsError(workRes.status === "rejected" && masterRes.status === "rejected");
-      if (workRes.status === "fulfilled" || masterRes.status === "fulfilled") {
-        setLastUpdated(new Date());
-      }
       setStatsLoading(false);
     };
 
@@ -183,6 +189,16 @@ const Login = () => {
       };
     });
   }, [workData, masterDomains, activeTab.idx, activeTab.year]);
+
+  // Report.js wali logic: sab records me se latest updated_at / created_at
+  const lastUpdated = useMemo(() => {
+    let latest = null;
+    workData.forEach((item) => {
+      const d = parseDate(firstFilled(item?.updated_at, item?.updatedAt, item?.created_at, item?.createdAt));
+      if (d && (!latest || d > latest)) latest = d;
+    });
+    return latest;
+  }, [workData]);
 
   /* ---------- Login ---------- */
   const handleLogin = async (e) => {
@@ -286,19 +302,28 @@ const Login = () => {
 
             {!statsLoading &&
               !statsError &&
-              domainRows.map((d) => (
-                <div key={d.name} className="live-domain-card" style={{ "--themeColor": d.color }}>
-                  <div className="live-domain-name">{d.name}</div>
-                  <div className="live-domain-jobs">
-                    {d.jobs}
-                    <span> Jobs</span>
+              domainRows.map((d, i) => {
+                const COLS = 3;
+                const lastRow = Math.floor((domainRows.length - 1) / COLS);
+                const cls = [
+                  "live-domain-cell",
+                  i % COLS === COLS - 1 ? "no-right" : "",
+                  Math.floor(i / COLS) === lastRow ? "no-bottom" : "",
+                ].join(" ");
+                return (
+                  <div key={d.name} className={cls} style={{ "--themeColor": d.color }}>
+                    <div className="live-domain-name">{d.name}</div>
+                    <div className="live-domain-jobs">
+                      {d.jobs}
+                      <span> Jobs</span>
+                    </div>
+                    <div className="live-domain-metrics">
+                      <span style={{ color: getPerfColor(d.qc ?? 0) }}>QC: {d.qc !== null ? `${d.qc}%` : "0%"}</span>
+                      <span style={{ color: getPerfColor(d.otp ?? 0) }}>OTP: {d.otp !== null ? `${d.otp}%` : "0%"}</span>
+                    </div>
                   </div>
-                  <div className="live-domain-metrics">
-                    <span style={{ color: getPerfColor(d.qc ?? 0) }}>QC: {d.qc !== null ? `${d.qc}%` : "0%"}</span>
-                    <span style={{ color: getPerfColor(d.otp ?? 0) }}>OTP: {d.otp !== null ? `${d.otp}%` : "0%"}</span>
-                  </div>
-                </div>
-              ))}
+                );
+              })}
           </div>
 
           <div className="live-last-updated">Last Updated: {formatLastUpdated(lastUpdated)}</div>
@@ -316,66 +341,63 @@ const Login = () => {
           backgroundColor: "#ffffff",
         }}
       >
-        <div className="auth-right-inner">
-          <img className="auth-logo" src="/Image/img1.png" alt="EMC logo" />
+        <div className="auth-card">
+          <img className="auth-logo" src="/Image/img3.png" alt="EMC logo" />
+          <h2>Login</h2>
+          <p>Enter your email and password</p>
 
-          <div className="auth-card">
-            <h2>Login</h2>
-            <p>Enter your email and password</p>
+          <form onSubmit={handleLogin} autoComplete="off">
+            {/* Email Box */}
+            <div className="email-input-group">
+              <input
+                type="text"
+                className="email-input-field"
+                placeholder="Email..."
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                autoComplete="off"
+                required
+              />
 
-            <form onSubmit={handleLogin} autoComplete="off">
-              {/* Email Box */}
-              <div className="email-input-group">
-                <input
-                  type="text"
-                  className="email-input-field"
-                  placeholder="Email..."
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  autoComplete="off"
-                  required
-                />
+              <select
+                className="email-domain-select"
+                value={emailDomain}
+                onChange={(e) => setEmailDomain(e.target.value)}
+              >
+                <option value="@ecometrix.co.in">@ecometrix.co.in</option>
+                <option value="@gmail.com">@gmail.com</option>
+                <option value="@outlook.com">@outlook.com</option>
+                <option value="@yahoo.com">@yahoo.com</option>
+                <option value="@zoho.com">@zoho.com</option>
+                <option value="@rediffmail.com">@rediffmail.com</option>
+              </select>
+            </div>
 
-                <select
-                  className="email-domain-select"
-                  value={emailDomain}
-                  onChange={(e) => setEmailDomain(e.target.value)}
-                >
-                  <option value="@ecometrix.co.in">@ecometrix.co.in</option>
-                  <option value="@gmail.com">@gmail.com</option>
-                  <option value="@outlook.com">@outlook.com</option>
-                  <option value="@yahoo.com">@yahoo.com</option>
-                  <option value="@zoho.com">@zoho.com</option>
-                  <option value="@rediffmail.com">@rediffmail.com</option>
-                </select>
-              </div>
+            {/* Password Box */}
+            <div className="password-wrapper">
+              <input
+                type={showPassword ? "text" : "password"}
+                placeholder="Password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                autoComplete="new-password"
+                required
+              />
 
-              {/* Password Box */}
-              <div className="password-wrapper">
-                <input
-                  type={showPassword ? "text" : "password"}
-                  placeholder="Password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  autoComplete="new-password"
-                  required
-                />
+              <span
+                className="password-eye"
+                onClick={() => setShowPassword(!showPassword)}
+              >
+                {showPassword ? <FaEyeSlash /> : <FaEye />}
+              </span>
+            </div>
 
-                <span
-                  className="password-eye"
-                  onClick={() => setShowPassword(!showPassword)}
-                >
-                  {showPassword ? <FaEyeSlash /> : <FaEye />}
-                </span>
-              </div>
+            {error && <p className="error">{error}</p>}
 
-              {error && <p className="error">{error}</p>}
-
-              <button type="submit" disabled={isLoading}>
-                {isLoading ? "Logging in..." : "Login"}
-              </button>
-            </form>
-          </div>
+            <button type="submit" disabled={isLoading}>
+              {isLoading ? "Logging in..." : "Login"}
+            </button>
+          </form>
         </div>
       </div>
     </div>
