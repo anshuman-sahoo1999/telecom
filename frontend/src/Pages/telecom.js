@@ -7,7 +7,7 @@ import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer,
   PieChart, Pie, Cell, Legend, CartesianGrid
 } from "recharts";
-import { FaTachometerAlt, FaChartBar, FaUsers, FaSitemap, FaPlusCircle, FaClock, FaHistory, FaLayerGroup, FaFolderOpen, FaPaperPlane, FaChartLine } from "react-icons/fa";
+import { FaTachometerAlt, FaChartBar, FaUsers, FaSitemap, FaPlusCircle, FaClock, FaHistory, FaLayerGroup, FaFolderOpen, FaPaperPlane, FaChartLine, FaTimes } from "react-icons/fa";
 import html2canvas from "html2canvas";
 import jsPDF from "jspdf";
 import geoData from "../us-states.json";
@@ -23,7 +23,7 @@ import TimesheetManagement from "../Pages/TimesheetManagement";
 import MasterDomainCreation from "../Pages/MasterDomainCreation";
 import CapacityForecast from "../Pages/CapacityForecast";
 import JobHistory from "../Pages/JobHistory";
-// NOTE: file ka naam exactly "KpiTrendModal.jsx" rakho (Linux/Vercel par case matter karta hai)
+// NOTE: file ka naam exactly "KpiTrendModal.jsx" rakho, path src/components/ (Linux/Vercel par case matter karta hai)
 import KpiTrendModal from "../components/KpiTrendModal";
 import axios from "axios";
 
@@ -287,6 +287,11 @@ export default function TelecomMap() {
     setShowKpiModal(true);
   };
 
+  const closeKpiModal = useCallback(() => {
+    setShowKpiModal(false);
+    setSelectedKpiDomain(null);
+  }, []);
+
   const handleStateHover = useCallback((stateName, evt) => {
     setTooltip({
       visible: true,
@@ -373,12 +378,12 @@ export default function TelecomMap() {
     const onKey = (e) => {
       if (e.key !== "Escape") return;
       setTooltip(CLOSED_TOOLTIP);
-      setShowKpiModal(false);
+      closeKpiModal();
       setShowExport(false);
     };
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
-  }, []);
+  }, [closeKpiModal]);
 
   // Export menu ke bahar click par band
   useEffect(() => {
@@ -885,7 +890,7 @@ export default function TelecomMap() {
             <div className="kpiContainer">
               <div className="kpiHeaderRow">
                 <h2 className="kpiTitle">📊 KPI - Job Delivery / Amdocs QC / OTP Summary</h2>
-                <button type="button" className="kpiTrendBtn" onClick={() => setShowTrendModal(true)}>📈 OTP / QC Trend</button>
+                <button type="button" className="kpiTrendBtn" title="Open OTP / QC trend" onClick={() => setShowTrendModal(true)}><span aria-hidden="true">📈</span> OTP / QC Trend</button>
               </div>
               <div className="kpiGridModern">
                 {mergedDomains.map((domain) => {
@@ -894,7 +899,7 @@ export default function TelecomMap() {
                   const otpPct = getDomainOtpPercent(domain);
                   return (
                     <div key={domain} className="kpiCardModern" style={{ "--themeColor": color }}>
-                      <button type="button" className="kpiEyeBtnLeft" onClick={(e) => { e.stopPropagation(); handleKpiReport(domain); }} style={{ background: `${color}15`, border: `1px solid ${color}70`, color: color }}>𝑖</button>
+                      <button type="button" className="kpiEyeBtnLeft" aria-label={`${domain} status report`} title={`${domain} status report`} onClick={(e) => { e.stopPropagation(); handleKpiReport(domain); }} style={{ background: `${color}15`, border: `1px solid ${color}70`, color: color }}>𝑖</button>
                       <div className="kpiContent">
                         <div className="kpiDomainModern">{domain}</div>
                         <div className="kpiSubModern">{getDomainUomText(domain)}</div>
@@ -1034,7 +1039,7 @@ export default function TelecomMap() {
                   <BarChart data={monthlyJobsSorted} barGap={0} barCategoryGap={25}>
                     <CartesianGrid strokeDasharray="3 3" />
                     <XAxis dataKey="name" interval={0} angle={-45} textAnchor="end" height={60} />
-                    <YAxis />
+                    <YAxis allowDecimals={false} />
                     <Tooltip content={<BarChartTooltip />} />
                     <Legend />
                     {allYears.map((year, index) => (
@@ -1120,7 +1125,7 @@ export default function TelecomMap() {
             <div style={{ fontSize: "14px", color: "#0f4a63" }}>{tooltipRegion ? `${tooltipRegion} - ` : ""}{tooltipState}</div>
             <div style={{ fontSize: "12px", color: "#166534", fontWeight: "700", marginLeft: "auto", whiteSpace: "nowrap" }}>{tooltipTotalJobs > 0 ? `Total Jobs: ${tooltipTotalJobs}` : "N/A"}</div>
             {isSheetTooltip && (
-              <button type="button" className="tooltipClose" aria-label="Close" onClick={() => setTooltip(CLOSED_TOOLTIP)}>✕</button>
+              <button type="button" className="tooltipClose" aria-label="Close" onClick={() => setTooltip(CLOSED_TOOLTIP)}><FaTimes /></button>
             )}
           </div>
           <div style={{ padding: "10px" }}>
@@ -1153,7 +1158,7 @@ export default function TelecomMap() {
       )}
 
       {showKpiModal && (
-        <div className="modalOverlay" onClick={() => setShowKpiModal(false)}>
+        <div className="modalOverlay" onClick={closeKpiModal}>
           <div className="modalContent" onClick={(e) => e.stopPropagation()}>
             <div className="modalHeader">
               <div className="statusHeaderBox">
@@ -1164,11 +1169,11 @@ export default function TelecomMap() {
                     <div className="statusMain">{selectedKpiDomain ? selectedKpiDomain : selectedFilterStates?.length === 1 ? selectedFilterStates[0] : "All Domains"}</div>
                   </div>
                 </div>
-                <button className="closeBtn" onClick={() => setShowKpiModal(false)}>✖</button>
+                <button type="button" className="closeBtn" aria-label="Close" title="Close" onClick={closeKpiModal}><FaTimes /></button>
               </div>
             </div>
             <div className="modalBody">
-              <Reports domain={selectedKpiDomain} states={selectedFilterStates} monthData={selectedMonth} month={selectedMonth?.month} year={selectedMonth?.year} onClose={() => setShowKpiModal(false)} />
+              <Reports domain={selectedKpiDomain} states={selectedFilterStates} monthData={selectedMonth} month={selectedMonth?.month} year={selectedMonth?.year} onClose={closeKpiModal} />
             </div>
           </div>
         </div>
