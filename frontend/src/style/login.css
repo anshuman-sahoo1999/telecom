@@ -176,10 +176,12 @@ html, body {
   border-color: #fff;
 }
 
-/* Domains: card nahi, bas beech me lines (3 column) */
+/* ================= DOMAIN GRID (4 per line) ================= */
+/* Card/table nahi: har row ke neeche poori line,
+   aur har domain ke right me sirf aadhi vertical line */
 .live-domain-grid {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(4, 1fr);
   max-height: 200px;
   overflow-y: auto;
   border-top: 1px solid rgba(255, 255, 255, 0.35);
@@ -195,15 +197,29 @@ html, body {
 }
 
 .live-domain-cell {
-  padding: 7px 14px 8px;
-  border-right: 1px solid rgba(255, 255, 255, 0.35);
+  position: relative;
+  padding: 10px 14px;
+  /* poori horizontal line, row ke neeche */
   border-bottom: 1px solid rgba(255, 255, 255, 0.35);
 }
 
-.live-domain-cell.no-right {
-  border-right: none;
+/* right side ki aadhi vertical line - horizontal line ko cross/touch nahi karti */
+.live-domain-cell::after {
+  content: "";
+  position: absolute;
+  right: 0;
+  top: 25%;
+  height: 50%;
+  width: 1px;
+  background: rgba(255, 255, 255, 0.45);
 }
 
+/* row ke last domain me vertical line nahi */
+.live-domain-cell.no-right::after {
+  display: none;
+}
+
+/* last row ke neeche line nahi */
 .live-domain-cell.no-bottom {
   border-bottom: none;
 }
@@ -246,6 +262,7 @@ html, body {
   font-weight: 600;
   opacity: 0.85;
   text-align: right;
+  white-space: nowrap;
 }
 
 .live-msg {
@@ -428,8 +445,26 @@ html, body {
     font-size: 13px;
   }
 
+  /* 4 column chhoti screen me tight hote hain, isliye sizes chhote */
   .live-domain-cell {
-    padding: 6px 8px 7px;
+    padding: 8px 6px;
+  }
+
+  .live-domain-name {
+    font-size: 11px;
+  }
+
+  .live-domain-jobs {
+    font-size: 16px;
+  }
+
+  .live-domain-jobs span {
+    font-size: 9px;
+  }
+
+  .live-domain-metrics {
+    flex-direction: column;
+    font-size: 10px;
   }
 
   .live-domain-grid {
