@@ -64,23 +64,24 @@ const getQc = (item) => {
   return pct === null || pct === 0 ? null : pct;
 };
 
-// OTP: blank / "-" / 0 / "0%" = data nahi hai (OTP % ke denominator me nahi judega)
-const hasOtpData = (val) => {
-  if (val === null || val === undefined) return false;
-  const str = val.toString().trim();
-  if (str === "" || str === "-") return false;
-  const num = parseFloat(str.replace("%", ""));
-  if (!isNaN(num) && num === 0) return false;
-  return true;
-};
-
-const isOtpMet = (val) => {
-  if (val === null || val === undefined || val === "") return false;
+// OTP score (0-100) ya null (data nahi):
+//  - blank / "-" / "NA" / 0 / "0%"  -> null (ginti me nahi aayega)
+//  - Yes / Met / Pass...            -> 100
+//  - No / Not met / Fail...         -> 0
+//  - number ya % (jaise 85, "85%")  -> wahi number (pehle 0 se bada har number 100% ginta tha)
+const getOtpScore = (val) => {
+  if (val === null || val === undefined) return null;
   const str = val.toString().trim().toLowerCase();
-  if (["yes", "y", "met", "true", "ok", "pass", "passed"].includes(str)) return true;
-  if (["no", "n", "not met", "false", "fail", "failed", "0"].includes(str)) return false;
+  if (str === "" || str === "-" || str === "na" || str === "n/a") return null;
+  if (["yes", "y", "met", "true", "ok", "pass", "passed"].includes(str)) return 100;
+  if (["no", "n", "not met", "false", "fail", "failed"].includes(str)) return 0;
   const num = parseFloat(str.replace("%", ""));
-  return !isNaN(num) && num > 0;
+  if (!isNaN(num)) {
+    if (num === 0) return null;
+    const pct = !str.includes("%") && num > 0 && num <= 1 ? num * 100 : num;
+    return Math.min(100, Math.max(0, pct));
+  }
+  return 0; // koi aur text = not met (pehle jaisa)
 };
 
 const parseUom = (raw) => {
@@ -567,7 +568,7 @@ export default function TelecomMap() {
       const domain = normalize(item.domain);
       if (!domain) return;
       if (!map[stateKey]) map[stateKey] = {};
-      if (!map[stateKey][domain]) map[stateKey][domain] = { jobs: 0, qcSum: 0, qcCount: 0, otp: 0, otpTotal: 0 };
+      if (!map[stateKey][domain]) map[stateKey][domain] = { jobs: 0, qcSum: 0, qcCount: 0, otpSum: 0, otpCount: 0 };
       const s = map[stateKey][domain];
       s.jobs += getJobs(item);
       const qcVal = getQc(item);
@@ -575,9 +576,10 @@ export default function TelecomMap() {
         s.qcSum += qcVal;
         s.qcCount += 1;
       }
-      if (hasOtpData(item.otp)) {
-        s.otpTotal += 1;
-        if (isOtpMet(item.otp)) s.otp += 1;
+      const otpScore = getOtpScore(item.otp);
+      if (otpScore !== null) {
+        s.otpSum += otpScore;
+        s.otpCount += 1;
       }
     });
     return map;
@@ -600,16 +602,17 @@ export default function TelecomMap() {
     currentFilterData.forEach((item) => {
       const domain = normalize(item.domain);
       if (!domain) return;
-      const s = map[domain] || (map[domain] = { jobs: 0, qcSum: 0, qcCount: 0, otpMet: 0, otpTotal: 0, uom: {} });
+      const s = map[domain] || (map[domain] = { jobs: 0, qcSum: 0, qcCount: 0, otpSum: 0, otpCount: 0, uom: {} });
       s.jobs += getJobs(item);
       const qcVal = getQc(item);
       if (qcVal !== null) {
         s.qcSum += qcVal;
         s.qcCount += 1;
       }
-      if (hasOtpData(item.otp)) {
-        s.otpTotal += 1;
-        if (isOtpMet(item.otp)) s.otpMet += 1;
+      const otpScore = getOtpScore(item.otp);
+      if (otpScore !== null) {
+        s.otpSum += otpScore;
+        s.otpCount += 1;
       }
 
       Object.entries(parseUom(item.uom)).forEach(([key, value]) => {
@@ -629,7 +632,7 @@ export default function TelecomMap() {
   };
   const getDomainOtpPercent = (domain) => {
     const s = domainStats[normalize(domain)];
-    return s && s.otpTotal > 0 ? Math.round((s.otpMet / s.otpTotal) * 100) : null;
+    return s && s.otpCount > 0 ? Math.round(s.otpSum / s.otpCount) : null;
   };
   const getDomainUomText = (domain) => {
     const uom = domainStats[normalize(domain)]?.uom || {};
@@ -646,14 +649,13 @@ export default function TelecomMap() {
 
   // ---- Monthly chart data ----
   const { monthlyJobsSorted, allYears } = useMemo(() => {
-    const buckets = {}; // "idx-year" -> { jobs, qcSum, qcCount, otpMet, total }
+    const buckets = {}; // "idx-year" -> { jobs, qcSum, qcCount, otpSum, otpCount }
     const yearSet = new Set();
 
     currentFilterData.forEach((item) => {
       const jobs = getJobs(item);
       const qcVal = getQc(item);
-      const otpHas = hasOtpData(item.otp);
-      const otpMet = otpHas && isOtpMet(item.otp);
+      const otpScore = getOtpScore(item.otp);
 
       // ek row ke unique months (duplicate month ek hi baar)
       const uniqueMonths = [];
@@ -674,15 +676,15 @@ export default function TelecomMap() {
       uniqueMonths.forEach(({ key, p }) => {
         yearSet.add(String(p.year));
 
-        const b = buckets[key] || (buckets[key] = { jobs: 0, qcSum: 0, qcCount: 0, otpMet: 0, otpTotal: 0 });
+        const b = buckets[key] || (buckets[key] = { jobs: 0, qcSum: 0, qcCount: 0, otpSum: 0, otpCount: 0 });
         b.jobs += jobsShare;
         if (qcVal !== null) {
           b.qcSum += qcVal;
           b.qcCount += 1;
         }
-        if (otpHas) {
-          b.otpTotal += 1;
-          if (otpMet) b.otpMet += 1;
+        if (otpScore !== null) {
+          b.otpSum += otpScore;
+          b.otpCount += 1;
         }
       });
     });
@@ -695,7 +697,7 @@ export default function TelecomMap() {
         if (!b) return;
         row[year] = Math.round(b.jobs * 100) / 100;
         row[`qc_${year}`] = b.qcCount > 0 ? Math.round(b.qcSum / b.qcCount) : null;
-        row[`otp_${year}`] = b.otpTotal > 0 ? Math.round((b.otpMet / b.otpTotal) * 100) : null;
+        row[`otp_${year}`] = b.otpCount > 0 ? Math.round(b.otpSum / b.otpCount) : null;
       });
       return row;
     });
@@ -714,7 +716,7 @@ export default function TelecomMap() {
       jobs: s.jobs,
       value: grandTotal ? Number(((s.jobs / grandTotal) * 100).toFixed(2)) : 0,
       qc: s.qcCount > 0 ? Math.round(s.qcSum / s.qcCount) : null,
-      otp: s.otpTotal > 0 ? Math.round((s.otpMet / s.otpTotal) * 100) : null,
+      otp: s.otpCount > 0 ? Math.round(s.otpSum / s.otpCount) : null,
       color: COLORS[index % COLORS.length],
     }));
   }, [domainStats]);
@@ -1157,7 +1159,7 @@ export default function TelecomMap() {
                 // state + domain lookup case-insensitive
                 const domainStat = stateDomainStatsMap[lc(tooltipState)]?.[normalize(d)];
                 const qc = domainStat && domainStat.qcCount > 0 ? Math.round(domainStat.qcSum / domainStat.qcCount) : null;
-                const otp = domainStat && domainStat.otpTotal > 0 ? Math.round((domainStat.otp / domainStat.otpTotal) * 100) : null;
+                const otp = domainStat && domainStat.otpCount > 0 ? Math.round(domainStat.otpSum / domainStat.otpCount) : null;
                 return (
                   <div key={d} style={{ marginBottom: "8px", borderBottom: "1px solid #eee", paddingBottom: "5px" }}>
                     <div style={{ display: "flex", justifyContent: "space-between", fontWeight: "700", fontSize: "13px", marginBottom: "2px" }}>
