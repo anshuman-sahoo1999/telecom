@@ -23,24 +23,16 @@ import TimesheetManagement from "../Pages/TimesheetManagement";
 import MasterDomainCreation from "../Pages/MasterDomainCreation";
 import CapacityForecast from "../Pages/CapacityForecast";
 import JobHistory from "../Pages/JobHistory";
-// NOTE: file ka naam exactly "KpiTrendModal.jsx" rakho, path src/components/ (Linux/Vercel par case matter karta hai)
 import KpiTrendModal from "../components/Kpitrendmodal.jsx";
 import axios from "axios";
 
-/* ======================================
-   PURE HELPERS (component ke bahar — re-create nahi honge)
-====================================== */
 const MONTH_NAMES = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 const MONTH_KEYS = MONTH_NAMES.map((m) => m.toLowerCase());
-
 const normalize = (d) => (d ?? "").toString().trim().toUpperCase();
 const lc = (s) => String(s ?? "").trim().toLowerCase();
-
-// Pehli non-empty value (0 ko valid maanta hai)
 const firstFilled = (...vals) =>
   vals.find((v) => v !== null && v !== undefined && String(v).trim() !== "");
 
-// "Jan,26" / "jan, 2026" / "January-26" / "Jan 2026"  ->  { idx: 0, year: 2026 }
 const parseMonthEntry = (m, fallbackYear) => {
   if (!m) return null;
   const match = String(m).trim().match(/^([A-Za-z]{3,})\W*(\d{2,4})?$/);
@@ -53,7 +45,6 @@ const parseMonthEntry = (m, fallbackYear) => {
   return { idx, year };
 };
 
-// NaN se sums kharab na hon
 const getJobs = (item) => Number(firstFilled(item?.jobsDelivered, item?.jobs_delivered)) || 0;
 
 const parsePercent = (val) => {
@@ -84,7 +75,6 @@ const parseUom = (raw) => {
   return uom && typeof uom === "object" && !Array.isArray(uom) ? uom : {};
 };
 
-// QC / OTP colour rule: 90-100% green, 80-90% orange, below 80% red
 const getPerfColor = (val, fallback = "#64748b") => {
   if (val === null || val === undefined || isNaN(val)) return fallback;
   if (val >= 90) return "#16a34a";
@@ -111,7 +101,6 @@ const getPerfBoxStyle = (val) => {
   };
 };
 
-// "NOOF ASE" / "NO OF ASE" / "No.of ASE"  ->  "No.of ase"
 const formatUomLabel = (key) => {
   const raw = String(key || "").trim();
   if (!raw) return raw;
