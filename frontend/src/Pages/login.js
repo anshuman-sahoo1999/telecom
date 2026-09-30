@@ -66,10 +66,12 @@ const getPerfColor = (val) => {
 };
 
 
+// Previous 2 months + current month (oldest -> current)
+// Sep => Jul, Aug, Sep | Oct => Aug, Sep, Oct | Nov => Sep, Oct, Nov
 const getMonthTabs = () => {
   const now = new Date();
-  return [0, 1, 2].map((i) => {
-    const d = new Date(now.getFullYear(), now.getMonth() + i, 1);
+  return [-2, -1, 0].map((offset) => {
+    const d = new Date(now.getFullYear(), now.getMonth() + offset, 1);
     return {
       idx: d.getMonth(),
       year: d.getFullYear(),
@@ -151,7 +153,8 @@ const Login = () => {
   }, []);
 
   const monthTabs = getMonthTabs();
-  const activeTab = monthTabs.find((t) => t.key === selectedKey) || monthTabs[0];
+  const currentTab = monthTabs[monthTabs.length - 1]; // current month (last tab)
+  const activeTab = monthTabs.find((t) => t.key === selectedKey) || currentTab;
 
   const domainRows = useMemo(() => {
     const fallbackYear = new Date().getFullYear();
@@ -291,7 +294,7 @@ const Login = () => {
                   onClick={() => setSelectedKey(t.key)}
                 >
                   {t.label}
-                  {t.year !== monthTabs[0].year && <small> '{String(t.year).slice(2)}</small>}
+                  {t.year !== currentTab.year && <small> '{String(t.year).slice(2)}</small>}
                 </button>
               ))}
             </div>
