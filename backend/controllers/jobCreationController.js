@@ -2,6 +2,20 @@ const db = require("../config/db");
 
 const clean = (v) => (v !== undefined && v !== null ? v.toString().trim() : "");
 const normalize = (v) => clean(v).toUpperCase();
+const isZeroValue = (v) => {
+  if (v === null || v === undefined || v === false) return false;
+  const s = v.toString().trim().replace(/%$/, "").trim();
+  return s !== "" && !isNaN(Number(s)) && Number(s) === 0;
+};
+
+const blankIfZero = (v) => (isZeroValue(v) ? "" : v);
+
+const qcVal = (v) => {
+  if (v === undefined || v === null) return null;
+  if (isZeroValue(v)) return null;
+  if (clean(v) === "") return null;
+  return v;
+};
 
 let stateData = {};
 try {
@@ -38,9 +52,9 @@ const workInsertParams = ({ domain, state, jobId, month, receiveDate, ecdDate, s
   receiveDate || null,
   ecdDate || null,
   submissionDate || null,
-  amdocsQc || null,
-  internalQc || null,
-  otp || null,
+  qcVal(amdocsQc),
+  qcVal(internalQc),
+  qcVal(otp),
 ];
 
 const monthNames = [
@@ -113,9 +127,9 @@ exports.createJob = (req, res) => {
   const formattedEcdDate = ecdDate && ecdDate !== "" ? ecdDate : null;
   const formattedSubmissionDate = submissionDate && submissionDate !== "" ? submissionDate : null;
 
-  const finalAmdocsQc = amdocsQc !== undefined ? amdocsQc : (amdocs_qc || null);
-  const finalInternalQc = internalQc !== undefined ? internalQc : (internal_qc || null);
-  const finalOtp = otp || internalOtp || null;
+  const finalAmdocsQc = qcVal(amdocsQc !== undefined ? amdocsQc : amdocs_qc);
+  const finalInternalQc = qcVal(internalQc !== undefined ? internalQc : internal_qc);
+  const finalOtp = qcVal(otp) || qcVal(internalOtp) || null;
 
   const cleanJobId = clean(jobId);
   const cleanDomain = normalize(domain);
@@ -250,6 +264,17 @@ exports.getAllJobs = (req, res) => {
         return v || null;
       };
 
+      jcRows.forEach((row) => {
+        row.otp = blankIfZero(row.otp);
+        row.amdocsQc = blankIfZero(row.amdocsQc);
+        row.internalQc = blankIfZero(row.internalQc);
+      });
+      wuRows.forEach((row) => {
+        row.otp = blankIfZero(row.otp);
+        row.amdocs_qc = blankIfZero(row.amdocs_qc);
+        row.internal_qc = blankIfZero(row.internal_qc);
+      });
+
       const jobMap = new Map();
 
       jcRows.forEach((row) => {
@@ -333,9 +358,9 @@ exports.updateJob = (req, res) => {
 
   const cleanNewJobId = clean(newJobId) || requestedJobId;
 
-  const finalInternalQc = internalQc !== undefined ? internalQc : (internal_qc || null);
-  const finalAmdocsQc = amdocsQc !== undefined ? amdocsQc : (amdocs_qc || null);
-  const finalOtp = otp || internalOtp || null;
+  const finalInternalQc = qcVal(internalQc !== undefined ? internalQc : internal_qc);
+  const finalAmdocsQc = qcVal(amdocsQc !== undefined ? amdocsQc : amdocs_qc);
+  const finalOtp = qcVal(otp) || qcVal(internalOtp) || null;
   const cleanMonth = cleanSingleMonth(month);
   const finalReceiveDate = (receiveDate || receive_date) || null;
   const finalEcdDate = (ecdDate || ecd_date) || null;
