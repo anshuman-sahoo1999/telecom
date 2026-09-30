@@ -144,6 +144,12 @@ const getFileNameDateTime = () => {
 };
 
 const monthsList = MONTH_NAMES;
+
+// Default month = abhi ka current month (mahina badalte hi apne aap badal jayega)
+const getDefaultMonth = () => {
+  const now = new Date();
+  return { month: MONTH_NAMES[now.getMonth()], year: now.getFullYear() };
+};
 const COLORS = ["#3b82f6", "#10b981", "#f59e0b", "#ef4444", "#8b5cf6", "#06b6d4"];
 const CROWDED_LABELS = ["Rhode Island", "Connecticut", "New Jersey", "Delaware", "Maryland", "District of Columbia", "Vermont", "New Hampshire", "Massachusetts"];
 const REGIONS = ["All Region", "Northeast", "Southeast", "Midwest", "Southwest", "West"];
@@ -242,7 +248,7 @@ export default function TelecomMap() {
 
   const currentYear = new Date().getFullYear();
 
-  const [selectedMonth, setSelectedMonth] = useState(null);
+  const [selectedMonth, setSelectedMonth] = useState(getDefaultMonth);
   const [fromDate, setFromDate] = useState("");
   const [toDate, setToDate] = useState("");
   const [activePage, setActivePage] = useState("dashboard");
@@ -509,7 +515,7 @@ export default function TelecomMap() {
   };
 
   const resetDateFilters = () => {
-    setSelectedMonth(null);
+    setSelectedMonth(getDefaultMonth());
     setFromDate("");
     setToDate("");
   };
@@ -798,7 +804,15 @@ export default function TelecomMap() {
 
   // ---- Map tooltip data ----
   const tooltipState = tooltip.data?.state;
-  const tooltipStateData = tooltipState ? mapReportByState[lc(tooltipState)] || {} : {};
+  // Month / date filter laga ho to tooltip bhi filtered data se (current month ka), warna backend ka data
+  const hasDateFilter = !!(selectedMonth || fromDate || toDate);
+  const tooltipStateData = !tooltipState
+    ? {}
+    : hasDateFilter
+      ? Object.fromEntries(
+          Object.entries(stateDomainStatsMap[lc(tooltipState)] || {}).map(([dom, s]) => [dom, s.jobs])
+        )
+      : mapReportByState[lc(tooltipState)] || {};
   const tooltipTotalJobs = Object.values(tooltipStateData).reduce((sum, val) => sum + (Number(val) || 0), 0);
   const tooltipRegion = tooltipState ? getRegionByState(tooltipState) : null;
 
