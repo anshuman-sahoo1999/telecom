@@ -280,9 +280,8 @@ const Login = () => {
               <span className="live-badge-ring">
                 <span className="live-badge-dot" />
               </span>
-              <span className="live-badge-text">LIVE</span>
+              <span className="live-badge-text">Live Progress Summary</span>
             </div>
-            <h3>Live Progress Summary</h3>
           </div>
 
           <div className="live-stats-controls">
