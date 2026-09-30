@@ -21,7 +21,7 @@ const DOMAIN_COLORS = {
   JPA: "#f97316",
 };
 
-// Ek line me kitne domain dikhane hain
+
 const COLS = 4;
 
 const parseMonthEntry = (m, fallbackYear) => {
@@ -57,7 +57,7 @@ const isOtpMet = (val) => {
   return !isNaN(num) && num > 0;
 };
 
-// Dark background par dikhne wale colours
+
 const getPerfColor = (val) => {
   if (val === null || val === undefined || isNaN(val)) return "#cbd5e1";
   if (val >= 90) return "#4ade80";
@@ -65,7 +65,7 @@ const getPerfColor = (val) => {
   return "#f87171";
 };
 
-// Current month se shuru hokar 3 month (Nov me: Nov, Dec, Jan -> year auto 2027)
+
 const getMonthTabs = () => {
   const now = new Date();
   return [0, 1, 2].map((i) => {
