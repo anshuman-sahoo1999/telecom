@@ -5,7 +5,7 @@ import {
 } from "recharts";
 import { FaDownload } from "react-icons/fa";
 import html2canvas from "html2canvas";
-import "../style/kpiTrend.css";
+import "../style/kpitrend.css";
 
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
