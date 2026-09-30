@@ -24,7 +24,7 @@ import MasterDomainCreation from "../Pages/MasterDomainCreation";
 import CapacityForecast from "../Pages/CapacityForecast";
 import JobHistory from "../Pages/JobHistory";
 // NOTE: file ka naam exactly "KpiTrendModal.jsx" rakho, path src/components/ (Linux/Vercel par case matter karta hai)
-import KpiTrendModal from "../components/KpiTrendModal";
+import KpiTrendModal from "../components/Kpitrendmodal.jsx";
 import axios from "axios";
 
 /* ======================================
