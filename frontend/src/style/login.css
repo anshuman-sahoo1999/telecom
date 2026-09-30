@@ -104,7 +104,7 @@ html, body {
   align-items: center;
   justify-content: space-between;
   gap: 10px;
-  margin-bottom: 8px;
+  margin-bottom: 12px;
 }
 
 .live-year-field {
@@ -176,15 +176,11 @@ html, body {
   border-color: #fff;
 }
 
-/* ================= DOMAIN GRID (4 per line) ================= */
-/* Card/table nahi: har row ke neeche poori line,
-   aur har domain ke right me sirf aadhi vertical line */
 .live-domain-grid {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
   max-height: 200px;
   overflow-y: auto;
-  border-top: 1px solid rgba(255, 255, 255, 0.35);
 }
 
 .live-domain-grid::-webkit-scrollbar {
@@ -199,27 +195,23 @@ html, body {
 .live-domain-cell {
   position: relative;
   padding: 10px 14px;
-  /* poori horizontal line, row ke neeche */
   border-bottom: 1px solid rgba(255, 255, 255, 0.35);
 }
 
-/* right side ki aadhi vertical line - horizontal line ko cross/touch nahi karti */
 .live-domain-cell::after {
   content: "";
   position: absolute;
   right: 0;
-  top: 25%;
-  height: 50%;
+  top: 15%;
+  height: 70%;
   width: 1px;
   background: rgba(255, 255, 255, 0.45);
 }
 
-/* row ke last domain me vertical line nahi */
 .live-domain-cell.no-right::after {
   display: none;
 }
 
-/* last row ke neeche line nahi */
 .live-domain-cell.no-bottom {
   border-bottom: none;
 }
@@ -291,8 +283,6 @@ html, body {
   padding: 30px 35px 35px;
   margin-top: -6%;
   border-radius: 18px;
-
-  /* STRONG GLASS */
   background: rgba(255, 255, 255, 0.08);
 
   backdrop-filter: blur(4px);
