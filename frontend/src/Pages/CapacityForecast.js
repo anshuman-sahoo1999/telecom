@@ -11,7 +11,6 @@ const monthsList = [
 
 const normalize = (d) => (d || "").toString().trim().toUpperCase();
 
-// "Mar, 2026" -> number (year * 12 + monthIndex). Timezone issue se bachne ke liye Date use nahi kiya.
 const monthStrToIndex = (monthStr) => {
   if (!monthStr) return null;
   const parts = monthStr.split(",");
@@ -107,6 +106,9 @@ export default function CapacityForecast() {
   const [inlineData, setInlineData] = useState({});
   const [openDropdownDomain, setOpenDropdownDomain] = useState(null);
 
+  // Create button se form popup khulega
+  const [showForm, setShowForm] = useState(false);
+
   const [fromDate, setFromDate] = useState("");
   const [toDate, setToDate] = useState("");
 
@@ -150,6 +152,21 @@ export default function CapacityForecast() {
     document.addEventListener("click", handleClickOutside);
     return () => document.removeEventListener("click", handleClickOutside);
   }, []);
+
+  // Popup khula ho to Esc se band ho, aur peeche ka page scroll na kare
+  useEffect(() => {
+    if (!showForm) return undefined;
+    const onKeyDown = (e) => {
+      if (e.key === "Escape") setShowForm(false);
+    };
+    document.addEventListener("keydown", onKeyDown);
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.removeEventListener("keydown", onKeyDown);
+      document.body.style.overflow = prevOverflow;
+    };
+  }, [showForm]);
 
   const fetchAllData = useCallback(async () => {
     try {
@@ -295,6 +312,7 @@ export default function CapacityForecast() {
         inflow: "",
         uomValues: {}
       });
+      setShowForm(false);
     } catch (err) {
       console.error("API submission error:", err);
       showToast("error", "Failed to save data to backend API!");
@@ -591,57 +609,100 @@ export default function CapacityForecast() {
 
       <h2 className="img-main-title">Capacity Vs Forecast Vs Inflow</h2>
 
-      <form className="img-form-wrapper" onSubmit={handleCustomSubmit}>
-        <div className="img-field-group">
-          <label>Choose Month & Year <span style={{ color: "red" }}>*</span></label>
-          <select name="month" value={formData.month} onChange={handleCustomChange} required>
-            {generatedMonths.map((m) => <option key={m} value={m}>{m}</option>)}
-          </select>
-        </div>
+      {/* ---------- Create button (title ke neeche, right side) ---------- */}
+      <div className="img-toolbar">
+        <button
+          type="button"
+          className="img-create-btn"
+          onClick={() => setShowForm(true)}
+        >
+          <span className="img-create-plus">+</span> Create
+        </button>
+      </div>
 
-        <div className="img-field-group">
-          <label>Choose Domain <span style={{ color: "red" }}>*</span></label>
-          <select name="domain" value={formData.domain} onChange={handleCustomChange} required>
-            <option value="">Select Domain</option>
-            {mergedDomains.map((d) => (
-              <option key={d} value={d}>{d}</option>
-            ))}
-          </select>
-        </div>
+      {/* ---------- Entry form popup ---------- */}
+      {showForm && (
+        <div className="img-modal-overlay" onClick={() => setShowForm(false)}>
+          <div
+            className="img-modal-box"
+            role="dialog"
+            aria-modal="true"
+            aria-label="Add new record"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="img-modal-header">
+              <span className="img-modal-title">Add New Record</span>
+              <button
+                type="button"
+                className="img-modal-close"
+                title="Close"
+                onClick={() => setShowForm(false)}
+              >
+                ✕
+              </button>
+            </div>
 
-        <div className="img-field-group">
-          <label>Enter No. Of Capacity</label>
-          <input type="number" name="capacity" value={formData.capacity} onChange={handleCustomChange} placeholder="Enter no. of capacity" />
-        </div>
+            <form className="img-form-wrapper img-modal-form" onSubmit={handleCustomSubmit}>
+              <div className="img-field-group">
+                <label>Choose Month & Year <span style={{ color: "red" }}>*</span></label>
+                <select name="month" value={formData.month} onChange={handleCustomChange} required>
+                  {generatedMonths.map((m) => <option key={m} value={m}>{m}</option>)}
+                </select>
+              </div>
 
-        <div className="img-field-group">
-          <label>Enter No. Of Forecast</label>
-          <input type="number" name="forecast" value={formData.forecast} onChange={handleCustomChange} placeholder="Enter no. of forecast" />
-        </div>
+              <div className="img-field-group">
+                <label>Choose Domain <span style={{ color: "red" }}>*</span></label>
+                <select name="domain" value={formData.domain} onChange={handleCustomChange} required>
+                  <option value="">Select Domain</option>
+                  {mergedDomains.map((d) => (
+                    <option key={d} value={d}>{d}</option>
+                  ))}
+                </select>
+              </div>
 
-        <div className="img-field-group">
-          <label>Enter No. Of Inflow</label>
-          <input type="number" name="inflow" value={formData.inflow} onChange={handleCustomChange} placeholder="Enter no. of inflow" />
-        </div>
+              <div className="img-field-group">
+                <label>Enter No. Of Capacity</label>
+                <input type="number" name="capacity" value={formData.capacity} onChange={handleCustomChange} placeholder="Enter no. of capacity" />
+              </div>
 
-        {activeUoms.map((sub) => (
-          <div key={sub} className="img-field-group">
-            <label>Enter No. Of {sub}</label>
-            <input
-              type="number"
-              value={formData.uomValues[sub] || ""}
-              onChange={(e) => handleUomChange(sub, e.target.value)}
-              placeholder={`Enter no. of ${String(sub).toLowerCase()}`}
-            />
+              <div className="img-field-group">
+                <label>Enter No. Of Forecast</label>
+                <input type="number" name="forecast" value={formData.forecast} onChange={handleCustomChange} placeholder="Enter no. of forecast" />
+              </div>
+
+              <div className="img-field-group">
+                <label>Enter No. Of Inflow</label>
+                <input type="number" name="inflow" value={formData.inflow} onChange={handleCustomChange} placeholder="Enter no. of inflow" />
+              </div>
+
+              {activeUoms.map((sub) => (
+                <div key={sub} className="img-field-group">
+                  <label>Enter No. Of {sub}</label>
+                  <input
+                    type="number"
+                    value={formData.uomValues[sub] || ""}
+                    onChange={(e) => handleUomChange(sub, e.target.value)}
+                    placeholder={`Enter no. of ${String(sub).toLowerCase()}`}
+                  />
+                </div>
+              ))}
+
+              <div className="img-form-actions">
+                <button type="submit" className="img-submit-btn">
+                  Submit Record
+                </button>
+                <button
+                  type="button"
+                  className="img-cancel-btn"
+                  onClick={() => setShowForm(false)}
+                >
+                  Cancel
+                </button>
+              </div>
+            </form>
           </div>
-        ))}
-
-        <div className="img-form-actions">
-          <button type="submit" className="img-submit-btn">
-            Submit Record
-          </button>
         </div>
-      </form>
+      )}
 
       <div className="img-date-filter-simple">
         <div className="img-filter-group">
