@@ -1,3 +1,6 @@
+/* =====================================================
+   KPI Trend – dashboard header row + button
+   ===================================================== */
 .kpiHeaderRow {
   display: flex;
   align-items: center;
@@ -51,13 +54,16 @@
   outline-offset: 2px;
 }
 
-/* ---------- Popup ---------- */
+/* =====================================================
+   Popup
+   ===================================================== */
 .ktmOverlay {
   position: fixed;
   inset: 0;
   display: flex;
   align-items: center;
   justify-content: center;
+  box-sizing: border-box;
   /* notch / safe-area wale phones ke liye */
   padding: max(16px, env(safe-area-inset-top)) max(16px, env(safe-area-inset-right))
     max(16px, env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left));
@@ -67,6 +73,7 @@
 }
 
 .ktmModal {
+  box-sizing: border-box;
   width: 100%;
   max-width: 1000px;
   max-height: 100%;
@@ -136,11 +143,19 @@
   border-radius: 50%;
   background: rgba(255, 255, 255, 0.2);
   color: #ffffff;
-  font-size: 14px;
+  font-size: 16px;
   line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   cursor: pointer;
   transition: background 0.2s ease;
   -webkit-tap-highlight-color: transparent;
+}
+
+.ktmCloseBtn svg {
+  display: block;
+  pointer-events: none;
 }
 
 @media (hover: hover) {
@@ -153,11 +168,13 @@
   background: rgba(239, 68, 68, 0.85);
 }
 
-/* ---------- Toolbar (domain dropdown) ---------- */
+/* =====================================================
+   Toolbar (domain + year dropdown)
+   ===================================================== */
 .ktmToolbar {
   display: flex;
   align-items: flex-end;
-  justify-content: space-between;
+  justify-content: flex-start;
   flex-wrap: wrap;
   gap: 14px;
   padding: 16px 22px 6px;
@@ -167,7 +184,7 @@
   display: flex;
   flex-direction: column;
   gap: 6px;
-  min-width: min(220px, 100%); /* chhoti screen par overflow nahi hoga */
+  min-width: min(180px, 100%); /* chhoti screen par overflow nahi hoga */
 }
 
 .ktmLabel {
@@ -177,6 +194,7 @@
 }
 
 .ktmSelect {
+  box-sizing: border-box;
   width: 100%;
   max-width: 100%;
   height: 40px;
@@ -197,34 +215,12 @@
   box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.15);
 }
 
-.ktmColorRule {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 14px;
-  font-size: 12px;
-  font-weight: 600;
-  color: #475569;
-}
-
-.ktmRuleItem {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.ktmRuleItem i {
-  flex-shrink: 0;
-  width: 12px;
-  height: 12px;
-  border-radius: 3px;
-  display: inline-block;
-}
-
-/* ---------- Chart card ---------- */
+/* =====================================================
+   Chart card
+   ===================================================== */
 .ktmChartCard {
-  margin: 12px 22px 22px;
-  padding: 18px 18px 12px;
+  margin: 10px 22px 18px;
+  padding: 14px 18px 8px;
   background: #ffffff;
   border: 1px solid #e2e8f0;
   border-radius: 14px;
@@ -248,13 +244,57 @@
   overflow-wrap: anywhere;
 }
 
+/* ---------- Legend (graph ki lines ke colour) ---------- */
+.ktmLegend {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 8px 22px;
+  margin: 6px 0 4px;
+  font-size: 13px;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.ktmLegendItem {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* line + beech me dot, bilkul graph ki line jaisa */
+.ktmLegendLine {
+  position: relative;
+  flex-shrink: 0;
+  display: inline-block;
+  width: 30px;
+  height: 3px;
+  border-radius: 2px;
+}
+
+.ktmLegendDot {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  border: 2px solid #ffffff;
+  box-sizing: content-box;
+  transform: translate(-50%, -50%);
+}
+
 /* Fixed height box: ResponsiveContainer height="100%" isi se size leta hai */
 .ktmChartBox {
   width: 100%;
-  height: 380px;
+  height: 290px;
+  min-width: 0;
 }
 
-/* ---------- Export icon + PNG / JPG menu ---------- */
+/* =====================================================
+   Export icon + PNG / JPG menu
+   ===================================================== */
 .ktmExport {
   position: relative;
   flex-shrink: 0;
@@ -277,15 +317,24 @@
   -webkit-tap-highlight-color: transparent;
 }
 
+.ktmExportBtn svg {
+  pointer-events: none;
+}
+
+.ktmExportBtn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
 @media (hover: hover) {
-  .ktmExportBtn:hover {
+  .ktmExportBtn:not(:disabled):hover {
     background: #2563eb;
     border-color: #2563eb;
     color: #ffffff;
   }
 }
 
-.ktmExportBtn:active,
+.ktmExportBtn:not(:disabled):active,
 .ktmExportBtn[aria-expanded="true"] {
   background: #2563eb;
   border-color: #2563eb;
@@ -334,7 +383,9 @@
   }
 }
 
-/* ---------- Tooltip ---------- */
+/* =====================================================
+   Tooltip
+   ===================================================== */
 .ktmTooltip {
   background: #ffffff;
   border: 1px solid #e2e8f0;
@@ -373,7 +424,9 @@
   color: #64748b;
 }
 
-/* ---------- Mobile ---------- */
+/* =====================================================
+   Mobile
+   ===================================================== */
 @media (max-width: 768px) {
   .kpiHeaderRow {
     flex-direction: column;
@@ -406,10 +459,12 @@
 
   .ktmToolbar {
     padding: 12px 14px 4px;
+    gap: 10px;
   }
 
+  /* Domain + Year mobile par bhi ek line me (jagah ho to), warna neeche */
   .ktmField {
-    width: 100%;
+    flex: 1 1 140px;
   }
 
   .ktmSelect {
@@ -425,12 +480,16 @@
     font-size: 14px;
   }
 
+  .ktmLegend {
+    font-size: 12px;
+    gap: 6px 16px;
+  }
+
   .ktmChartBox {
-    height: 300px;
+    height: 240px;
   }
 }
 
-/* Jinhone "reduce motion" on kiya hai unke liye animations band */
 @media (prefers-reduced-motion: reduce) {
   .kpiTrendBtn,
   .ktmCloseBtn,
