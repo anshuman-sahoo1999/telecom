@@ -266,7 +266,7 @@ export default function KpiTrendModal({ data = [], domains = [], onClose }) {
             <div className="ktmHeaderIcon" aria-hidden="true">📈</div>
             <div className="ktmHeaderText">
               <div className="ktmHeaderSmall">KPI Trend</div>
-              <div className="ktmHeaderMain">OTP / Amdocs QC - Month &amp; Year Wise</div>
+              <div className="ktmHeaderMain">OTP / Amdocs QC </div>
             </div>
           </div>
           <button
