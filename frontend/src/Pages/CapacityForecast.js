@@ -109,6 +109,10 @@ export default function CapacityForecast() {
   // Create button se form popup khulega
   const [showForm, setShowForm] = useState(false);
 
+  // Double click par duplicate record na bane
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isSavingInline, setIsSavingInline] = useState(false);
+
   const [fromDate, setFromDate] = useState("");
   const [toDate, setToDate] = useState("");
 
@@ -168,13 +172,26 @@ export default function CapacityForecast() {
     };
   }, [showForm]);
 
+  // Delete confirm box bhi Esc se band ho
+  useEffect(() => {
+    if (deleteId === null) return undefined;
+    const onKeyDown = (e) => {
+      if (e.key === "Escape") setDeleteId(null);
+    };
+    document.addEventListener("keydown", onKeyDown);
+    return () => document.removeEventListener("keydown", onKeyDown);
+  }, [deleteId]);
+
   const fetchAllData = useCallback(async () => {
     try {
-      const workRes = await axios.get(`${API_BASE_URL}/api/work/all`);
-      const workData = workRes.data || [];
+      const [workRes, masterRes] = await Promise.all([
+        axios.get(`${API_BASE_URL}/api/work/all`),
+        axios.get(`${API_BASE_URL}/api/master`)
+      ]);
+
+      const workData = Array.isArray(workRes.data) ? workRes.data : [];
       setAllWorkData(workData);
 
-      const masterRes = await axios.get(`${API_BASE_URL}/api/master`);
       const data = masterRes.data || {};
       setMasterDataMap(data);
       const domainList = Object.keys(data);
@@ -192,17 +209,17 @@ export default function CapacityForecast() {
       }
     } catch (err) {
       console.error("Error fetching work/master data:", err);
-      showToast("error", "Domain data load nahi ho paya!");
+      showToast("error", "Failed to load domain data!");
     }
   }, [showToast]);
 
   const fetchCapacityRecords = useCallback(async () => {
     try {
       const res = await axios.get(`${API_BASE_URL}/api/capacity-forecast`);
-      setRecords(res.data || []);
+      setRecords(Array.isArray(res.data) ? res.data : []);
     } catch (err) {
       console.error("Error fetching capacity records:", err);
-      showToast("error", "Records load nahi ho paye!");
+      showToast("error", "Failed to load records!");
     }
   }, [showToast]);
 
@@ -278,6 +295,8 @@ export default function CapacityForecast() {
 
   const handleCustomSubmit = async (e) => {
     e.preventDefault();
+    if (isSubmitting) return;
+
     // Sirf Month aur Domain mandatory hain.
     if (!formData.month || !formData.domain) {
       showToast("warning", "Please select Month and Domain!");
@@ -298,6 +317,7 @@ export default function CapacityForecast() {
       uom: formattedUom
     };
 
+    setIsSubmitting(true);
     try {
       await axios.post(`${API_BASE_URL}/api/capacity-forecast`, payloadData);
       showToast("success", "Data submitted successfully!");
@@ -316,17 +336,25 @@ export default function CapacityForecast() {
     } catch (err) {
       console.error("API submission error:", err);
       showToast("error", "Failed to save data to backend API!");
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
-  const handleInlineEditStart = (row) => {
+  // uomKeys: us domain ke table ke saare UOM columns, taaki jo UOM is row mein
+  // missing hai wo bhi edit karke save ho sake
+  const handleInlineEditStart = (row, uomKeys = []) => {
+    const uomInit = {};
+    uomKeys.forEach((k) => {
+      uomInit[k] = row.uom?.[k] ?? 0;
+    });
     setEditingRowId(getRowId(row));
     setInlineData({
       month: row.month || generatedMonths[0],
       capacity: row.capacity ?? 0,
       forecast: row.forecast ?? 0,
       inflow: row.inflow ?? 0,
-      uom: { ...(row.uom || {}) }
+      uom: { ...(row.uom || {}), ...uomInit }
     });
   };
 
@@ -342,6 +370,7 @@ export default function CapacityForecast() {
   };
 
   const handleInlineSave = async (row) => {
+    if (isSavingInline) return;
     const rowId = getRowId(row);
 
     if (!inlineData.month) {
@@ -365,6 +394,7 @@ export default function CapacityForecast() {
       uom: formattedUom
     };
 
+    setIsSavingInline(true);
     try {
       await axios.put(`${API_BASE_URL}/api/capacity-forecast/${rowId}`, payloadData);
       showToast("success", "Record updated successfully!");
@@ -373,13 +403,15 @@ export default function CapacityForecast() {
     } catch (err) {
       console.error("Error updating record:", err);
       showToast("error", "Failed to update record!");
+    } finally {
+      setIsSavingInline(false);
     }
   };
 
   // Delete: pehle screen par confirm box dikhega, browser popup nahi
   const handleDelete = (id) => {
     if (id === undefined || id === null) {
-      showToast("error", "Record ID nahi mili, delete nahi ho sakta!");
+      showToast("error", "Record ID not found, cannot delete!");
       return;
     }
     setDeleteId(id);
@@ -514,9 +546,13 @@ export default function CapacityForecast() {
         });
       }
 
-      return await html2canvas(wrapper, { scale: 2, useCORS: true });
+      return await html2canvas(wrapper, {
+        scale: 2,
+        useCORS: true,
+        backgroundColor: "#ffffff"
+      });
     } finally {
-      document.body.removeChild(wrapper);
+      if (wrapper.parentNode) wrapper.parentNode.removeChild(wrapper);
     }
   };
 
@@ -524,7 +560,10 @@ export default function CapacityForecast() {
     setOpenDropdownDomain(null);
     try {
       const canvas = await generateStyledCanvas(domainName);
-      if (!canvas) return;
+      if (!canvas) {
+        showToast("error", "Nothing to export!");
+        return;
+      }
 
       let mimeType = "image/png";
       let extension = "png";
@@ -580,7 +619,13 @@ export default function CapacityForecast() {
       {/* ---------- Delete confirm (screen par) ---------- */}
       {deleteId !== null && (
         <div style={overlayStyle} onClick={() => setDeleteId(null)}>
-          <div style={modalStyle} onClick={(e) => e.stopPropagation()}>
+          <div
+            style={modalStyle}
+            role="alertdialog"
+            aria-modal="true"
+            aria-label="Delete record"
+            onClick={(e) => e.stopPropagation()}
+          >
             <div style={{ fontSize: "16px", fontWeight: 700, marginBottom: "8px", color: "#111827" }}>
               Delete Record?
             </div>
@@ -662,17 +707,17 @@ export default function CapacityForecast() {
 
               <div className="img-field-group">
                 <label>Enter No. Of Capacity</label>
-                <input type="number" name="capacity" value={formData.capacity} onChange={handleCustomChange} placeholder="Enter no. of capacity" />
+                <input type="number" min="0" name="capacity" value={formData.capacity} onChange={handleCustomChange} placeholder="Enter no. of capacity" />
               </div>
 
               <div className="img-field-group">
                 <label>Enter No. Of Forecast</label>
-                <input type="number" name="forecast" value={formData.forecast} onChange={handleCustomChange} placeholder="Enter no. of forecast" />
+                <input type="number" min="0" name="forecast" value={formData.forecast} onChange={handleCustomChange} placeholder="Enter no. of forecast" />
               </div>
 
               <div className="img-field-group">
                 <label>Enter No. Of Inflow</label>
-                <input type="number" name="inflow" value={formData.inflow} onChange={handleCustomChange} placeholder="Enter no. of inflow" />
+                <input type="number" min="0" name="inflow" value={formData.inflow} onChange={handleCustomChange} placeholder="Enter no. of inflow" />
               </div>
 
               {activeUoms.map((sub) => (
@@ -680,6 +725,7 @@ export default function CapacityForecast() {
                   <label>Enter No. Of {sub}</label>
                   <input
                     type="number"
+                    min="0"
                     value={formData.uomValues[sub] || ""}
                     onChange={(e) => handleUomChange(sub, e.target.value)}
                     placeholder={`Enter no. of ${String(sub).toLowerCase()}`}
@@ -688,8 +734,8 @@ export default function CapacityForecast() {
               ))}
 
               <div className="img-form-actions">
-                <button type="submit" className="img-submit-btn">
-                  Submit Record
+                <button type="submit" className="img-submit-btn" disabled={isSubmitting}>
+                  {isSubmitting ? "Submitting..." : "Submit Record"}
                 </button>
               </div>
             </form>
@@ -745,7 +791,7 @@ export default function CapacityForecast() {
 
           return (
             <div key={domainName} className="img-table-box">
-              <div ref={(el) => (componentRefs.current[domainName] = el)}>
+              <div ref={(el) => { componentRefs.current[domainName] = el; }}>
                 <div className="img-table-header-container">
                   <div className="img-table-header-title">{domainName} Project</div>
 
@@ -806,6 +852,7 @@ export default function CapacityForecast() {
                                 {isEditing ? (
                                   <input
                                     type="number"
+                                    min="0"
                                     className="img-edit-row-input"
                                     value={inlineData.capacity}
                                     onChange={(e) => handleInlineFieldChange("capacity", e.target.value)}
@@ -818,6 +865,7 @@ export default function CapacityForecast() {
                                 {isEditing ? (
                                   <input
                                     type="number"
+                                    min="0"
                                     className="img-edit-row-input"
                                     value={inlineData.forecast}
                                     onChange={(e) => handleInlineFieldChange("forecast", e.target.value)}
@@ -830,6 +878,7 @@ export default function CapacityForecast() {
                                 {isEditing ? (
                                   <input
                                     type="number"
+                                    min="0"
                                     className="img-edit-row-input"
                                     value={inlineData.inflow}
                                     onChange={(e) => handleInlineFieldChange("inflow", e.target.value)}
@@ -843,6 +892,7 @@ export default function CapacityForecast() {
                                   {isEditing ? (
                                     <input
                                       type="number"
+                                      min="0"
                                       className="img-edit-row-input"
                                       value={inlineData.uom?.[uk] ?? ""}
                                       onChange={(e) => handleInlineUomChange(uk, e.target.value)}
@@ -855,12 +905,12 @@ export default function CapacityForecast() {
                               <td>
                                 {isEditing ? (
                                   <>
-                                    <button type="button" className="img-action-btn img-action-save-btn" title="Save" onClick={() => handleInlineSave(row)}>✅</button>
+                                    <button type="button" className="img-action-btn img-action-save-btn" title="Save" disabled={isSavingInline} onClick={() => handleInlineSave(row)}>✅</button>
                                     <button type="button" className="img-action-btn img-action-cancel-btn" title="Cancel" onClick={() => setEditingRowId(null)}>❌</button>
                                   </>
                                 ) : (
                                   <>
-                                    <button type="button" className="img-action-btn img-action-edit-btn" title="Edit" onClick={() => handleInlineEditStart(row)}>✏️</button>
+                                    <button type="button" className="img-action-btn img-action-edit-btn" title="Edit" onClick={() => handleInlineEditStart(row, uomKeys)}>✏️</button>
                                     <button type="button" className="img-action-btn img-action-delete-btn" title="Delete" onClick={() => handleDelete(rowId)}>🗑️</button>
                                   </>
                                 )}
