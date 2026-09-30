@@ -691,13 +691,6 @@ export default function CapacityForecast() {
                 <button type="submit" className="img-submit-btn">
                   Submit Record
                 </button>
-                <button
-                  type="button"
-                  className="img-cancel-btn"
-                  onClick={() => setShowForm(false)}
-                >
-                  Cancel
-                </button>
               </div>
             </form>
           </div>
