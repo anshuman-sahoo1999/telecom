@@ -8,6 +8,8 @@ import html2canvas from "html2canvas";
 import "../style/kpitrend.css";
 
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+
+// Graph ke colours (legend bhi isi se banta hai, isliye hamesha match karega)
 const QC_COLOR = "#2563eb";
 const OTP_COLOR = "#111827";
 const SERIES = [
@@ -37,6 +39,7 @@ const isOtpMet = (val) => {
   return !isNaN(num) && num > 0;
 };
 
+// "Jan,26" / "jan, 2026" / "January-26" / "Jan 2026" -> { monthIdx, year }
 const parseMonthYear = (m, fallbackYear) => {
   const match = String(m).trim().match(/^([A-Za-z]{3,})\W*(\d{2,4})?$/);
   if (!match) return null;
@@ -67,6 +70,7 @@ const TrendTooltip = ({ active, payload, label }) => {
 };
 
 export default function KpiTrendModal({ data = [], domains = [], onClose }) {
+  // Current year hamesha system date se aata hai -> 2026 ke baad 2027 khud ho jayega
   const currentYear = new Date().getFullYear();
 
   const [selectedDomain, setSelectedDomain] = useState("ALL");
@@ -79,6 +83,8 @@ export default function KpiTrendModal({ data = [], domains = [], onClose }) {
   const handleClose = useCallback(() => {
     if (typeof onClose === "function") onClose();
   }, [onClose]);
+
+  // Duplicate domains hatao (case / space ke hisaab se)
   const domainList = useMemo(() => {
     const seen = new Set();
     const list = [];
@@ -91,6 +97,7 @@ export default function KpiTrendModal({ data = [], domains = [], onClose }) {
     return list;
   }, [domains]);
 
+  // Year dropdown: data me jo saal hain + current year (ascending)
   const yearList = useMemo(() => {
     const set = new Set([currentYear]);
     (Array.isArray(data) ? data : []).forEach((item) => {
@@ -103,7 +110,10 @@ export default function KpiTrendModal({ data = [], domains = [], onClose }) {
     return Array.from(set).sort((a, b) => a - b).map(String);
   }, [data, currentYear]);
 
+  // Selected year list me na ho (data change / naya saal) to current year par wapas
   const activeYear = yearList.includes(selectedYear) ? selectedYear : String(currentYear);
+
+  // Esc: pehle export menu band, phir popup band
   useEffect(() => {
     const onKey = (e) => {
       if (e.key !== "Escape") return;
@@ -113,7 +123,8 @@ export default function KpiTrendModal({ data = [], domains = [], onClose }) {
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
   }, [handleClose, showExportMenu]);
-  
+
+  // Popup khula ho to peeche ka page scroll na ho + focus close button par
   useEffect(() => {
     const prevOverflow = document.body.style.overflow;
     const prevFocus = document.activeElement;
@@ -125,18 +136,19 @@ export default function KpiTrendModal({ data = [], domains = [], onClose }) {
     };
   }, []);
 
+  // Selected year ke Jan - Dec: har mahine ka QC % aur OTP %
   const chartData = useMemo(() => {
     const yearNum = Number(activeYear);
-    const bucket = {}; 
+    const bucket = {}; // monthIdx -> { qcSum, qcCount, otpMet, total }
     const wanted = normalize(selectedDomain);
 
     (Array.isArray(data) ? data : []).forEach((item) => {
       if (!item) return;
       if (selectedDomain !== "ALL" && normalize(item.domain) !== wanted) return;
 
-      const qcVal = parsePercent(firstFilled(item.amdocsQc, item.amdocs_qc)); 
+      const qcVal = parsePercent(firstFilled(item.amdocsQc, item.amdocs_qc)); // 0 bhi valid
       const otpMet = isOtpMet(item.otp);
-      const seen = new Set(); 
+      const seen = new Set(); // ek row me same month duplicate ho to ek hi baar
 
       (Array.isArray(item.months) ? item.months : []).forEach((m) => {
         if (!m) return;
@@ -156,13 +168,13 @@ export default function KpiTrendModal({ data = [], domains = [], onClose }) {
       });
     });
 
-
+    // Hamesha Jan - Dec; jis mahine ka data nahi hai wahan point nahi banega (gap)
     return MONTHS.map((month, idx) => {
       const b = bucket[idx];
       if (!b) return { label: month, QC: null, OTP: null };
       return {
         label: month,
-        QC: b.qcCount > 0 ? Math.round(b.qcSum / b.qcCount) : 0,
+        QC: b.qcCount > 0 ? Math.round(b.qcSum / b.qcCount) : 0, // data hai par QC nahi -> 0%
         OTP: b.total > 0 ? Math.round((b.otpMet / b.total) * 100) : 0,
       };
     });
@@ -183,7 +195,7 @@ export default function KpiTrendModal({ data = [], domains = [], onClose }) {
     if (!chartRef.current || exporting) return;
     setExporting(true);
     try {
-      await new Promise((res) => setTimeout(res, 150)); 
+      await new Promise((res) => setTimeout(res, 150)); // menu band hone ka wait
       const canvas = await html2canvas(chartRef.current, {
         scale: 2,
         useCORS: true,
@@ -206,6 +218,7 @@ export default function KpiTrendModal({ data = [], domains = [], onClose }) {
     }
   };
 
+  // Labels overlap na ho: jo value upar hai uska label upar, neeche wale ka neeche
   const renderPointLabel = (seriesKey, color) => (props) => {
     const { x, y, value, index } = props;
     if (x === null || x === undefined || y === null || y === undefined) return null;
@@ -236,7 +249,7 @@ export default function KpiTrendModal({ data = [], domains = [], onClose }) {
     <div
       className="ktmOverlay"
       onMouseDown={(e) => {
-
+        // sirf overlay par direct click se band ho (drag / text select se nahi)
         if (e.target === e.currentTarget) handleClose();
       }}
     >
@@ -253,7 +266,7 @@ export default function KpiTrendModal({ data = [], domains = [], onClose }) {
             <div className="ktmHeaderIcon" aria-hidden="true">📈</div>
             <div className="ktmHeaderText">
               <div className="ktmHeaderSmall">KPI Trend</div>
-              <div className="ktmHeaderMain">OTP / Amdocs QC</div>
+              <div className="ktmHeaderMain">OTP / Amdocs QC - Month &amp; Year Wise</div>
             </div>
           </div>
           <button
@@ -346,7 +359,7 @@ export default function KpiTrendModal({ data = [], domains = [], onClose }) {
           ) : (
             <div className="ktmChartBox">
               <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={chartData} margin={{ top: 22, right: 24, left: 24, bottom: 6 }}>
+                <LineChart data={chartData} margin={{ top: 22, right: 24, left: 0, bottom: 6 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
                   <XAxis
                     dataKey="label"
@@ -355,8 +368,14 @@ export default function KpiTrendModal({ data = [], domains = [], onClose }) {
                     tick={{ fontSize: 12, fill: "#334155" }}
                     label={{ value: `Month - ${activeYear}`, position: "insideBottom", offset: -4, fontSize: 12, fill: "#64748b" }}
                   />
-                  {/* Y axis hidden (dikhega nahi) — par scale 0-100 fixed rehta hai, isliye graph sahi banta hai */}
-                  <YAxis hide domain={[0, 100]} padding={{ top: 6, bottom: 16 }} />
+                  <YAxis
+                    domain={[0, 100]}
+                    ticks={[0, 20, 40, 60, 80, 100]}
+                    padding={{ top: 6, bottom: 16 }}
+                    tickFormatter={(v) => `${v}%`}
+                    tick={{ fontSize: 12, fill: "#334155" }}
+                    label={{ value: "Percentage (%)", angle: -90, position: "insideLeft", offset: 10, fontSize: 12, fill: "#64748b" }}
+                  />
                   <Tooltip content={<TrendTooltip />} />
                   {SERIES.map((s) => (
                     <Line
