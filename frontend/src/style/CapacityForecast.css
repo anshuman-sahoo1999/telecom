@@ -85,6 +85,133 @@
   transform: translateY(1px);
 }
 
+/* ---------- Create button (title ke neeche, right side) ---------- */
+.img-toolbar {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 16px;
+}
+
+.img-create-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: #1e3c72;
+  color: #fff;
+  border: none;
+  padding: 9px 20px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: bold;
+  box-shadow: 0 2px 6px rgba(30, 60, 114, 0.3);
+  transition: background 0.2s ease, transform 0.1s ease;
+}
+
+.img-create-btn:hover {
+  background: #2a5298;
+}
+
+.img-create-btn:active {
+  transform: translateY(1px);
+}
+
+.img-create-plus {
+  font-size: 18px;
+  line-height: 1;
+}
+
+/* ---------- Entry form popup (modal) ---------- */
+.img-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  z-index: 9000; /* toast (99999) aur delete confirm (99998) iske upar dikhte hain */
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  animation: img-fade-in 0.18s ease;
+}
+
+.img-modal-box {
+  background: #fff;
+  border-radius: 8px;
+  width: 100%;
+  max-width: 640px;
+  max-height: 90vh;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  box-shadow: 0 12px 34px rgba(0, 0, 0, 0.35);
+  animation: img-pop-in 0.2s ease;
+}
+
+.img-modal-header {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: #182848;
+  color: #fff;
+  padding: 12px 16px;
+}
+
+.img-modal-title {
+  font-size: 16px;
+  font-weight: bold;
+  letter-spacing: 0.3px;
+}
+
+.img-modal-close {
+  background: transparent;
+  border: none;
+  color: #fff;
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 4px;
+}
+
+.img-modal-close:hover {
+  background: rgba(255, 255, 255, 0.18);
+}
+
+/* Form popup ke andar: card jaisa shadow/margin nahi chahiye */
+.img-modal-form.img-form-wrapper {
+  box-shadow: none;
+  margin-bottom: 0;
+  border-radius: 0 0 8px 8px;
+  padding: 20px;
+}
+
+.img-cancel-btn {
+  background: #6b7280;
+  color: #fff;
+  border: none;
+  padding: 9px 20px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-weight: bold;
+  height: 35px;
+}
+
+.img-cancel-btn:hover {
+  background: #4b5563;
+}
+
+@keyframes img-fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes img-pop-in {
+  from { opacity: 0; transform: translateY(12px) scale(0.98); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
 /* ---------- Date filter ---------- */
 .img-date-filter-simple {
   display: flex;
@@ -352,8 +479,17 @@
     grid-column: span 1;
   }
 
-  .img-submit-btn {
+  .img-submit-btn,
+  .img-cancel-btn {
     width: 100%;
+  }
+
+  .img-form-actions {
+    flex-direction: column;
+  }
+
+  .img-modal-form.img-form-wrapper {
+    padding: 15px;
   }
 
   .img-date-filter-simple {
@@ -395,6 +531,23 @@
 
 /* Phones */
 @media (max-width: 480px) {
+  .img-create-btn {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .img-modal-overlay {
+    padding: 8px;
+  }
+
+  .img-modal-box {
+    max-height: 94vh;
+  }
+
+  .img-modal-title {
+    font-size: 15px;
+  }
+
   .img-style-container {
     padding: 8px;
   }
