@@ -15,24 +15,18 @@ const MasterCreation = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const navigate = useNavigate();
-
-
   const [newDomain, setNewDomain] = useState("");
   const [showCreateForm, setShowCreateForm] = useState(false);
-
   const [sow, setSow] = useState([""]);
   const [jobType, setJobType] = useState([""]);
   const [uom, setUom] = useState([""]);
-
   const [deleteMode, setDeleteMode] = useState(false);
-
   const [hiddenItems, setHiddenItems] = useState({
     sow: {},
     jobType: {},
     uom: {},
   });
 
-  /* ================= FETCH ================= */
   const fetchData = async () => {
     try {
       setLoading(true);
@@ -40,8 +34,6 @@ const MasterCreation = () => {
       const responseData = res.data || {};
 
       setData(responseData);
-
-      // ✅ FIX: only show domains that have actual saved data
       const filteredDomains = Object.keys(responseData).filter((d) => {
         const domain = responseData[d];
         return (
@@ -63,34 +55,26 @@ const MasterCreation = () => {
     fetchData();
   }, []);
 
-  /* ================= LOAD DOMAIN ================= */
   const loadDomainData = (domain) => {
     const current = data[domain] || {};
-
     setSow(current.sow?.length ? current.sow : [""]);
     setJobType(current.jobType?.length ? current.jobType : [""]);
     setUom(current.uom?.length ? current.uom : [""]);
   };
 
 const handleDomainChange = (domain) => {
-
-  // SAME DOMAIN CLICK = CLOSE
   if (selectedDomain === domain) {
     setSelectedDomain("");
-
     setSow([""]);
     setJobType([""]);
     setUom([""]);
 
     return;
   }
-
-  // OPEN
   setSelectedDomain(domain);
   loadDomainData(domain);
 };
 
-  /* ================= CREATE DOMAIN API ================= */
   const createDomain = async () => {
     try {
       if (!newDomain.trim()) {
@@ -127,8 +111,6 @@ const handleDomainChange = (domain) => {
       );
 
       if (!confirmDelete) return;
-
-      // ✅ FIXED API CALL (PARAM BASED)
       await axios.delete(
         `${API_BASE}/delete-domain/${domainToDelete}`
       );
@@ -148,7 +130,6 @@ const handleDomainChange = (domain) => {
     }
   };
 
-  /* ================= ARRAY HELPERS ================= */
   const updateArray = (setter, arr, i, val) => {
     const copy = [...arr];
     copy[i] = val;
@@ -159,8 +140,6 @@ const handleDomainChange = (domain) => {
 
   const removeField = (setter, arr, i) =>
     setter(arr.filter((_, idx) => idx !== i));
-
-  /* ================= SAVE ALL ================= */
   const saveAll = async () => {
     try {
       const clean = (arr) =>
@@ -231,7 +210,7 @@ const handleDomainChange = (domain) => {
       alert("Delete failed");
     }
   };
-  /* ================= UI ================= */
+
 return (
   <>
     <div className="page-top-bar">
@@ -244,16 +223,11 @@ return (
     </div>
 
     <div className="master-container flex-layout">
-      {/* LEFT PANEL */}
       <div className="left-side">
         <h2 className="title">Master Entry</h2>
-
         <div className="card">
-
           <div className="domain-header">
-
             <h3>Select Domain</h3>
-
             <button
               className="create-domain-btn"
               onClick={() => setShowCreateForm(!showCreateForm)}
@@ -325,7 +299,6 @@ return (
           ))}
         </div>
 
-        {/* JOB TYPE */}
         <div className="card">
           <h3>Job Type</h3>
           {jobType.map((v, i) => (
@@ -345,8 +318,7 @@ return (
             </div>
           ))}
         </div>
-
-        {/* UOM */}
+            
         <div className="card">
           <h3>UOM</h3>
           {uom.map((v, i) => (
@@ -372,14 +344,10 @@ return (
         </div>
       </div>
 
-      {/* RIGHT PANEL */}
       <div className="right-side">
-
         <h2 className="title">Edit Master </h2>
-
         {loading && <p>Loading...</p>}
         {error && <p>{error}</p>}
-
         <table className="master-table">
           <thead>
             <tr>
@@ -442,7 +410,7 @@ return (
     ))}
 </td>
 
-            <td>
+<td>
   {data[d]?.uom
     ?.filter((item) => !hiddenItems.uom[`${d}-${item}`])
     .map((item, idx, arr) => (
