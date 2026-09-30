@@ -60,7 +60,7 @@ html, body {
   position: relative;
   z-index: 2;
   color: #fff;
-  padding: 16px 18px 18px;
+  padding: 12px 18px 12px;
   border-radius: 16px;
   background: rgba(255, 255, 255, 0.1);
   backdrop-filter: blur(8px);
@@ -73,7 +73,7 @@ html, body {
   display: flex;
   align-items: center;
   gap: 10px;
-  margin-bottom: 14px;
+  margin-bottom: 10px;
 }
 
 .live-stats-header h3 {
@@ -101,20 +101,21 @@ html, body {
 /* Year (left) + 3 month tabs (right) */
 .live-stats-controls {
   display: flex;
-  align-items: stretch;
+  align-items: center;
+  justify-content: space-between;
   gap: 10px;
-  margin-bottom: 14px;
+  margin-bottom: 8px;
 }
 
 .live-year-field {
   display: flex;
-  flex-direction: column;
-  justify-content: center;
-  min-width: 78px;
-  padding: 6px 14px;
-  border-radius: 10px;
-  background: rgba(255, 255, 255, 0.16);
-  border: 1px solid rgba(255, 255, 255, 0.3);
+  align-items: center;
+  gap: 10px;
+  min-width: 150px;
+  padding: 7px 16px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.12);
+  border: 1px solid rgba(255, 255, 255, 0.4);
 }
 
 .live-year-label {
@@ -127,25 +128,37 @@ html, body {
 .live-year-value {
   font-size: 17px;
   font-weight: 700;
+  margin-left: auto;
 }
 
+/* 3 month tabs - ek dusre se jude hue (segmented) */
 .live-month-tabs {
-  flex: 1;
   display: flex;
-  gap: 8px;
+  margin-left: auto;
 }
 
 .live-month-tab {
-  flex: 1;
-  padding: 10px 6px;
-  border-radius: 10px;
-  border: 1px solid rgba(255, 255, 255, 0.3);
+  min-width: 70px;
+  padding: 9px 12px;
+  border: 1px solid rgba(255, 255, 255, 0.4);
   background: rgba(255, 255, 255, 0.08);
   color: #fff;
   font-size: 14px;
   font-weight: 600;
   cursor: pointer;
   transition: 0.25s;
+}
+
+.live-month-tab + .live-month-tab {
+  border-left: none;
+}
+
+.live-month-tab:first-child {
+  border-radius: 8px 0 0 8px;
+}
+
+.live-month-tab:last-child {
+  border-radius: 0 8px 8px 0;
 }
 
 .live-month-tab small {
@@ -161,17 +174,15 @@ html, body {
   background: #fff;
   color: #0b3a66;
   border-color: #fff;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
 }
 
-/* Domain cards */
+/* Domains: card nahi, bas beech me lines (3 column) */
 .live-domain-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(128px, 1fr));
-  gap: 10px;
-  max-height: 230px;
+  grid-template-columns: repeat(3, 1fr);
+  max-height: 200px;
   overflow-y: auto;
-  padding-right: 2px;
+  border-top: 1px solid rgba(255, 255, 255, 0.35);
 }
 
 .live-domain-grid::-webkit-scrollbar {
@@ -183,12 +194,18 @@ html, body {
   border-radius: 10px;
 }
 
-.live-domain-card {
-  padding: 9px 11px 10px;
-  border-radius: 10px;
-  background: rgba(11, 18, 32, 0.55);
-  border: 1px solid rgba(255, 255, 255, 0.14);
-  border-left: 4px solid var(--themeColor, #6366f1);
+.live-domain-cell {
+  padding: 7px 14px 8px;
+  border-right: 1px solid rgba(255, 255, 255, 0.35);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.35);
+}
+
+.live-domain-cell.no-right {
+  border-right: none;
+}
+
+.live-domain-cell.no-bottom {
+  border-bottom: none;
 }
 
 .live-domain-name {
@@ -200,10 +217,10 @@ html, body {
 }
 
 .live-domain-jobs {
-  font-size: 22px;
+  font-size: 20px;
   font-weight: 800;
-  line-height: 1.2;
-  margin: 2px 0 4px;
+  line-height: 1.15;
+  margin: 1px 0 3px;
 }
 
 .live-domain-jobs span {
@@ -214,16 +231,17 @@ html, body {
 
 .live-domain-metrics {
   display: flex;
+  flex-wrap: wrap;
   justify-content: space-between;
-  gap: 6px;
+  gap: 2px 8px;
   font-size: 11px;
   font-weight: 700;
 }
 
 .live-last-updated {
-  margin-top: 12px;
-  padding-top: 10px;
-  border-top: 1px solid rgba(255, 255, 255, 0.2);
+  margin-top: 6px;
+  padding-top: 8px;
+  border-top: 1px solid rgba(255, 255, 255, 0.35);
   font-size: 12px;
   font-weight: 600;
   opacity: 0.85;
@@ -251,25 +269,10 @@ html, body {
   );
 }
 
-/* Logo + Login card ek column me, center align */
-.auth-right-inner {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  margin-top: -6%;
-}
-
-.auth-logo {
-  width: 130px;
-  height: auto;
-  margin-bottom: 18px;
-  position: relative;
-  z-index: 10;
-}
-
 .auth-card {
   width: 430px;
-  padding: 35px;
+  padding: 30px 35px 35px;
+  margin-top: -6%;
   border-radius: 18px;
 
   /* STRONG GLASS */
@@ -284,6 +287,14 @@ html, body {
 
   position: relative;
   z-index: 10;
+}
+
+/* EMC logo - card ke andar, Login ke upar, center */
+.auth-logo {
+  display: block;
+  width: 110px;
+  height: auto;
+  margin: 0 auto 14px;
 }
 
 .auth-card h2 {
@@ -370,17 +381,13 @@ html, body {
     box-sizing: border-box;
   }
 
-  .auth-right-inner {
-    margin-top: 0;
-    width: 100%;
-  }
-
   .auth-logo {
-    width: 100px;
-    margin-bottom: 14px;
+    width: 90px;
+    margin-bottom: 10px;
   }
 
   .auth-card {
+    margin-top: 0;
     width: 100%;
     max-width: 100%;
     padding: 20px;
@@ -410,9 +417,23 @@ html, body {
     font-size: 14px;
   }
 
+  .live-year-field {
+    min-width: 100px;
+    padding: 6px 10px;
+  }
+
+  .live-month-tab {
+    min-width: 52px;
+    padding: 8px 8px;
+    font-size: 13px;
+  }
+
+  .live-domain-cell {
+    padding: 6px 8px 7px;
+  }
+
   .live-domain-grid {
-    grid-template-columns: repeat(2, 1fr);
-    max-height: 260px;
+    max-height: 240px;
   }
 }
 
