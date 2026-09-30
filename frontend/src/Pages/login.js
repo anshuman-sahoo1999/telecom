@@ -21,6 +21,9 @@ const DOMAIN_COLORS = {
   JPA: "#f97316",
 };
 
+// Ek line me kitne domain dikhane hain
+const COLS = 4;
+
 const parseMonthEntry = (m, fallbackYear) => {
   if (!m) return null;
   const match = String(m).trim().match(/^([A-Za-z]{3,})\W*(\d{2,4})?$/);
@@ -54,7 +57,7 @@ const isOtpMet = (val) => {
   return !isNaN(num) && num > 0;
 };
 
-
+// Dark background par dikhne wale colours
 const getPerfColor = (val) => {
   if (val === null || val === undefined || isNaN(val)) return "#cbd5e1";
   if (val >= 90) return "#4ade80";
@@ -62,7 +65,7 @@ const getPerfColor = (val) => {
   return "#f87171";
 };
 
-
+// Current month se shuru hokar 3 month (Nov me: Nov, Dec, Jan -> year auto 2027)
 const getMonthTabs = () => {
   const now = new Date();
   return [0, 1, 2].map((i) => {
@@ -79,25 +82,30 @@ const getMonthTabs = () => {
 const parseDate = (d) => {
   if (!d) return null;
   if (d instanceof Date) return isNaN(d.getTime()) ? null : d;
-  const parsed = new Date(d);
+  let v = d;
+  // "2026-09-22 16:38:00" (space wala) ko ISO banao taaki har browser me parse ho
+  if (typeof v === "string" && /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}/.test(v.trim())) {
+    v = v.trim().replace(" ", "T");
+  }
+  const parsed = new Date(v);
   return isNaN(parsed.getTime()) ? null : parsed;
 };
 
-
+// Report.js jaisa: har record ka updated_at (nahi to created_at) -> sabse latest, IST me
+// Format: "22 Sep 2026 at 04:38 PM Hrs"
+// Intl par depend nahi karte (kuch browsers me hour/dayPeriod nahi dete), IST (+5:30) khud nikalte hain
+const pad2 = (n) => String(n).padStart(2, "0");
 const formatLastUpdated = (d) => {
   if (!d) return "--";
-  const parts = new Intl.DateTimeFormat("en-IN", {
-    timeZone: "Asia/Kolkata",
-    day: "2-digit",
-    month: "numeric",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-    hour12: true,
-  }).formatToParts(d);
-  const get = (type) => parts.find((p) => p.type === type)?.value || "";
-  const monthLabel = MONTH_NAMES[Number(get("month")) - 1] || "";
-  return `${get("day")} ${monthLabel} ${get("year")} at ${get("hour")}:${get("minute")} ${get("dayPeriod").toUpperCase()} Hrs`;
+  const ist = new Date(d.getTime() + 5.5 * 60 * 60 * 1000);
+  const day = pad2(ist.getUTCDate());
+  const month = MONTH_NAMES[ist.getUTCMonth()];
+  const year = ist.getUTCFullYear();
+  let hour = ist.getUTCHours();
+  const minute = pad2(ist.getUTCMinutes());
+  const period = hour >= 12 ? "PM" : "AM";
+  hour = hour % 12 || 12;
+  return `${day} ${month} ${year} at ${pad2(hour)}:${minute} ${period} Hrs`;
 };
 
 const Login = () => {
@@ -194,7 +202,7 @@ const Login = () => {
   const lastUpdated = useMemo(() => {
     let latest = null;
     workData.forEach((item) => {
-      const d = parseDate(firstFilled(item?.updated_at, item?.updatedAt, item?.created_at, item?.createdAt));
+      const d = parseDate(firstFilled(item?.updated_at, item?.updatedAt, item?.updated_on, item?.modified_at, item?.created_at, item?.createdAt));
       if (d && (!latest || d > latest)) latest = d;
     });
     return latest;
@@ -303,13 +311,16 @@ const Login = () => {
             {!statsLoading &&
               !statsError &&
               domainRows.map((d, i) => {
-                const COLS = 3;
                 const lastRow = Math.floor((domainRows.length - 1) / COLS);
+                const isLastInRow = i % COLS === COLS - 1;
+                const isVeryLast = i === domainRows.length - 1;
                 const cls = [
                   "live-domain-cell",
-                  i % COLS === COLS - 1 ? "no-right" : "",
+                  isLastInRow || isVeryLast ? "no-right" : "",
                   Math.floor(i / COLS) === lastRow ? "no-bottom" : "",
-                ].join(" ");
+                ]
+                  .filter(Boolean)
+                  .join(" ");
                 return (
                   <div key={d.name} className={cls} style={{ "--themeColor": d.color }}>
                     <div className="live-domain-name">{d.name}</div>
@@ -342,7 +353,7 @@ const Login = () => {
         }}
       >
         <div className="auth-card">
-          <img className="auth-logo" src="/Image/img3.png" alt="EMC logo" />
+          <img className="auth-logo" src="/Image/img1.png" alt="EMC logo" />
           <h2>Login</h2>
           <p>Enter your email and password</p>
 
