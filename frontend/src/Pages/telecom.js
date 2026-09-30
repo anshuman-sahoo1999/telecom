@@ -49,14 +49,30 @@ const getJobs = (item) => Number(firstFilled(item?.jobsDelivered, item?.jobs_del
 
 const parsePercent = (val) => {
   if (val === null || val === undefined || val === "") return null;
-  const num = parseFloat(val.toString().replace("%", "").trim());
+  const str = val.toString().trim();
+  const num = parseFloat(str.replace("%", "").trim());
   if (isNaN(num)) return null;
-  const pct = num > 0 && num <= 1 ? num * 100 : num;
-  return Math.min(100, Math.max(0, Math.round(pct)));
+  // "1%" ko 100% na banao: 0-1 wali scaling sirf tab jab % sign nahi hai (Excel ka 0.95 = 95%)
+  const pct = !str.includes("%") && num > 0 && num <= 1 ? num * 100 : num;
+  // per-row rounding nahi (average me galti aati thi); rounding average ke baad hoti hai
+  return Math.min(100, Math.max(0, pct));
 };
 
-// 0 value bhi valid (|| use karne se 0 gayab ho jata tha)
-const getQc = (item) => parsePercent(firstFilled(item?.amdocsQc, item?.amdocs_qc));
+// QC: blank ya 0 = data nahi hai (average me nahi judega)
+const getQc = (item) => {
+  const pct = parsePercent(firstFilled(item?.amdocsQc, item?.amdocs_qc));
+  return pct === null || pct === 0 ? null : pct;
+};
+
+// OTP: blank / "-" / 0 / "0%" = data nahi hai (OTP % ke denominator me nahi judega)
+const hasOtpData = (val) => {
+  if (val === null || val === undefined) return false;
+  const str = val.toString().trim();
+  if (str === "" || str === "-") return false;
+  const num = parseFloat(str.replace("%", ""));
+  if (!isNaN(num) && num === 0) return false;
+  return true;
+};
 
 const isOtpMet = (val) => {
   if (val === null || val === undefined || val === "") return false;
@@ -211,8 +227,12 @@ const BarChartTooltip = ({ active, payload, label }) => {
             </div>
             <div style={{ display: "flex", gap: 10, paddingLeft: 13, whiteSpace: "nowrap" }}>
               <span style={{ color: "#2563eb" }}><b style={{ fontWeight: 800 }}>Job-</b> <b style={{ fontWeight: 800 }}>{p.value}</b></span>
-              <span style={{ color: getPerfColor(qc ?? 0) }}><b style={{ fontWeight: 800 }}>QC-</b> <b style={{ fontWeight: 800 }}>{qc !== null && qc !== undefined ? `${qc}%` : "0%"}</b></span>
-              <span style={{ color: getPerfColor(otp ?? 0) }}><b style={{ fontWeight: 800 }}>OTP-</b> <b style={{ fontWeight: 800 }}>{otp !== null && otp !== undefined ? `${otp}%` : "0%"}</b></span>
+              {qc !== null && qc !== undefined && (
+                <span style={{ color: getPerfColor(qc) }}><b style={{ fontWeight: 800 }}>QC-</b> <b style={{ fontWeight: 800 }}>{`${qc}%`}</b></span>
+              )}
+              {otp !== null && otp !== undefined && (
+                <span style={{ color: getPerfColor(otp) }}><b style={{ fontWeight: 800 }}>OTP-</b> <b style={{ fontWeight: 800 }}>{`${otp}%`}</b></span>
+              )}
             </div>
           </div>
         );
@@ -228,8 +248,12 @@ const PieChartTooltip = ({ active, payload }) => {
     <div style={{ ...tooltipCardStyle, lineHeight: 1.7 }}>
       <div style={{ fontWeight: 800, marginBottom: 4, fontSize: 12.5, color: "#0f172a" }}>{d.name}</div>
       <div style={{ color: "#2563eb" }}><b style={{ fontWeight: 800 }}>Job-</b> <b style={{ fontWeight: 800 }}>{d.jobs}</b> <span style={{ color: "#64748b", fontWeight: 600 }}>(<b style={{ fontWeight: 800 }}>{d.value}%</b>)</span></div>
-      <div style={{ color: getPerfColor(d.qc ?? 0) }}><b style={{ fontWeight: 800 }}>QC-</b> <b style={{ fontWeight: 800 }}>{d.qc !== null && d.qc !== undefined ? `${d.qc}%` : "0%"}</b></div>
-      <div style={{ color: getPerfColor(d.otp ?? 0) }}><b style={{ fontWeight: 800 }}>OTP-</b> <b style={{ fontWeight: 800 }}>{d.otp !== null && d.otp !== undefined ? `${d.otp}%` : "0%"}</b></div>
+      {d.qc !== null && d.qc !== undefined && (
+        <div style={{ color: getPerfColor(d.qc) }}><b style={{ fontWeight: 800 }}>QC-</b> <b style={{ fontWeight: 800 }}>{`${d.qc}%`}</b></div>
+      )}
+      {d.otp !== null && d.otp !== undefined && (
+        <div style={{ color: getPerfColor(d.otp) }}><b style={{ fontWeight: 800 }}>OTP-</b> <b style={{ fontWeight: 800 }}>{`${d.otp}%`}</b></div>
+      )}
     </div>
   );
 };
@@ -258,7 +282,6 @@ export default function TelecomMap() {
   const [isExporting, setIsExporting] = useState(false);
   const [allWorkData, setAllWorkData] = useState([]);
   const [domains, setDomains] = useState([]);
-  const [mapReportData, setMapReportData] = useState({});
   const [role, setRole] = useState(null);
   const [tooltip, setTooltip] = useState(CLOSED_TOOLTIP);
 
@@ -403,13 +426,12 @@ export default function TelecomMap() {
     }
   }, []);
 
-  // ---- Data fetch (teeno API parallel; ek fail ho to baaki chalti rahe) ----
+  // ---- Data fetch (dono API parallel; ek fail ho to baaki chalti rahe) ----
   const fetchAllData = useCallback(async () => {
     lastFetchRef.current = Date.now();
-    const [workRes, masterRes, stateRes] = await Promise.allSettled([
+    const [workRes, masterRes] = await Promise.allSettled([
       axios.get(`${API_BASE_URL}/api/work/all`),
       axios.get(`${API_BASE_URL}/api/master`),
-      axios.get(`${API_BASE_URL}/api/work/state-wise-jobs`),
     ]);
 
     if (workRes.status === "fulfilled") {
@@ -421,11 +443,6 @@ export default function TelecomMap() {
       setDomains(Object.keys(masterRes.value.data || {}));
     } else {
       console.error("Error fetching master data:", masterRes.reason);
-    }
-    if (stateRes.status === "fulfilled") {
-      setMapReportData(stateRes.value.data || {});
-    } else {
-      console.error("Error fetching state-wise jobs:", stateRes.reason);
     }
   }, []);
 
@@ -558,20 +575,13 @@ export default function TelecomMap() {
         s.qcSum += qcVal;
         s.qcCount += 1;
       }
-      s.otpTotal += 1;
-      if (isOtpMet(item.otp)) s.otp += 1;
+      if (hasOtpData(item.otp)) {
+        s.otpTotal += 1;
+        if (isOtpMet(item.otp)) s.otp += 1;
+      }
     });
     return map;
   }, [currentFilterData]);
-
-  // Backend ka state-wise data lowercase key se (tooltip lookup case-insensitive)
-  const mapReportByState = useMemo(() => {
-    const map = {};
-    Object.entries(mapReportData || {}).forEach(([k, v]) => {
-      map[lc(k)] = v || {};
-    });
-    return map;
-  }, [mapReportData]);
 
   const getStateColor = (stateName) => {
     const totalJobs = stateJobsMap[lc(stateName)] || 0;
@@ -590,15 +600,17 @@ export default function TelecomMap() {
     currentFilterData.forEach((item) => {
       const domain = normalize(item.domain);
       if (!domain) return;
-      const s = map[domain] || (map[domain] = { jobs: 0, qcSum: 0, qcCount: 0, otpMet: 0, total: 0, uom: {} });
+      const s = map[domain] || (map[domain] = { jobs: 0, qcSum: 0, qcCount: 0, otpMet: 0, otpTotal: 0, uom: {} });
       s.jobs += getJobs(item);
       const qcVal = getQc(item);
       if (qcVal !== null) {
         s.qcSum += qcVal;
         s.qcCount += 1;
       }
-      s.total += 1;
-      if (isOtpMet(item.otp)) s.otpMet += 1;
+      if (hasOtpData(item.otp)) {
+        s.otpTotal += 1;
+        if (isOtpMet(item.otp)) s.otpMet += 1;
+      }
 
       Object.entries(parseUom(item.uom)).forEach(([key, value]) => {
         if (!key || key === "undefined") return;
@@ -617,7 +629,7 @@ export default function TelecomMap() {
   };
   const getDomainOtpPercent = (domain) => {
     const s = domainStats[normalize(domain)];
-    return s && s.total > 0 ? Math.round((s.otpMet / s.total) * 100) : null;
+    return s && s.otpTotal > 0 ? Math.round((s.otpMet / s.otpTotal) * 100) : null;
   };
   const getDomainUomText = (domain) => {
     const uom = domainStats[normalize(domain)]?.uom || {};
@@ -640,25 +652,38 @@ export default function TelecomMap() {
     currentFilterData.forEach((item) => {
       const jobs = getJobs(item);
       const qcVal = getQc(item);
-      const otpMet = isOtpMet(item.otp);
-      const seen = new Set(); // ek row me same month duplicate ho to ek hi baar
+      const otpHas = hasOtpData(item.otp);
+      const otpMet = otpHas && isOtpMet(item.otp);
 
+      // ek row ke unique months (duplicate month ek hi baar)
+      const uniqueMonths = [];
+      const seen = new Set();
       (Array.isArray(item.months) ? item.months : []).forEach((m) => {
         const p = parseMonthEntry(m, currentYear);
         if (!p) return;
         const key = `${p.idx}-${p.year}`;
         if (seen.has(key)) return;
         seen.add(key);
+        uniqueMonths.push({ key, p });
+      });
+
+      // Jobs har month me poore nahi jode jate (warna 2 month wali row ke jobs double ho jate the);
+      // row ke jobs un months me barabar baante jate hain, total sahi rehta hai.
+      const jobsShare = uniqueMonths.length > 0 ? jobs / uniqueMonths.length : 0;
+
+      uniqueMonths.forEach(({ key, p }) => {
         yearSet.add(String(p.year));
 
-        const b = buckets[key] || (buckets[key] = { jobs: 0, qcSum: 0, qcCount: 0, otpMet: 0, total: 0 });
-        b.jobs += jobs;
+        const b = buckets[key] || (buckets[key] = { jobs: 0, qcSum: 0, qcCount: 0, otpMet: 0, otpTotal: 0 });
+        b.jobs += jobsShare;
         if (qcVal !== null) {
           b.qcSum += qcVal;
           b.qcCount += 1;
         }
-        b.total += 1;
-        if (otpMet) b.otpMet += 1;
+        if (otpHas) {
+          b.otpTotal += 1;
+          if (otpMet) b.otpMet += 1;
+        }
       });
     });
 
@@ -668,9 +693,9 @@ export default function TelecomMap() {
       years.forEach((year) => {
         const b = buckets[`${idx}-${year}`];
         if (!b) return;
-        row[year] = b.jobs;
+        row[year] = Math.round(b.jobs * 100) / 100;
         row[`qc_${year}`] = b.qcCount > 0 ? Math.round(b.qcSum / b.qcCount) : null;
-        row[`otp_${year}`] = b.total > 0 ? Math.round((b.otpMet / b.total) * 100) : null;
+        row[`otp_${year}`] = b.otpTotal > 0 ? Math.round((b.otpMet / b.otpTotal) * 100) : null;
       });
       return row;
     });
@@ -689,7 +714,7 @@ export default function TelecomMap() {
       jobs: s.jobs,
       value: grandTotal ? Number(((s.jobs / grandTotal) * 100).toFixed(2)) : 0,
       qc: s.qcCount > 0 ? Math.round(s.qcSum / s.qcCount) : null,
-      otp: s.total > 0 ? Math.round((s.otpMet / s.total) * 100) : null,
+      otp: s.otpTotal > 0 ? Math.round((s.otpMet / s.otpTotal) * 100) : null,
       color: COLORS[index % COLORS.length],
     }));
   }, [domainStats]);
@@ -798,7 +823,15 @@ export default function TelecomMap() {
 
   // ---- Map tooltip data ----
   const tooltipState = tooltip.data?.state;
-  const tooltipStateData = tooltipState ? mapReportByState[lc(tooltipState)] || {} : {};
+  // Jobs bhi filtered data se (QC / OTP jis data se aate hain wahi), taaki teeno match karein
+  const tooltipStateData = useMemo(() => {
+    const out = {};
+    if (!tooltipState) return out;
+    Object.entries(stateDomainStatsMap[lc(tooltipState)] || {}).forEach(([d, st]) => {
+      out[d] = st.jobs;
+    });
+    return out;
+  }, [tooltipState, stateDomainStatsMap]);
   const tooltipTotalJobs = Object.values(tooltipStateData).reduce((sum, val) => sum + (Number(val) || 0), 0);
   const tooltipRegion = tooltipState ? getRegionByState(tooltipState) : null;
 
@@ -893,8 +926,8 @@ export default function TelecomMap() {
                         <div className="kpiDomainModern">{domain}</div>
                         <div className="kpiSubModern">{getDomainUomText(domain)}</div>
                         <div className="kpiQcOtpRow" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "nowrap", gap: "6px", margin: "8px 0 4px" }}>
-                          <span style={getPerfBoxStyle(qcAvg ?? 0)}>Amdocs QC: {qcAvg !== null ? `${qcAvg}%` : "0%"}</span>
-                          <span style={getPerfBoxStyle(otpPct ?? 0)}>OTP: {otpPct !== null ? `${otpPct}%` : "0%"}</span>
+                          {qcAvg !== null && <span style={getPerfBoxStyle(qcAvg)}>Amdocs QC: {qcAvg}%</span>}
+                          {otpPct !== null && <span style={getPerfBoxStyle(otpPct)}>OTP: {otpPct}%</span>}
                         </div>
                         <div className="kpiValueModern">{getDomainJobs(domain)}<span> Jobs</span></div>
                       </div>
@@ -1132,8 +1165,8 @@ export default function TelecomMap() {
                       <span style={{ color: "#16a34a", fontWeight: "700" }}>{jobs} Jobs</span>
                     </div>
                     <div style={{ display: "flex", justifyContent: "space-between", fontSize: "11px", fontWeight: "600" }}>
-                      <span style={{ color: getPerfColor(qc ?? 0) }}>QC: {qc !== null ? `${qc}%` : "0%"}</span>
-                      <span style={{ color: getPerfColor(otp ?? 0) }}>OTP: {otp !== null ? `${otp}%` : "0%"}</span>
+                      {qc !== null ? <span style={{ color: getPerfColor(qc) }}>QC: {qc}%</span> : <span></span>}
+                      {otp !== null ? <span style={{ color: getPerfColor(otp) }}>OTP: {otp}%</span> : <span></span>}
                     </div>
                   </div>
                 );
