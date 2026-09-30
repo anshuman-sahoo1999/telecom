@@ -7,26 +7,22 @@ import { FaDownload } from "react-icons/fa";
 import html2canvas from "html2canvas";
 import "../style/kpiTrend.css";
 
-/* ======================================================
-   KPI TREND MODAL  (OTP / QC month-year wise line chart)
-   Props:
-     data     -> all work rows (allWorkData from Telecom page)
-     domains  -> list of domain names for the dropdown
-     onClose  -> function to close the popup
-====================================================== */
-
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
-const QC_COLOR = "#2563eb";   // blue
-const OTP_COLOR = "#111827";  // black
+const QC_COLOR = "#2563eb";  
+const OTP_COLOR = "#111827";  
 
-const normalize = (d) => (d || "").toString().trim().toUpperCase();
+const normalize = (d) => (d ?? "").toString().trim().toUpperCase();
+
+const firstFilled = (...vals) =>
+  vals.find((v) => v !== null && v !== undefined && String(v).trim() !== "");
 
 const parsePercent = (val) => {
   if (val === null || val === undefined || val === "") return null;
   const num = parseFloat(val.toString().replace("%", "").trim());
   if (isNaN(num)) return null;
-  return num > 0 && num <= 1 ? Math.round(num * 100) : Math.round(num);
+  const pct = num > 0 && num <= 1 ? num * 100 : num; // 0.95 -> 95
+  return Math.min(100, Math.max(0, Math.round(pct)));  // 0-100 ke beech rakho
 };
 
 const isOtpMet = (val) => {
@@ -37,12 +33,44 @@ const isOtpMet = (val) => {
   const num = parseFloat(str.replace("%", ""));
   return !isNaN(num) && num > 0;
 };
+const parseMonthYear = (m, fallbackYear) => {
+  const match = String(m).trim().match(/^([A-Za-z]{3,})\W*(\d{2,4})?$/);
+  if (!match) return null;
+  const monthIdx = MONTHS.findIndex((x) => x.toLowerCase() === match[1].slice(0, 3).toLowerCase());
+  if (monthIdx < 0) return null;
+  let year = fallbackYear;
+  if (match[2]) year = match[2].length === 2 ? 2000 + Number(match[2]) : Number(match[2]);
+  if (!Number.isFinite(year)) return null;
+  return { monthIdx, year };
+};
+
+const TrendTooltip = ({ active, payload, label }) => {
+  if (!active || !payload || !payload.length) return null;
+  return (
+    <div className="ktmTooltip">
+      <div className="ktmTooltipTitle">{label}</div>
+      {payload.map((p) => (
+        <div key={p.dataKey} className="ktmTooltipRow">
+          <span className="ktmDot" style={{ background: p.color }}></span>
+          <span>{p.name}:</span>
+          <b>{p.value}%</b>
+        </div>
+      ))}
+    </div>
+  );
+};
 
 export default function KpiTrendModal({ data = [], domains = [], onClose }) {
   const [selectedDomain, setSelectedDomain] = useState("ALL");
   const [showExportMenu, setShowExportMenu] = useState(false);
   const chartRef = useRef(null);
   const currentYear = new Date().getFullYear();
+
+  // Duplicate domains hata do (React key warning + double option se bachne ke liye)
+  const domainList = useMemo(
+    () => Array.from(new Set((domains || []).filter(Boolean))),
+    [domains]
+  );
 
   // Close popup with Esc key
   useEffect(() => {
@@ -54,23 +82,28 @@ export default function KpiTrendModal({ data = [], domains = [], onClose }) {
   // Month-Year wise QC % and OTP %
   const chartData = useMemo(() => {
     const bucket = {}; // key -> { year, monthIdx, qcSum, qcCount, otpMet, total }
+    const wanted = normalize(selectedDomain);
 
     (Array.isArray(data) ? data : []).forEach((item) => {
-      if (selectedDomain !== "ALL" && normalize(item.domain) !== selectedDomain) return;
+      if (!item) return;
+      // FIX: dono side normalize, taaki case/space mismatch na ho
+      if (selectedDomain !== "ALL" && normalize(item.domain) !== wanted) return;
 
-      const qcVal = parsePercent(item.amdocsQc || item.amdocs_qc);
+      // FIX: 0 value ko bhi valid maana jaye (|| se 0 gayab ho jata tha)
+      const qcVal = parsePercent(firstFilled(item.amdocsQc, item.amdocs_qc));
       const otpMet = isOtpMet(item.otp);
+
+      // FIX: ek row me same month duplicate ho to sirf ek baar count ho
+      const seen = new Set();
 
       (Array.isArray(item.months) ? item.months : []).forEach((m) => {
         if (!m) return;
-        const [monthRaw, yearRaw] = String(m).split(",");
-        const monthIdx = MONTHS.findIndex(
-          (x) => x.toLowerCase() === String(monthRaw || "").trim().slice(0, 3).toLowerCase()
-        );
-        if (monthIdx < 0) return;
-        const y = String(yearRaw || "").trim();
-        const year = y.length === 2 ? Number(`20${y}`) : Number(y || currentYear);
+        const parsed = parseMonthYear(m, currentYear);
+        if (!parsed) return;
+        const { monthIdx, year } = parsed;
         const key = `${year}-${String(monthIdx).padStart(2, "0")}`;
+        if (seen.has(key)) return;
+        seen.add(key);
 
         if (!bucket[key]) bucket[key] = { year, monthIdx, qcSum: 0, qcCount: 0, otpMet: 0, total: 0 };
         if (qcVal !== null) {
@@ -107,7 +140,7 @@ export default function KpiTrendModal({ data = [], domains = [], onClose }) {
     setShowExportMenu(false);
     if (!chartRef.current) return;
     try {
-      await new Promise((res) => setTimeout(res, 150));
+      await new Promise((res) => setTimeout(res, 150)); // menu band hone ka wait
       const canvas = await html2canvas(chartRef.current, {
         scale: 2,
         useCORS: true,
@@ -115,34 +148,30 @@ export default function KpiTrendModal({ data = [], domains = [], onClose }) {
         ignoreElements: (el) => el.hasAttribute && el.hasAttribute("data-export-ignore"),
       });
       const mime = type === "jpg" ? "image/jpeg" : "image/png";
+      // FIX: filename me / \ : * ? " < > | jaise invalid characters hatao
+      const safeTitle = domainTitle.replace(/[\\/:*?"<>|]/g, "-");
       const link = document.createElement("a");
       link.href = canvas.toDataURL(mime, 0.95);
-      link.download = `KPI Trend ${domainTitle} ${getFileNameDateTime()}.${type}`;
+      link.download = `KPI Trend ${safeTitle} ${getFileNameDateTime()}.${type}`;
+      document.body.appendChild(link); // kuch browsers me zaroori
       link.click();
+      document.body.removeChild(link);
     } catch (err) {
       console.error("Trend chart export failed:", err);
     }
   };
 
-  const TrendTooltip = ({ active, payload, label }) => {
-    if (!active || !payload || !payload.length) return null;
-    return (
-      <div className="ktmTooltip">
-        <div className="ktmTooltipTitle">{label}</div>
-        {payload.map((p) => (
-          <div key={p.dataKey} className="ktmTooltipRow">
-            <span className="ktmDot" style={{ background: p.color }}></span>
-            <span>{p.name}:</span>
-            <b>{p.value}%</b>
-          </div>
-        ))}
-      </div>
-    );
-  };
+  const xTilt = chartData.length > 6;
 
   return (
     <div className="ktmOverlay" onClick={onClose}>
-      <div className="ktmModal" onClick={(e) => { e.stopPropagation(); setShowExportMenu(false); }}>
+      <div
+        className="ktmModal"
+        role="dialog"
+        aria-modal="true"
+        aria-label="KPI Trend"
+        onClick={(e) => { e.stopPropagation(); setShowExportMenu(false); }}
+      >
         {/* ---------- Header ---------- */}
         <div className="ktmHeader">
           <div className="ktmHeaderLeft">
@@ -152,20 +181,21 @@ export default function KpiTrendModal({ data = [], domains = [], onClose }) {
               <div className="ktmHeaderMain">OTP / Amdocs QC - Month & Year Wise</div>
             </div>
           </div>
-          <button className="ktmCloseBtn" onClick={onClose} aria-label="Close">✖</button>
+          <button type="button" className="ktmCloseBtn" onClick={onClose} aria-label="Close">✖</button>
         </div>
 
         {/* ---------- Domain dropdown ---------- */}
         <div className="ktmToolbar">
           <div className="ktmField">
-            <label className="ktmLabel">Select Domain</label>
+            <label className="ktmLabel" htmlFor="ktmDomainSelect">Select Domain</label>
             <select
+              id="ktmDomainSelect"
               className="ktmSelect"
               value={selectedDomain}
               onChange={(e) => setSelectedDomain(e.target.value)}
             >
               <option value="ALL">All Domains</option>
-              {(domains || []).map((d) => (
+              {domainList.map((d) => (
                 <option key={d} value={d}>{d}</option>
               ))}
             </select>
@@ -211,11 +241,11 @@ export default function KpiTrendModal({ data = [], domains = [], onClose }) {
                 <XAxis
                   dataKey="label"
                   interval={0}
-                  angle={chartData.length > 6 ? -35 : 0}
-                  textAnchor={chartData.length > 6 ? "end" : "middle"}
-                  height={chartData.length > 6 ? 70 : 40}
+                  angle={xTilt ? -35 : 0}
+                  textAnchor={xTilt ? "end" : "middle"}
+                  height={xTilt ? 70 : 40}
                   tick={{ fontSize: 12, fill: "#334155" }}
-                  label={{ value: "Month - Year", position: "insideBottom", offset: chartData.length > 6 ? -2 : -6, fontSize: 12, fill: "#64748b" }}
+                  label={{ value: "Month - Year", position: "insideBottom", offset: xTilt ? -2 : -6, fontSize: 12, fill: "#64748b" }}
                 />
                 <YAxis
                   domain={[0, 100]}
