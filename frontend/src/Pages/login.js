@@ -83,7 +83,6 @@ const parseDate = (d) => {
   if (!d) return null;
   if (d instanceof Date) return isNaN(d.getTime()) ? null : d;
   let v = d;
-  // "2026-09-22 16:38:00" (space wala) ko ISO banao taaki har browser me parse ho
   if (typeof v === "string" && /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}/.test(v.trim())) {
     v = v.trim().replace(" ", "T");
   }
@@ -91,9 +90,6 @@ const parseDate = (d) => {
   return isNaN(parsed.getTime()) ? null : parsed;
 };
 
-// Report.js jaisa: har record ka updated_at (nahi to created_at) -> sabse latest, IST me
-// Format: "22 Sep 2026 at 04:38 PM Hrs"
-// Intl par depend nahi karte (kuch browsers me hour/dayPeriod nahi dete), IST (+5:30) khud nikalte hain
 const pad2 = (n) => String(n).padStart(2, "0");
 const formatLastUpdated = (d) => {
   if (!d) return "--";
@@ -353,7 +349,7 @@ const Login = () => {
         }}
       >
         <div className="auth-card">
-          <img className="auth-logo" src="/Image/img1.png" alt="EMC logo" />
+          <img className="auth-logo" src="/Image/img3.png" alt="EMC logo" />
           <h2>Login</h2>
           <p>Enter your email and password</p>
 
