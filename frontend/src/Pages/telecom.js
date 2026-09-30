@@ -144,12 +144,6 @@ const getFileNameDateTime = () => {
 };
 
 const monthsList = MONTH_NAMES;
-
-// Default month = abhi ka current month (mahina badalte hi apne aap badal jayega)
-const getDefaultMonth = () => {
-  const now = new Date();
-  return { month: MONTH_NAMES[now.getMonth()], year: now.getFullYear() };
-};
 const COLORS = ["#3b82f6", "#10b981", "#f59e0b", "#ef4444", "#8b5cf6", "#06b6d4"];
 const CROWDED_LABELS = ["Rhode Island", "Connecticut", "New Jersey", "Delaware", "Maryland", "District of Columbia", "Vermont", "New Hampshire", "Massachusetts"];
 const REGIONS = ["All Region", "Northeast", "Southeast", "Midwest", "Southwest", "West"];
@@ -248,7 +242,7 @@ export default function TelecomMap() {
 
   const currentYear = new Date().getFullYear();
 
-  const [selectedMonth, setSelectedMonth] = useState(getDefaultMonth);
+  const [selectedMonth, setSelectedMonth] = useState(null);
   const [fromDate, setFromDate] = useState("");
   const [toDate, setToDate] = useState("");
   const [activePage, setActivePage] = useState("dashboard");
@@ -515,7 +509,7 @@ export default function TelecomMap() {
   };
 
   const resetDateFilters = () => {
-    setSelectedMonth(getDefaultMonth());
+    setSelectedMonth(null);
     setFromDate("");
     setToDate("");
   };
@@ -804,15 +798,7 @@ export default function TelecomMap() {
 
   // ---- Map tooltip data ----
   const tooltipState = tooltip.data?.state;
-  // Month / date filter laga ho to tooltip bhi filtered data se (current month ka), warna backend ka data
-  const hasDateFilter = !!(selectedMonth || fromDate || toDate);
-  const tooltipStateData = !tooltipState
-    ? {}
-    : hasDateFilter
-      ? Object.fromEntries(
-          Object.entries(stateDomainStatsMap[lc(tooltipState)] || {}).map(([dom, s]) => [dom, s.jobs])
-        )
-      : mapReportByState[lc(tooltipState)] || {};
+  const tooltipStateData = tooltipState ? mapReportByState[lc(tooltipState)] || {} : {};
   const tooltipTotalJobs = Object.values(tooltipStateData).reduce((sum, val) => sum + (Number(val) || 0), 0);
   const tooltipRegion = tooltipState ? getRegionByState(tooltipState) : null;
 
@@ -893,7 +879,7 @@ export default function TelecomMap() {
             <div className="kpiContainer">
               <div className="kpiHeaderRow">
                 <h2 className="kpiTitle">📊 KPI - Job Delivery / Amdocs QC / OTP Summary</h2>
-                <button type="button" className="kpiTrendBtn" title="Open OTP / QC trend" onClick={() => setShowTrendModal(true)}><span aria-hidden="true">📈</span> OTP / QC Trend</button>
+                <button type="button" className="kpiTrendBtn" title="Open OTP / QC trend" onClick={() => setShowTrendModal(true)}> OTP / QC </button>
               </div>
               <div className="kpiGridModern">
                 {mergedDomains.map((domain) => {
@@ -915,6 +901,76 @@ export default function TelecomMap() {
                     </div>
                   );
                 })}
+              </div>
+            </div>
+
+            <div className="bottomChartsRow">
+              <div className="chartBox">
+                <h3 className="chartTitle" style={{ marginBottom: "6px" }}>📊 Month Wise Job Delivery, Amdocs QC & OTP</h3>
+                <ResponsiveContainer width="100%" height={350}>
+                  <BarChart data={monthlyJobsSorted} barGap={0} barCategoryGap={25}>
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis dataKey="name" interval={0} angle={-45} textAnchor="end" height={60} />
+                    <YAxis allowDecimals={false} />
+                    <Tooltip content={<BarChartTooltip />} />
+                    <Legend />
+                    {allYears.map((year, index) => (
+                      <Bar key={year} dataKey={year} stackId="a" fill={COLORS[index % COLORS.length]} name={year} barSize={viewportWidth < 768 ? 18 : 35} radius={[6, 6, 0, 0]} />
+                    ))}
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+              <div className="chartBox">
+                <h3 className="chartTitle" style={{ marginBottom: "6px" }}>🥧 Domain % Share (Job, Amdocs QC & OTP)</h3>
+                <ResponsiveContainer width="100%" height={360}>
+                  <PieChart>
+                    <Pie
+                      data={pieChartData}
+                      dataKey="value"
+                      nameKey="name"
+                      cx="50%"
+                      cy="50%"
+                      outerRadius={viewportWidth < 768 ? 80 : 120}
+                      innerRadius={0}
+                      paddingAngle={pieChartData.length > 1 ? 2 : 0}
+                      stroke="#fff"
+                      strokeWidth={2}
+                      startAngle={90}
+                      endAngle={-270}
+                      isAnimationActive={true}
+                      animationBegin={0}
+                      animationDuration={1000}
+                      animationEasing="ease-out"
+                      label={false}
+                      labelLine={false}
+                    >
+                      {pieChartData.map((entry) => (
+                        <Cell key={entry.name} fill={entry.color} />
+                      ))}
+                    </Pie>
+                    <Tooltip content={<PieChartTooltip />} />
+                    <Legend content={() => (
+                      <div style={{ display: "flex", justifyContent: "center", alignItems: "center", flexWrap: "wrap", gap: "14px", marginTop: "10px", fontSize: "13px", fontWeight: "600" }}>
+                        {pieAll.length === 0 && <div style={{ color: "#64748b" }}>No data available</div>}
+                        {pieAll.length > 0 && (
+                          <div onClick={() => setHiddenDomains([])} style={{ display: "flex", alignItems: "center", gap: "6px", cursor: "pointer" }}><span style={{ width: "16px", height: "10px", borderRadius: "2px", background: "#111827", display: "inline-block" }}></span>ALL</div>
+                        )}
+                        {pieAll.map((entry) => {
+                          const isHidden = hiddenDomains.includes(entry.name);
+                          return (
+                            <div
+                              key={entry.name}
+                              onClick={() => setHiddenDomains((prev) => (prev.includes(entry.name) ? prev.filter((x) => x !== entry.name) : [...prev, entry.name]))}
+                              style={{ display: "flex", alignItems: "center", gap: "6px", cursor: "pointer", opacity: isHidden ? 0.4 : 1, textDecoration: isHidden ? "line-through" : "none" }}
+                            >
+                              <span style={{ width: "16px", height: "10px", borderRadius: "2px", background: entry.color, display: "inline-block" }}></span>{entry.name}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )} />
+                  </PieChart>
+                </ResponsiveContainer>
               </div>
             </div>
 
@@ -1032,76 +1088,6 @@ export default function TelecomMap() {
                     ))}
                   </div>
                 </div>
-              </div>
-            </div>
-
-            <div className="bottomChartsRow">
-              <div className="chartBox">
-                <h3 className="chartTitle" style={{ marginBottom: "6px" }}>📊 Month Wise Job Delivery, Amdocs QC & OTP</h3>
-                <ResponsiveContainer width="100%" height={350}>
-                  <BarChart data={monthlyJobsSorted} barGap={0} barCategoryGap={25}>
-                    <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis dataKey="name" interval={0} angle={-45} textAnchor="end" height={60} />
-                    <YAxis allowDecimals={false} />
-                    <Tooltip content={<BarChartTooltip />} />
-                    <Legend />
-                    {allYears.map((year, index) => (
-                      <Bar key={year} dataKey={year} stackId="a" fill={COLORS[index % COLORS.length]} name={year} barSize={viewportWidth < 768 ? 18 : 35} radius={[6, 6, 0, 0]} />
-                    ))}
-                  </BarChart>
-                </ResponsiveContainer>
-              </div>
-              <div className="chartBox">
-                <h3 className="chartTitle" style={{ marginBottom: "6px" }}>🥧 Domain % Share (Job, Amdocs QC & OTP)</h3>
-                <ResponsiveContainer width="100%" height={360}>
-                  <PieChart>
-                    <Pie
-                      data={pieChartData}
-                      dataKey="value"
-                      nameKey="name"
-                      cx="50%"
-                      cy="50%"
-                      outerRadius={viewportWidth < 768 ? 80 : 120}
-                      innerRadius={0}
-                      paddingAngle={pieChartData.length > 1 ? 2 : 0}
-                      stroke="#fff"
-                      strokeWidth={2}
-                      startAngle={90}
-                      endAngle={-270}
-                      isAnimationActive={true}
-                      animationBegin={0}
-                      animationDuration={1000}
-                      animationEasing="ease-out"
-                      label={false}
-                      labelLine={false}
-                    >
-                      {pieChartData.map((entry) => (
-                        <Cell key={entry.name} fill={entry.color} />
-                      ))}
-                    </Pie>
-                    <Tooltip content={<PieChartTooltip />} />
-                    <Legend content={() => (
-                      <div style={{ display: "flex", justifyContent: "center", alignItems: "center", flexWrap: "wrap", gap: "14px", marginTop: "10px", fontSize: "13px", fontWeight: "600" }}>
-                        {pieAll.length === 0 && <div style={{ color: "#64748b" }}>No data available</div>}
-                        {pieAll.length > 0 && (
-                          <div onClick={() => setHiddenDomains([])} style={{ display: "flex", alignItems: "center", gap: "6px", cursor: "pointer" }}><span style={{ width: "16px", height: "10px", borderRadius: "2px", background: "#111827", display: "inline-block" }}></span>ALL</div>
-                        )}
-                        {pieAll.map((entry) => {
-                          const isHidden = hiddenDomains.includes(entry.name);
-                          return (
-                            <div
-                              key={entry.name}
-                              onClick={() => setHiddenDomains((prev) => (prev.includes(entry.name) ? prev.filter((x) => x !== entry.name) : [...prev, entry.name]))}
-                              style={{ display: "flex", alignItems: "center", gap: "6px", cursor: "pointer", opacity: isHidden ? 0.4 : 1, textDecoration: isHidden ? "line-through" : "none" }}
-                            >
-                              <span style={{ width: "16px", height: "10px", borderRadius: "2px", background: entry.color, display: "inline-block" }}></span>{entry.name}
-                            </div>
-                          );
-                        })}
-                      </div>
-                    )} />
-                  </PieChart>
-                </ResponsiveContainer>
               </div>
             </div>
           </>
