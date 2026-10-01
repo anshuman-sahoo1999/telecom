@@ -1,11 +1,5 @@
-// controllers/kpiInsightController.js
-// KPI Insight -> Quality Rating (%) : Month x Domain x Scope
 const db = require("../config/db");
-
-/* =========================
-   DB helpers (NeonDB PostgreSQL + MySQL dono par chalega)
-========================= */
-const isMySQL = !!db.config; // mysql2 connection ke paas .config hota hai, Postgres wrapper ke paas nahi
+const isMySQL = !!db.config; 
 
 const run = (sql, params = []) =>
   new Promise((resolve, reject) => {
@@ -35,57 +29,6 @@ const TABLE_SQL = isMySQL
       updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
       UNIQUE (kpi_year, kpi_month, domain, scope_name)
     )`;
-
-/* =========================
-   Excel (Ecometrix Mar26 to Aug26 -> KPIs sheet -> Quality Rating) ka data
-   [year, month, domain, scope, quality %]
-   Table pehli baar khali ho to ye rows apne aap ek baar daal di jati hain.
-========================= */
-const EXCEL_SEED = [
-  [2026, 3, "ASE", "", 83.86],
-  [2026, 3, "F2", "", 64.83],
-  [2026, 3, "JPA", "", 78.51],
-  [2026, 3, "LUMEN", "Permit", 68.0],
-  [2026, 3, "PERMIT", "IFP", 58.52],
-  [2026, 3, "PERMIT", "IFP F1", 45.14],
-  [2026, 3, "PLA", "IFP", 84.67],
-  [2026, 4, "ASE", "", 85.49],
-  [2026, 4, "F2", "", 83.0],
-  [2026, 4, "JPA", "", 83.11],
-  [2026, 4, "PERMIT", "IFP", 86.0],
-  [2026, 4, "PERMIT", "IFP F1", 81.0],
-  [2026, 4, "PLA", "IFP", 86.38],
-  [2026, 5, "ASE", "", 86.67],
-  [2026, 5, "F2", "", 76.16],
-  [2026, 5, "JPA", "", 86.5],
-  [2026, 5, "LUMEN", "Construction print", 39.0],
-  [2026, 5, "LUMEN", "Permit", 46.18],
-  [2026, 5, "PERMIT", "IFP", 90.0],
-  [2026, 5, "PLA", "IFP", 86.24],
-  [2026, 6, "ASE", "", 92.35],
-  [2026, 6, "F2", "", 82.61],
-  [2026, 6, "JPA", "", 85.79],
-  [2026, 6, "LUMEN", "Construction print", 38.5],
-  [2026, 6, "LUMEN", "Redline Drafting", 58.37],
-  [2026, 6, "PERMIT", "IFP", 84.56],
-  [2026, 6, "PLA", "IFP", 85.56],
-  [2026, 7, "ASE", "", 91.15],
-  [2026, 7, "F2", "", 81.74],
-  [2026, 7, "JPA", "", 84.22],
-  [2026, 7, "LUMEN", "Construction print", 47.0],
-  [2026, 7, "LUMEN", "Redline Drafting", 49.39],
-  [2026, 7, "PERMIT", "ASE", 26.5],
-  [2026, 7, "PLA", "IFP", 88.92],
-  [2026, 8, "ASE", "", 92.09],
-  [2026, 8, "F2", "", 82.34],
-  [2026, 8, "JPA", "", 84.24],
-  [2026, 8, "LUMEN", "Construction print", 80.0],
-  [2026, 8, "PERMIT", "ASE", 45.83],
-  [2026, 8, "PERMIT", "IFP F1", 65.18],
-  [2026, 8, "PLA", "IFP", 88.08]
-];
-
-/* Excel me jo domain / scope hain (master_data me na bhi ho to dropdown me aayenge) */
 const DEFAULT_SCOPES = {
   ASE: [],
   F2: [],
@@ -113,35 +56,16 @@ const parseList = (val) => {
   return [];
 };
 
-/* =========================
-   Table ready + one time seed
-========================= */
+const isDuplicateError = (err) =>
+  !!err && (err.code === "ER_DUP_ENTRY" || err.errno === 1062 || err.code === "23505");
+
+
 let readyPromise = null;
-
-const seedIfEmpty = async () => {
-  const countRows = await run("SELECT COUNT(*) AS total FROM kpi_quality");
-  const total = Number(countRows && countRows[0] ? countRows[0].total : 0);
-  if (total > 0) return;
-
-  for (const [year, month, domain, scope, pct] of EXCEL_SEED) {
-    try {
-      await run(
-        "INSERT INTO kpi_quality (kpi_year, kpi_month, domain, scope_name, quality_pct) VALUES (?, ?, ?, ?, ?)",
-        [year, month, domain, scope, pct]
-      );
-    } catch (e) {
-      // duplicate ho to ignore
-    }
-  }
-};
 
 const ensureReady = () => {
   if (!readyPromise) {
-    readyPromise = (async () => {
-      await run(TABLE_SQL);
-      await seedIfEmpty();
-    })().catch((err) => {
-      readyPromise = null; // agli request me dobara try karega
+    readyPromise = run(TABLE_SQL).catch((err) => {
+      readyPromise = null; 
       throw err;
     });
   }
@@ -158,8 +82,50 @@ const mapRow = (r) => ({
 });
 
 /* =========================
-   GET /api/kpi-insight  -> saari quality entries
+   Validation helpers
 ========================= */
+const parseId = (v) => {
+  const id = parseInt(v, 10);
+  return Number.isInteger(id) && id > 0 ? id : null;
+};
+
+// body se year / month / domain / scope / quality nikal kar validate karta hai.
+// defaults: update me jo field na aaye wo purani value se bhar jati hai.
+const parsePayload = (body = {}, defaults = {}) => {
+  const pick = (key) => (body[key] !== undefined ? body[key] : defaults[key]);
+
+  const year = parseInt(pick("year"), 10);
+  const month = parseInt(pick("month"), 10);
+  const domain = normalizeDomain(pick("domain"));
+  const scope = clean(pick("scope"));
+  const quality = parseFloat(clean(pick("quality")).replace("%", ""));
+
+  if (!Number.isInteger(year) || year < 2000 || year > 2100) return { error: "Valid year is required" };
+  if (!Number.isInteger(month) || month < 1 || month > 12) return { error: "Valid month is required" };
+  if (!domain) return { error: "Domain is required" };
+  if (domain.length > 100 || scope.length > 150) return { error: "Domain / scope is too long" };
+  if (!Number.isFinite(quality) || quality < 0 || quality > 100) {
+    return { error: "Quality % must be between 0 and 100" };
+  }
+
+  return { year, month, domain, scope, pct: Math.round(quality * 100) / 100 };
+};
+
+const resolveScopeSpelling = async (domain, scope) => {
+  if (!scope) return scope;
+  const spellings = await run("SELECT DISTINCT scope_name FROM kpi_quality WHERE domain = ?", [domain]);
+  const match = (spellings || []).find((r) => clean(r.scope_name).toLowerCase() === scope.toLowerCase());
+  return match ? clean(match.scope_name) : scope;
+};
+
+const findByKey = async (year, month, domain, scope) => {
+  const rows = await run(
+    "SELECT id FROM kpi_quality WHERE kpi_year = ? AND kpi_month = ? AND domain = ? AND scope_name = ?",
+    [year, month, domain, scope]
+  );
+  return rows && rows.length > 0 ? rows[0] : null;
+};
+
 const getAllQuality = async (req, res) => {
   try {
     await ensureReady();
@@ -172,15 +138,9 @@ const getAllQuality = async (req, res) => {
   }
 };
 
-/* =========================
-   GET /api/kpi-insight/options -> domain + uske scopes (dropdown ke liye)
-   Sources: (1) pehle se saved entries  (2) master_data (domain / sow)  (3) Excel wale default
-========================= */
 const getOptions = async (req, res) => {
   try {
     await ensureReady();
-
-    // domain -> Map(lowercase scope -> scope)
     const domainMap = new Map();
     const addDomain = (d) => {
       const key = normalizeDomain(d);
@@ -193,12 +153,8 @@ const getOptions = async (req, res) => {
       const name = clean(s);
       if (scopes && name && !scopes.has(name.toLowerCase())) scopes.set(name.toLowerCase(), name);
     };
-
-    // (1) pehle se saved entries (inki spelling sabse pehle, taaki table ke column na toote)
     const saved = await run("SELECT DISTINCT domain, scope_name FROM kpi_quality");
     (saved || []).forEach((r) => addScope(r.domain, r.scope_name));
-
-    // (2) master_data (Domain Creation me jo domain / sow bana hai)
     try {
       const master = await run("SELECT domain, sow FROM master_data ORDER BY domain");
       (master || []).forEach((r) => {
@@ -206,10 +162,8 @@ const getOptions = async (req, res) => {
         parseList(r.sow).forEach((s) => addScope(r.domain, s));
       });
     } catch (e) {
-      // master_data na mile to bhi chalega
     }
 
-    // (3) Excel wale default
     Object.entries(DEFAULT_SCOPES).forEach(([d, scopes]) => {
       addDomain(d);
       scopes.forEach((s) => addScope(d, s));
@@ -229,66 +183,129 @@ const getOptions = async (req, res) => {
 };
 
 /* =========================
-   POST /api/kpi-insight -> Create / Update (same month + domain + scope ho to update)
+   POST /api/kpi-insight -> Create (same month + domain + scope ho to update)
    body: { year, month, domain, scope, quality }
 ========================= */
 const saveQuality = async (req, res) => {
   try {
-    const body = req.body || {};
-    const year = parseInt(body.year, 10);
-    const month = parseInt(body.month, 10);
-    const domain = normalizeDomain(body.domain);
-    let scope = clean(body.scope);
-    const quality = parseFloat(clean(body.quality).replace("%", ""));
+    const parsed = parsePayload(req.body);
+    if (parsed.error) return res.status(400).json({ message: parsed.error });
 
-    if (!Number.isInteger(year) || year < 2000 || year > 2100) {
-      return res.status(400).json({ message: "Valid year is required" });
+    const { year, month, domain, pct } = parsed;
+
+    await ensureReady();
+    const scope = await resolveScopeSpelling(domain, parsed.scope);
+
+    const existing = await findByKey(year, month, domain, scope);
+    if (existing) {
+      await run("UPDATE kpi_quality SET quality_pct = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?", [
+        pct,
+        existing.id,
+      ]);
+      return res.json({ message: "Quality % updated successfully", action: "updated", id: existing.id });
     }
-    if (!Number.isInteger(month) || month < 1 || month > 12) {
-      return res.status(400).json({ message: "Valid month is required" });
+
+    try {
+      await run(
+        "INSERT INTO kpi_quality (kpi_year, kpi_month, domain, scope_name, quality_pct) VALUES (?, ?, ?, ?, ?)",
+        [year, month, domain, scope, pct]
+      );
+    } catch (err) {
+      // do request ek saath aayein to unique key fail hogi -> update kar do
+      if (!isDuplicateError(err)) throw err;
+      const again = await findByKey(year, month, domain, scope);
+      if (!again) throw err;
+      await run("UPDATE kpi_quality SET quality_pct = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?", [
+        pct,
+        again.id,
+      ]);
+      return res.json({ message: "Quality % updated successfully", action: "updated", id: again.id });
     }
-    if (!domain) {
-      return res.status(400).json({ message: "Domain is required" });
-    }
-    if (scope.length > 150 || domain.length > 100) {
-      return res.status(400).json({ message: "Domain / scope is too long" });
-    }
-    if (!Number.isFinite(quality) || quality < 0 || quality > 100) {
-      return res.status(400).json({ message: "Quality % must be between 0 and 100" });
-    }
-    const pct = Math.round(quality * 100) / 100;
+
+    // id wapas select se (MySQL insertId / Postgres RETURNING dono ki zarurat nahi)
+    const created = await findByKey(year, month, domain, scope);
+    res.status(201).json({ message: "Quality % created successfully", action: "created", id: created ? created.id : null });
+  } catch (err) {
+    res.status(500).json({ message: "Failed to save quality %", error: err.message });
+  }
+};
+
+/* =========================
+   PUT /api/kpi-insight/:id -> Edit / Update
+   body: { year?, month?, domain?, scope?, quality? }  (jo na aaye wo purani value rahegi)
+========================= */
+const updateQuality = async (req, res) => {
+  try {
+    const id = parseId(req.params.id);
+    if (!id) return res.status(400).json({ message: "Valid id is required" });
 
     await ensureReady();
 
-    // Same domain me scope pehle kisi aur spelling/case me saved ho to wahi spelling use ho
-    if (scope) {
-      const spellings = await run("SELECT DISTINCT scope_name FROM kpi_quality WHERE domain = ?", [domain]);
-      const match = (spellings || []).find(
-        (r) => clean(r.scope_name).toLowerCase() === scope.toLowerCase()
-      );
-      if (match) scope = clean(match.scope_name);
+    const rows = await run(
+      "SELECT id, kpi_year, kpi_month, domain, scope_name, quality_pct FROM kpi_quality WHERE id = ?",
+      [id]
+    );
+    if (!rows || rows.length === 0) return res.status(404).json({ message: "Quality entry not found" });
+    const current = mapRow(rows[0]);
+
+    const parsed = parsePayload(req.body, {
+      year: current.year,
+      month: current.month,
+      domain: current.domain,
+      scope: current.scope,
+      quality: current.quality,
+    });
+    if (parsed.error) return res.status(400).json({ message: parsed.error });
+
+    const { year, month, domain, pct } = parsed;
+    const scope = await resolveScopeSpelling(domain, parsed.scope);
+
+    // Month / domain / scope badalne par kisi aur entry se takraye to mana karo
+    const clash = await findByKey(year, month, domain, scope);
+    if (clash && Number(clash.id) !== id) {
+      return res.status(409).json({ message: "An entry already exists for this month, domain and scope" });
     }
 
-    const existing = await run(
-      "SELECT id FROM kpi_quality WHERE kpi_year = ? AND kpi_month = ? AND domain = ? AND scope_name = ?",
-      [year, month, domain, scope]
-    );
-
-    if (existing && existing.length > 0) {
+    try {
       await run(
-        "UPDATE kpi_quality SET quality_pct = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
-        [pct, existing[0].id]
+        "UPDATE kpi_quality SET kpi_year = ?, kpi_month = ?, domain = ?, scope_name = ?, quality_pct = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+        [year, month, domain, scope, pct, id]
       );
-      return res.json({ message: "Quality % updated successfully", action: "updated", id: existing[0].id });
+    } catch (err) {
+      if (isDuplicateError(err)) {
+        return res.status(409).json({ message: "An entry already exists for this month, domain and scope" });
+      }
+      throw err;
     }
 
-    const result = await run(
-      "INSERT INTO kpi_quality (kpi_year, kpi_month, domain, scope_name, quality_pct) VALUES (?, ?, ?, ?, ?)",
-      [year, month, domain, scope, pct]
-    );
-    res.json({ message: "Quality % created successfully", action: "created", id: result ? result.insertId : null });
+    res.json({
+      message: "Quality % updated successfully",
+      action: "updated",
+      id,
+      entry: { id, year, month, domain, scope, quality: pct },
+    });
   } catch (err) {
-    res.status(500).json({ message: "Failed to save quality %", error: err.message });
+    res.status(500).json({ message: "Failed to update quality %", error: err.message });
+  }
+};
+
+/* =========================
+   DELETE /api/kpi-insight/:id -> ek entry delete
+========================= */
+const deleteQuality = async (req, res) => {
+  try {
+    const id = parseId(req.params.id);
+    if (!id) return res.status(400).json({ message: "Valid id is required" });
+
+    await ensureReady();
+
+    const rows = await run("SELECT id FROM kpi_quality WHERE id = ?", [id]);
+    if (!rows || rows.length === 0) return res.status(404).json({ message: "Quality entry not found" });
+
+    await run("DELETE FROM kpi_quality WHERE id = ?", [id]);
+    res.json({ message: "Quality % deleted successfully", action: "deleted", id });
+  } catch (err) {
+    res.status(500).json({ message: "Failed to delete quality %", error: err.message });
   }
 };
 
@@ -296,4 +313,6 @@ module.exports = {
   getAllQuality,
   getOptions,
   saveQuality,
+  updateQuality,
+  deleteQuality,
 };
