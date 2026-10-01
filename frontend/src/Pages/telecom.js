@@ -9,6 +9,8 @@ import {
 } from "recharts";
 import { FaTachometerAlt, FaChartBar, FaUsers, FaSitemap, FaPlusCircle, FaClock, FaHistory, FaLayerGroup, FaFolderOpen, FaPaperPlane, FaChartLine, FaTimes, FaLightbulb } from "react-icons/fa";
 import jsPDF from "jspdf";
+// FIX: html2canvas import missing tha -> Export (PNG/JPG/PDF) "html2canvas is not defined" error deta tha
+// Install: npm i html2canvas
 import html2canvas from "html2canvas";
 import geoData from "../us-states.json";
 import "../style/telecom.css";
@@ -264,6 +266,7 @@ export default function TelecomMap() {
   const [selectedKpiDomain, setSelectedKpiDomain] = useState(null);
   const [showKpiModal, setShowKpiModal] = useState(false);
   const [expandedJobMenu, setExpandedJobMenu] = useState(false);
+  const [expandedDashMenu, setExpandedDashMenu] = useState(true);
   const [showTrendModal, setShowTrendModal] = useState(false);
 
   const currentYear = new Date().getFullYear();
@@ -862,8 +865,25 @@ export default function TelecomMap() {
   return (
     <div className="page">
       <div className={`topMenu ${menuOpen ? "expanded" : "collapsed"}`}>
-        <button className={`menuBtn ${activePage === "dashboard" ? "active" : ""}`} onClick={() => goTo("dashboard")}><FaTachometerAlt className="menuIcon" />{menuOpen && "Dashboard"}</button>
-        <button className={`menuBtn ${activePage === "kpiinsight" ? "active" : ""}`} onClick={() => goTo("kpiinsight")}><FaLightbulb className="menuIcon" />{menuOpen && "KPI Insight"}</button>
+        {/* Dashboard group: Dashboard page default rahega, uske neeche KPI Insight click karne par khulega */}
+        <div className="menuGroupContainer">
+          <button
+            className={`menuBtn ${(activePage === "dashboard" || activePage === "kpiinsight") ? "active" : ""}`}
+            onClick={() => {
+              setExpandedDashMenu((prev) => !prev);
+              if (activePage !== "dashboard" && activePage !== "kpiinsight") setActivePage("dashboard");
+            }}
+          >
+            <FaTachometerAlt className="menuIcon" />
+            {menuOpen && <span style={{ display: "flex", justifyContent: "space-between", width: "100%", alignItems: "center" }}>Dashboard <span style={{ fontSize: "11px" }}>{expandedDashMenu ? "▲" : "▼"}</span></span>}
+          </button>
+          {((menuOpen && expandedDashMenu) || !menuOpen) && (
+            <div className="subMenuContainer" style={menuOpen ? { paddingLeft: "20px", display: "flex", flexDirection: "column", gap: "4px", marginTop: "4px" } : {}}>
+              <button className={`menuBtn subMenuBtn ${activePage === "dashboard" ? "active" : ""}`} onClick={() => goTo("dashboard")}><FaChartBar className="menuIcon" style={{ fontSize: "16px" }} />{menuOpen && "Overview"}</button>
+              <button className={`menuBtn subMenuBtn ${activePage === "kpiinsight" ? "active" : ""}`} onClick={() => goTo("kpiinsight")}><FaLightbulb className="menuIcon" style={{ fontSize: "16px" }} />{menuOpen && "KPI Insight"}</button>
+            </div>
+          )}
+        </div>
         {/* Data Upload button hidden. Dubara dikhana ho to yaha button add karo aur FaUpload ko react-icons/fa import me wapas jodo. */}
         <button className={`menuBtn ${activePage === "report" ? "active" : ""}`} onClick={() => goTo("report")}><FaChartBar className="menuIcon" />{menuOpen && "Report"}</button>
         {role === "Admin" && <button className={`menuBtn ${activePage === "user-management" ? "active" : ""}`} onClick={() => goTo("user-management")}><FaUsers className="menuIcon" />{menuOpen && "User Management"}</button>}
