@@ -50,7 +50,7 @@ const sanitizeQuality = (value) => {
 
 // "." -> "", "85." -> "85" (used on blur)
 const normalizeQuality = (raw) => {
-  if (raw === "." ) return "";
+  if (raw === ".") return "";
   if (raw.endsWith(".")) return raw.slice(0, -1);
   return raw;
 };
@@ -200,8 +200,8 @@ function MonthPicker({ years, selected, onChange, disabled }) {
    CREATE POPUP
 ====================================== */
 function CreateModal({ years, defaultYear, defaultMonth, domainList, rows, onClose, onSaved }) {
-  const [year, setYear] = useState(defaultYear);
-  const [month, setMonth] = useState(defaultMonth);
+  // Single "Choose Month, Year" value, e.g. "2026-3". Default = current month + current year.
+  const [ym, setYm] = useState(mk(defaultYear, defaultMonth));
   const [domain, setDomain] = useState("");
   const [scope, setScope] = useState("");
   const [qRaw, setQRaw] = useState("");
@@ -212,6 +212,10 @@ function CreateModal({ years, defaultYear, defaultMonth, domainList, rows, onClo
   const qRef = useRef(null);
   const caretRef = useRef(null);
   const infoRef = useRef(null);
+
+  const [year, month] = useMemo(() => ym.split("-").map(Number), [ym]);
+
+  const yearsAsc = useMemo(() => [...years].sort((a, b) => a - b), [years]);
 
   const scopesForDomain = useMemo(() => {
     const d = domainList.find((x) => x.domain === domain);
@@ -331,23 +335,21 @@ function CreateModal({ years, defaultYear, defaultMonth, domainList, rows, onClo
         </div>
 
         <div className="kpiq-modal-body">
-          <div className="kpiq-row2">
-            <div className="kpiq-field">
-              <label className="kpiq-label">Choose Month</label>
-              <select className="kpiq-select" value={month} onChange={(e) => { setMonth(Number(e.target.value)); setError(""); }}>
-                {MONTH_NAMES.map((m, i) => (
-                  <option key={m} value={i + 1}>{m}</option>
-                ))}
-              </select>
-            </div>
-            <div className="kpiq-field">
-              <label className="kpiq-label">Choose Year</label>
-              <select className="kpiq-select" value={year} onChange={(e) => { setYear(Number(e.target.value)); setError(""); }}>
-                {years.map((y) => (
-                  <option key={y} value={y}>{y}</option>
-                ))}
-              </select>
-            </div>
+          <div className="kpiq-field">
+            <label className="kpiq-label">Choose Month, Year</label>
+            <select
+              className="kpiq-select"
+              value={ym}
+              onChange={(e) => { setYm(e.target.value); setError(""); }}
+            >
+              {yearsAsc.map((y) => (
+                <optgroup key={y} label={String(y)}>
+                  {MONTH_NAMES.map((m, i) => (
+                    <option key={mk(y, i + 1)} value={mk(y, i + 1)}>{m} {y}</option>
+                  ))}
+                </optgroup>
+              ))}
+            </select>
           </div>
 
           <div className="kpiq-field">
@@ -490,6 +492,7 @@ function ConfirmDelete({ period, count, busy, onCancel, onConfirm }) {
    MAIN PAGE
 ====================================== */
 export default function KPIInsight({ domains = [] }) {
+  // Always taken from the system date, so it rolls over to 2027 automatically.
   const currentYear = new Date().getFullYear();
   const currentMonth = new Date().getMonth() + 1;
 
@@ -639,7 +642,6 @@ export default function KPIInsight({ domains = [] }) {
     if (!editing || editing.saving) return;
     const { period, drafts } = editing;
     const jobs = [];
-    let invalid = false;
     view.cols.forEach((c) => {
       const old = view.cell[`${period.k}|${c.key}`];
       const raw = normalizeQuality(drafts[c.key] ?? "");
@@ -660,7 +662,6 @@ export default function KPIInsight({ domains = [] }) {
         );
       }
     });
-    if (invalid) return setEditing((e) => (e ? { ...e, error: "Enter a valid Quality %" } : e));
     if (jobs.length === 0) return setEditing(null);
 
     setEditing((e) => (e ? { ...e, saving: true, error: "" } : e));
@@ -714,22 +715,26 @@ export default function KPIInsight({ domains = [] }) {
       }
 
       const wb = new ExcelJS.Workbook();
-      const ws = wb.addWorksheet("Quality Rating");
+      const ws = wb.addWorksheet("KPIs");
 
       const argb = (hex) => `FF${hex.replace("#", "").toUpperCase()}`;
       const side = (hex) => ({ style: "thin", color: { argb: argb(hex) } });
       const box = (hex) => ({ top: side(hex), left: side(hex), bottom: side(hex), right: side(hex) });
       const center = { horizontal: "center", vertical: "middle", wrapText: true };
       const lastCol = view.cols.length + 1;
+      const HEAD_ROWS = 2; // row 1: Quality Rating | Domain, row 2: JOB Completed Month | domain names
 
-      ws.getCell(1, 1).value = "JOB Completed Month";
-      ws.mergeCells(1, 1, 2, 1);
+      // ---- Header (2 rows) ----
+      ws.getCell(1, 1).value = "Quality Rating";
       ws.getCell(1, 2).value = "Domain";
       if (lastCol > 2) ws.mergeCells(1, 2, 1, lastCol);
+
+      ws.getCell(2, 1).value = "JOB Completed Month";
       view.cols.forEach((c, i) => {
         ws.getCell(2, i + 2).value = c.scope ? `${c.domain}\n${c.scope}` : c.domain;
       });
-      for (let r = 1; r <= 2; r++) {
+
+      for (let r = 1; r <= HEAD_ROWS; r++) {
         for (let c = 1; c <= lastCol; c++) {
           const cell = ws.getCell(r, c);
           cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF0F4A63" } };
@@ -738,14 +743,16 @@ export default function KPIInsight({ domains = [] }) {
           cell.border = box("#CBD5E1");
         }
       }
+      ws.getRow(1).height = 24;
       ws.getRow(2).height = 34;
 
+      // ---- Data rows ----
       view.periods.forEach((p, ri) => {
-        const rowNo = ri + 3;
+        const rowNo = ri + HEAD_ROWS + 1;
         const label = ws.getCell(rowNo, 1);
         label.value = `${MONTH_NAMES[p.month - 1]} ${p.year}`;
         label.font = { bold: true };
-        label.alignment = { horizontal: "left", vertical: "middle" };
+        label.alignment = { horizontal: "center", vertical: "middle" };
         label.border = box("#CBD5E1");
 
         view.cols.forEach((c, ci) => {
@@ -769,7 +776,7 @@ export default function KPIInsight({ domains = [] }) {
 
       ws.getColumn(1).width = 22;
       for (let c = 2; c <= lastCol; c++) ws.getColumn(c).width = 18;
-      ws.views = [{ state: "frozen", xSplit: 1, ySplit: 2 }];
+      ws.views = [{ state: "frozen", xSplit: 1, ySplit: HEAD_ROWS }];
 
       const first = view.periods[0];
       const last = view.periods[view.periods.length - 1];
@@ -863,11 +870,12 @@ export default function KPIInsight({ domains = [] }) {
             <table className="kpiq-table">
               <thead>
                 <tr className="first">
-                  <th className="stickyCol" rowSpan={2}>JOB Completed Month</th>
+                  <th className="stickyCol">Quality Rating</th>
                   <th colSpan={view.cols.length}>Domain</th>
                   <th className="stickyRight" rowSpan={2}>Action</th>
                 </tr>
                 <tr className="second">
+                  <th className="stickyCol">JOB Completed Month</th>
                   {view.cols.map((c) => (
                     <th key={c.key}>
                       {c.domain}
