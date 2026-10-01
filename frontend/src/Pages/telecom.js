@@ -7,8 +7,7 @@ import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer,
   PieChart, Pie, Cell, Legend, CartesianGrid
 } from "recharts";
-import { FaTachometerAlt, FaChartBar, FaUsers, FaSitemap, FaPlusCircle, FaClock, FaHistory, FaLayerGroup, FaFolderOpen, FaPaperPlane, FaChartLine, FaTimes } from "react-icons/fa";
-import html2canvas from "html2canvas";
+import { FaTachometerAlt, FaChartBar, FaUsers, FaSitemap, FaPlusCircle, FaClock, FaHistory, FaLayerGroup, FaFolderOpen, FaPaperPlane, FaChartLine, FaTimes, FaLightbulb } from "react-icons/fa";
 import jsPDF from "jspdf";
 import geoData from "../us-states.json";
 import "../style/telecom.css";
@@ -23,6 +22,7 @@ import TimesheetManagement from "../Pages/TimesheetManagement";
 import MasterDomainCreation from "../Pages/MasterDomainCreation";
 import CapacityForecast from "../Pages/CapacityForecast";
 import JobHistory from "../Pages/JobHistory";
+import KPIInsight from "./KPIInsight"; 
 import KpiTrendModal from "../components/Kpitrendmodal.jsx";
 import axios from "axios";
 
@@ -850,6 +850,7 @@ export default function TelecomMap() {
     <div className="page">
       <div className={`topMenu ${menuOpen ? "expanded" : "collapsed"}`}>
         <button className={`menuBtn ${activePage === "dashboard" ? "active" : ""}`} onClick={() => goTo("dashboard")}><FaTachometerAlt className="menuIcon" />{menuOpen && "Dashboard"}</button>
+        <button className={`menuBtn ${activePage === "kpiinsight" ? "active" : ""}`} onClick={() => goTo("kpiinsight")}><FaLightbulb className="menuIcon" />{menuOpen && "KPI Insight"}</button>
         {/* Data Upload button hidden. Dubara dikhana ho to yaha button add karo aur FaUpload ko react-icons/fa import me wapas jodo. */}
         <button className={`menuBtn ${activePage === "report" ? "active" : ""}`} onClick={() => goTo("report")}><FaChartBar className="menuIcon" />{menuOpen && "Report"}</button>
         {role === "Admin" && <button className={`menuBtn ${activePage === "user-management" ? "active" : ""}`} onClick={() => goTo("user-management")}><FaUsers className="menuIcon" />{menuOpen && "User Management"}</button>}
@@ -916,7 +917,7 @@ export default function TelecomMap() {
 
             <div className="kpiContainer">
               <div className="kpiHeaderRow">
-                <h2 className="kpiTitle">📊 KPI - Job Delivery / Amdocs QC / OTP Summary</h2>
+                <h2 className="kpiTitle">📊 Job Delivery / Amdocs QC / OTP Summary</h2>
                 <button type="button" className="kpiTrendBtn" title="Open OTP / QC trend" onClick={() => setShowTrendModal(true)}> OTP / QC </button>
               </div>
               <div className="kpiGridModern">
@@ -1144,6 +1145,7 @@ export default function TelecomMap() {
         )}
 
         {activePage === "workupdate" && (<div className="belowSection"><WorkUpdate refreshDashboard={fetchAllData} /></div>)}
+        {activePage === "kpiinsight" && <div className="belowSection"><KPIInsight data={allWorkData} domains={mergedDomains} /></div>}
         {activePage === "report" && <div className="belowSection"><Report /></div>}
         {activePage === "user-management" && <div className="belowSection"><UserManagement /></div>}
         {activePage === "organogram" && <div className="belowSection"><Organogram /></div>}
