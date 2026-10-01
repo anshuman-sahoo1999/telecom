@@ -30,6 +30,7 @@ const countyRoutes = require("./routes/countyRoutes");
 const jobCreationRoutes = require("./routes/jobCreationRoutes");
 const timesheetRoutes = require("./routes/timesheetRoutes");
 const capacityRoutes = require("./routes/capacityRoutes");
+const kpiInsightRoutes = require("./routes/kpiInsightRoutes");
 
 // Mount routes with and without /api prefix for Vercel routing compatibility
 app.use("/api/auth", authRoutes); 
@@ -49,6 +50,9 @@ app.use("/timesheet", timesheetRoutes);
 
 app.use("/api/capacity-forecast", capacityRoutes);
 app.use("/capacity-forecast", capacityRoutes);
+
+app.use("/api/kpi-insight", kpiInsightRoutes);
+app.use("/kpi-insight", kpiInsightRoutes);
 
 app.use("/api", countyRoutes);
 app.use("/", countyRoutes);
