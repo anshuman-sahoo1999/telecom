@@ -6,7 +6,6 @@
   min-height: 100vh;
   font-family: Arial, sans-serif;
   box-sizing: border-box;
-  padding: 16px;
 }
 
 .img-main-title {
@@ -203,6 +202,7 @@
   gap: 15px;
   align-items: flex-end;
   margin-bottom: 20px;
+  margin-top: -10px;
   flex-wrap: wrap;
 }
 
