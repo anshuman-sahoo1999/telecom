@@ -27,6 +27,9 @@ const COLS = 4;
 const REFRESH_MS = 60000;
 const REQUEST_TIMEOUT_MS = 15000;
 
+// OTP / QC ka data na ho to ye dikhega ("--" ya bilkul blank chahiye to "" kar do)
+const BLANK_PCT = "--";
+
 const parseMonthEntry = (m, fallbackYear) => {
   if (!m) return null;
   const match = String(m).trim().match(/^([A-Za-z]{3,})\W*(\d{2,4})?$/);
@@ -41,6 +44,8 @@ const parseMonthEntry = (m, fallbackYear) => {
 
 const getJobs = (item) => Number(firstFilled(item?.jobsDelivered, item?.jobs_delivered)) || 0;
 
+// "95%", "95", 0.95, 1 => 0-100 number.
+// "%" likha ho to jaisa hai waisa (1% = 1%). Bina "%" ke 0-1 ke beech = fraction (1 = 100%)
 const parsePercent = (val) => {
   if (val === null || val === undefined || val === "") return null;
   const str = val.toString().trim();
@@ -51,15 +56,29 @@ const parsePercent = (val) => {
   return Math.min(100, Math.max(0, Math.round(pct)));
 };
 
+// Amdocs QC: blank / invalid => null (calculation me count nahi hoga)
 const getQc = (item) => parsePercent(firstFilled(item?.amdocsQc, item?.amdocs_qc));
 
-const isOtpMet = (val) => {
-  if (val === null || val === undefined || val === "") return false;
-  const str = val.toString().trim().toLowerCase();
-  if (["yes", "y", "met", "true", "ok", "pass", "passed"].includes(str)) return true;
-  if (["no", "n", "not met", "false", "fail", "failed", "0"].includes(str)) return false;
-  const num = parseFloat(str.replace("%", ""));
-  return !isNaN(num) && num > 0;
+// OTP blank hai? (blank, "-", "NA", "N/A", 0, 0%) => blank maana jayega, calculation me count nahi hoga
+const isOtpBlank = (val) => {
+  if (val === null || val === undefined || val === false) return true;
+  const s = val.toString().trim().toLowerCase();
+  if (s === "" || s === "-" || s === "na" || s === "n/a") return true;
+  const n = Number(s.replace(/%$/, "").trim());
+  if (!isNaN(n) && n === 0) return true;
+  return false;
+};
+
+// OTP ki value (0-100) — QC ki tarah percentage:
+//   1 / "100%" => 100,  0.95 / "95%" => 95,  Yes/Met => 100,  No/Fail => 0,  blank => null
+const OTP_YES = ["yes", "y", "met", "true", "ok", "pass", "passed"];
+const OTP_NO = ["no", "n", "not met", "false", "fail", "failed"];
+const getOtpValue = (val) => {
+  if (isOtpBlank(val)) return null;
+  const s = val.toString().trim().toLowerCase();
+  if (OTP_YES.includes(s)) return 100;
+  if (OTP_NO.includes(s)) return 0;
+  return parsePercent(s);
 };
 
 const getPerfColor = (val) => {
@@ -69,7 +88,8 @@ const getPerfColor = (val) => {
   return "#f87171";
 };
 
-const formatPercent = (val) => (val !== null && val !== undefined ? `${val}%` : "--");
+const formatPercent = (val) =>
+  val !== null && val !== undefined && !Number.isNaN(val) ? `${val}%` : BLANK_PCT;
 
 // Previous 2 months + current month (oldest -> current)
 // Sep => Jul, Aug, Sep | Oct => Aug, Sep, Oct | Nov => Sep, Oct, Nov
@@ -201,15 +221,22 @@ const Login = () => {
       });
       if (!inMonth) return;
 
-      const s = map[domain] || (map[domain] = { jobs: 0, qcSum: 0, qcCount: 0, otpMet: 0, total: 0 });
+      const s = map[domain] || (map[domain] = { jobs: 0, qcSum: 0, qcCount: 0, otpSum: 0, otpCount: 0 });
       s.jobs += getJobs(item);
+
+      // Amdocs QC: sirf wahi rows jinme value bhari hai
       const qcVal = getQc(item);
       if (qcVal !== null) {
         s.qcSum += qcVal;
         s.qcCount += 1;
       }
-      s.total += 1;
-      if (isOtpMet(item.otp)) s.otpMet += 1;
+
+      // OTP percentage value (1 = 100%); blank ho to calculation me shamil nahi
+      const otpVal = getOtpValue(item?.otp);
+      if (otpVal !== null) {
+        s.otpSum += otpVal;
+        s.otpCount += 1;
+      }
     });
 
     const names = [
@@ -223,7 +250,7 @@ const Login = () => {
         color: DOMAIN_COLORS[name] || DEFAULT_DOMAIN_COLOR,
         jobs: s ? s.jobs : 0,
         qc: s && s.qcCount > 0 ? Math.round(s.qcSum / s.qcCount) : null,
-        otp: s && s.total > 0 ? Math.round((s.otpMet / s.total) * 100) : null,
+        otp: s && s.otpCount > 0 ? Math.round(s.otpSum / s.otpCount) : null,
       };
     });
   }, [workData, masterDomains, activeTab.idx, activeTab.year]);
