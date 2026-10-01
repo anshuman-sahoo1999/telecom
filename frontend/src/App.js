@@ -1,5 +1,5 @@
 import React from "react";
-import { BrowserRouter as Router, Routes, Route } from "react-router-dom";
+import { BrowserRouter as Router, Routes, Route, Navigate } from "react-router-dom";
 import Login from "./Pages/login";
 import Telecom from "./Pages/telecom";
 import WorkUpdate from "./Pages/WorkUpdate";
@@ -44,6 +44,7 @@ function App() {
           <Route path="/admin-dashboard/user-management" element={<UserManagement />} />
           <Route path="/admin-dashboard/organogram" element={<Organogram />} />
           <Route path="/admin-dashboard/workstatus" element={<TimesheetManagement />} />
+          <Route path="/admin-dashboard/timesheet" element={<TimesheetManagement />} />
           <Route path="/admin-dashboard/kpiinsight" element={<KPIInsight />} />
         </Route>
 
@@ -81,6 +82,7 @@ function App() {
           <Route path="/teamlead-dashboard/report" element={<Report />} />
           <Route path="/teamlead-dashboard/organogram" element={<Organogram />} />
           <Route path="/teamlead-dashboard/timesheet" element={<TimesheetManagement />} />
+          <Route path="/teamlead-dashboard/workstatus" element={<TimesheetManagement />} />
           <Route path="/teamlead-dashboard/kpiinsight" element={<KPIInsight />} />
         </Route>
 
@@ -106,6 +108,8 @@ function App() {
           <Route path="/master-dashboard" element={<MasterDashboard />} />
           <Route path="/timesheet" element={<TimesheetPage />} />
         </Route>
+
+        <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </Router>
   );
