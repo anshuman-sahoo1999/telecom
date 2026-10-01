@@ -118,7 +118,7 @@ const LiveClock = () => {
     return () => clearInterval(timer);
   }, []);
 
-  return <div className="live-last-updated">As On-{formatNow(now)}</div>;
+  return <div className="live-last-updated">As On- {formatNow(now)}</div>;
 };
 
 const extractDomainNames = (data) => {
