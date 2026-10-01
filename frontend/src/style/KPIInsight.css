@@ -1,7 +1,7 @@
 /* ======================================
    KPI INSIGHT PAGE
 ====================================== */
-.kpiq-page { padding: 16px; width: 100%; box-sizing: border-box; }
+.kpiq-page { width: 100%; box-sizing: border-box; }
 .kpiq-top { display: flex; justify-content: space-between; align-items: flex-end; flex-wrap: wrap; gap: 12px; margin-bottom: 14px; }
 .kpiq-actions { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 .kpiq-title {   font-size: 32px;
@@ -49,7 +49,7 @@
 
 /* Card + Table */
 .kpiq-card { background: #fff; border: 1px solid #e2e8f0; border-radius: 10px; box-shadow: 0 2px 8px rgba(0,0,0,0.06); overflow: hidden; }
-.kpiq-card-head { padding: 12px 16px; background: #f1f5f9; border-bottom: 1px solid #e2e8f0; font-size: 15px; font-weight: 800; color: #0f4a63; text-align: left; }
+.kpiq-card-head { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 12px 16px; background: #f1f5f9; border-bottom: 1px solid #e2e8f0; font-size: 15px; font-weight: 800; color: #0f4a63; text-align: left; }
 .kpiq-scroll { overflow: auto; max-height: 68vh; }
 .kpiq-table { width: 100%; border-collapse: separate; border-spacing: 0; min-width: 640px; }
 .kpiq-table th, .kpiq-table td { padding: 10px 12px; font-size: 13px; text-align: center; vertical-align: middle; border-bottom: 1px solid #e2e8f0; border-right: 1px solid #eef2f7; white-space: nowrap; }
@@ -83,29 +83,12 @@
 .kpiq-overlay.confirm { z-index: 9999; }
 .kpiq-modal { background: #fff; border-radius: 12px; width: 100%; max-width: 440px; box-shadow: 0 20px 50px rgba(0,0,0,0.3); max-height: 94vh; overflow: auto; }
 .kpiq-modal.small { max-width: 380px; }
-.kpiq-modal.wide { max-width: 520px; }
 .kpiq-modal-head { display: flex; justify-content: space-between; align-items: center; padding: 14px 18px; background: #0f4a63; color: #fff; border-radius: 12px 12px 0 0; }
 .kpiq-modal-head.danger { background: #dc2626; }
 .kpiq-modal-head h3 { margin: 0; font-size: 16px; }
 .kpiq-x { background: transparent; border: none; color: #fff; font-size: 16px; cursor: pointer; display: flex; padding: 4px; }
 .kpiq-modal-body { padding: 18px; display: flex; flex-direction: column; gap: 14px; }
 .kpiq-modal-foot { display: flex; justify-content: flex-end; gap: 10px; padding: 0 18px 18px; }
-
-/* Edit popup list */
-.kpiq-edit-list { display: flex; flex-direction: column; gap: 8px; max-height: 52vh; overflow: auto; padding-right: 2px; }
-.kpiq-edit-row { display: grid; grid-template-columns: 1fr 120px 32px; align-items: center; gap: 10px; padding: 8px 10px; border: 1px solid #e2e8f0; border-radius: 8px; background: #fff; }
-.kpiq-edit-row.removed { background: #fef2f2; border-color: #fecaca; }
-.kpiq-edit-row.removed .kpiq-edit-name { text-decoration: line-through; opacity: 0.6; }
-.kpiq-edit-name { display: flex; flex-direction: column; font-size: 13.5px; color: #0f172a; min-width: 0; }
-.kpiq-edit-name span { font-size: 11.5px; color: #64748b; font-weight: 600; }
-.kpiq-edit-input { position: relative; }
-.kpiq-edit-input .kpiq-input { padding-right: 26px; text-align: right; }
-.kpiq-suffix { position: absolute; right: 10px; top: 50%; transform: translateY(-50%); font-size: 13px; font-weight: 700; color: #475569; pointer-events: none; }
-.kpiq-icon { display: inline-flex; align-items: center; justify-content: center; width: 30px; height: 30px; padding: 0; border: none; border-radius: 6px; background: transparent; font-size: 13px; cursor: pointer; }
-.kpiq-icon.del { color: #dc2626; }
-.kpiq-icon.del:hover:not(:disabled) { background: #fee2e2; }
-.kpiq-icon.undo { color: #0f4a63; }
-.kpiq-icon.undo:hover:not(:disabled) { background: #e0f2fe; }
 
 /* Info popup */
 .kpiq-info-wrap { position: relative; display: inline-flex; align-items: center; }
@@ -120,14 +103,95 @@
 .kpiq-toast { position: fixed; top: 20px; right: 20px; z-index: 99999; min-width: 240px; max-width: 420px; padding: 12px 16px; border-radius: 8px; color: #fff; font-size: 14px; font-weight: 600; box-shadow: 0 6px 18px rgba(0,0,0,0.25); display: flex; justify-content: space-between; align-items: center; gap: 12px; }
 .kpiq-empty { padding: 40px 16px; text-align: center; color: #64748b; font-size: 14px; }
 
-/* Mobile */
-@media (max-width: 600px) {
-  .kpiq-page { padding: 10px; }
+/* Inline row edit */
+.kpiq-table thead .stickyCol { min-width: 150px; }
+.kpiq-table thead .stickyRight { min-width: 150px; }
+.kpiq-table th:not(.stickyCol):not(.stickyRight) { min-width: 96px; }
+.kpiq-table tbody tr.editing td { background: #f0f9ff; }
+.kpiq-table tbody tr.editing td.stickyCol,
+.kpiq-table tbody tr.editing td.stickyRight { background: #e0f2fe; }
+.kpiq-cell-edit { position: relative; display: inline-block; }
+.kpiq-cell-input { width: 84px; box-sizing: border-box; padding: 6px 22px 6px 6px; text-align: center; font-size: 13px; font-weight: 700; border-radius: 6px; border: 1px solid #cbd5e1; background: #fff; color: #0f172a; outline: none; }
+.kpiq-cell-input:focus { border-color: #0f4a63; box-shadow: 0 0 0 3px rgba(15,74,99,0.15); }
+.kpiq-cell-input:disabled { opacity: 0.7; }
+.kpiq-cell-pct { position: absolute; right: 7px; top: 50%; transform: translateY(-50%); font-size: 12px; font-weight: 700; color: #475569; pointer-events: none; }
+.kpiq-edit-note { display: flex; flex-wrap: wrap; gap: 6px 14px; align-items: center; padding: 8px 16px; background: #e0f2fe; border-bottom: 1px solid #bae6fd; color: #0f4a63; font-size: 12.5px; font-weight: 600; }
+.kpiq-act.save { background: #16a34a; color: #fff; border-color: #16a34a; }
+.kpiq-act.save:hover:not(:disabled) { background: #15803d; }
+.kpiq-act.cancel { background: #e2e8f0; color: #0f172a; border-color: #cbd5e1; }
+.kpiq-act.cancel:hover:not(:disabled) { background: #cbd5e1; }
+.kpiq-act:disabled { opacity: 0.5; cursor: not-allowed; }
+.kpiq-card-head::after { content: "Swipe left / right"; display: none; font-size: 11px; font-weight: 600; color: #64748b; }
+
+/* ======================================
+   TABLET (up to 992px)
+====================================== */
+@media (max-width: 992px) {
+  .kpiq-page { padding: 12px; }
+  .kpiq-scroll { max-height: 72vh; }
+  .kpiq-table th, .kpiq-table td { padding: 8px 9px; font-size: 12.5px; }
+  .kpiq-table thead .stickyCol { min-width: 120px; }
+  .kpiq-table thead .stickyRight { min-width: 130px; }
+  .kpiq-table th:not(.stickyCol):not(.stickyRight) { min-width: 88px; }
+  .kpiq-act { padding: 5px 8px; font-size: 11.5px; }
+  .kpiq-card-head::after { display: inline; }
+}
+
+/* ======================================
+   MOBILE (up to 768px)
+====================================== */
+@media (max-width: 768px) {
+  .kpiq-title { font-size: 18px; }
+  .kpiq-top { align-items: stretch; }
   .kpiq-top .kpiq-field { flex: 1 1 100%; }
   .kpiq-picker { min-width: 0; width: 100%; }
-  .kpiq-picker-pop { width: 100%; }
+  .kpiq-picker-pop { width: 100%; max-width: 100%; }
   .kpiq-actions { width: 100%; }
   .kpiq-actions .kpiq-btn { flex: 1; justify-content: center; }
   .kpiq-row2 { grid-template-columns: 1fr; }
-  .kpiq-edit-row { grid-template-columns: 1fr 100px 30px; gap: 6px; }
+
+  .kpiq-table { min-width: 0; }
+  .kpiq-table th, .kpiq-table td { padding: 7px 7px; font-size: 12px; }
+  .kpiq-table thead .stickyCol { min-width: 84px; }
+  .kpiq-table .stickyCol { max-width: 92px; white-space: normal; line-height: 1.25; }
+  .kpiq-table thead .stickyRight { min-width: 74px; }
+  .kpiq-table th:not(.stickyCol):not(.stickyRight) { min-width: 80px; }
+  .kpiq-colScope { font-size: 10px; }
+  .kpiq-pill { min-width: 50px; padding: 3px 6px; font-size: 12px; }
+
+  /* Action buttons: sirf icon */
+  .kpiq-act-wrap { gap: 4px; }
+  .kpiq-act { width: 32px; height: 32px; padding: 0; justify-content: center; }
+  .kpiq-act-txt { display: none; }
+
+  .kpiq-cell-input { width: 78px; }
+  .kpiq-edit-note { padding: 8px 12px; font-size: 12px; }
+
+  .kpiq-toast { left: 10px; right: 10px; top: 10px; min-width: 0; max-width: none; }
+  .kpiq-legend { gap: 8px 14px; }
+  .kpiq-modal-foot { flex-wrap: wrap; }
+  .kpiq-modal-foot .kpiq-btn { flex: 1; justify-content: center; }
+}
+
+/* ======================================
+   SMALL PHONES (up to 480px)
+====================================== */
+@media (max-width: 480px) {
+  .kpiq-page { padding: 8px; }
+  .kpiq-btn { padding: 10px 12px; font-size: 13.5px; }
+  .kpiq-card-head { padding: 10px 12px; font-size: 14px; }
+  .kpiq-card-head::after { display: none; }
+  .kpiq-overlay { padding: 0; align-items: flex-end; }
+  .kpiq-modal, .kpiq-modal.small { max-width: none; border-radius: 14px 14px 0 0; max-height: 92vh; }
+  .kpiq-overlay.confirm { align-items: center; padding: 16px; }
+  .kpiq-overlay.confirm .kpiq-modal.small { border-radius: 12px; }
+  .kpiq-modal-head { border-radius: 14px 14px 0 0; }
+  .kpiq-modal-head.danger { border-radius: 12px 12px 0 0; }
+}
+
+/* Touch devices: iPhone input zoom na ho */
+@media (pointer: coarse) {
+  .kpiq-select, .kpiq-input, .kpiq-cell-input { font-size: 16px; }
+  .kpiq-cell-input { width: 92px; }
+  .kpiq-picker-pop .kpiq-check { padding: 8px 4px; }
 }
