@@ -88,7 +88,6 @@
 .img-toolbar {
   display: flex;
   justify-content: flex-end;
-  margin-bottom: 16px;
 }
 
 .img-create-btn {
@@ -201,7 +200,6 @@
   display: flex;
   gap: 15px;
   align-items: flex-end;
-  margin-bottom: 20px;
   flex-wrap: wrap;
   position: relative;
   top: -10px;
