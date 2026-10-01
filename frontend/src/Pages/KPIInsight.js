@@ -198,10 +198,12 @@ function MonthPicker({ years, selected, onChange, disabled }) {
 
 /* ======================================
    CREATE POPUP
+   CHANGE: "Choose Month, Year" me ab sirf CURRENT YEAR ke 12 months aate hain.
+   Default = current month + current year.
 ====================================== */
-function CreateModal({ years, defaultYear, defaultMonth, domainList, rows, onClose, onSaved }) {
+function CreateModal({ currentYear, defaultMonth, domainList, rows, onClose, onSaved }) {
   // Single "Choose Month, Year" value, e.g. "2026-3". Default = current month + current year.
-  const [ym, setYm] = useState(mk(defaultYear, defaultMonth));
+  const [ym, setYm] = useState(mk(currentYear, defaultMonth));
   const [domain, setDomain] = useState("");
   const [scope, setScope] = useState("");
   const [qRaw, setQRaw] = useState("");
@@ -214,8 +216,6 @@ function CreateModal({ years, defaultYear, defaultMonth, domainList, rows, onClo
   const infoRef = useRef(null);
 
   const [year, month] = useMemo(() => ym.split("-").map(Number), [ym]);
-
-  const yearsAsc = useMemo(() => [...years].sort((a, b) => a - b), [years]);
 
   const scopesForDomain = useMemo(() => {
     const d = domainList.find((x) => x.domain === domain);
@@ -337,17 +337,16 @@ function CreateModal({ years, defaultYear, defaultMonth, domainList, rows, onClo
         <div className="kpiq-modal-body">
           <div className="kpiq-field">
             <label className="kpiq-label">Choose Month, Year</label>
+            {/* Sirf current year ke months (Jan - Dec). Default = current month */}
             <select
               className="kpiq-select"
               value={ym}
               onChange={(e) => { setYm(e.target.value); setError(""); }}
             >
-              {yearsAsc.map((y) => (
-                <optgroup key={y} label={String(y)}>
-                  {MONTH_NAMES.map((m, i) => (
-                    <option key={mk(y, i + 1)} value={mk(y, i + 1)}>{m} {y}</option>
-                  ))}
-                </optgroup>
+              {MONTH_NAMES.map((m, i) => (
+                <option key={mk(currentYear, i + 1)} value={mk(currentYear, i + 1)}>
+                  {m} {currentYear}
+                </option>
               ))}
             </select>
           </div>
@@ -559,14 +558,9 @@ export default function KPIInsight({ domains = [] }) {
     return [...map.values()].sort((a, b) => a.domain.localeCompare(b.domain));
   }, [options, domains]);
 
+  // Top filter (MonthPicker) me purane saalon ka data dekhne ke liye saare available years rahenge
   const yearList = useMemo(() => {
     const set = new Set([currentYear]);
-    rows.forEach((r) => set.add(r.year));
-    return [...set].sort((a, b) => b - a);
-  }, [rows, currentYear]);
-
-  const modalYears = useMemo(() => {
-    const set = new Set([currentYear - 1, currentYear, currentYear + 1]);
     rows.forEach((r) => set.add(r.year));
     return [...set].sort((a, b) => b - a);
   }, [rows, currentYear]);
@@ -962,8 +956,7 @@ export default function KPIInsight({ domains = [] }) {
 
       {modal?.type === "create" && (
         <CreateModal
-          years={modalYears}
-          defaultYear={currentYear}
+          currentYear={currentYear}
           defaultMonth={currentMonth}
           domainList={domainList}
           rows={rows}
