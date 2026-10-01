@@ -26,15 +26,15 @@ const getBand = (val) => {
 
 // 83.86 -> "83.86%", 70 -> "70%"
 const fmtPct = (v) =>
-  v === null || v === undefined || Number.isNaN(Number(v)) ? "" : `${Number(Number(v).toFixed(2))}%`;
+  v === null || v === undefined || v === "" || Number.isNaN(Number(v)) ? "" : `${Number(Number(v).toFixed(2))}%`;
 
 const sameScope = (a, b) => String(a || "").trim().toLowerCase() === String(b || "").trim().toLowerCase();
 const mk = (y, m) => `${y}-${m}`; // month key e.g. "2026-3"
-const colKeyOf = (r) => `${r.domain}||${String(r.scope || "").trim().toLowerCase()}`;
-const escHtml = (s) => String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-const byDomainScope = (a, b) => a.domain.localeCompare(b.domain) || String(a.scope || "").localeCompare(String(b.scope || ""));
+const colKeyOf = (r) => `${String(r.domain || "").trim().toUpperCase()}||${String(r.scope || "").trim().toLowerCase()}`;
+const byDomainScope = (a, b) =>
+  String(a.domain || "").localeCompare(String(b.domain || "")) || String(a.scope || "").localeCompare(String(b.scope || ""));
 
-// Quality input ko clean karta hai. Invalid ho to null (change ignore).
+// Cleans quality input. Returns null if invalid (change is ignored).
 const sanitizeQuality = (value) => {
   let raw = String(value).replace(/%/g, "").replace(/[^0-9.]/g, "");
   const firstDot = raw.indexOf(".");
@@ -48,10 +48,39 @@ const sanitizeQuality = (value) => {
   return raw;
 };
 
+// "." -> "", "85." -> "85" (used on blur)
+const normalizeQuality = (raw) => {
+  if (raw === "." ) return "";
+  if (raw.endsWith(".")) return raw.slice(0, -1);
+  return raw;
+};
+
+/* ======================================
+   OVERLAY (closes only if mousedown AND click both happen on the backdrop,
+   so selecting text inside an input and releasing outside doesn't close it)
+====================================== */
+function Overlay({ className = "kpiq-overlay", disabled, onClose, children }) {
+  const downOnBackdrop = useRef(false);
+  return (
+    <div
+      className={className}
+      onMouseDown={(e) => {
+        downOnBackdrop.current = e.target === e.currentTarget;
+      }}
+      onClick={(e) => {
+        if (downOnBackdrop.current && e.target === e.currentTarget && !disabled) onClose();
+        downOnBackdrop.current = false;
+      }}
+    >
+      {children}
+    </div>
+  );
+}
+
 /* ======================================
    MONTH / YEAR MULTI SELECT DROPDOWN
 ====================================== */
-function MonthPicker({ years, selected, onChange }) {
+function MonthPicker({ years, selected, onChange, disabled }) {
   const [open, setOpen] = useState(false);
   const ref = useRef(null);
 
@@ -60,9 +89,20 @@ function MonthPicker({ years, selected, onChange }) {
     const onDown = (e) => {
       if (ref.current && !ref.current.contains(e.target)) setOpen(false);
     };
+    const onKey = (e) => {
+      if (e.key === "Escape") setOpen(false);
+    };
     document.addEventListener("pointerdown", onDown);
-    return () => document.removeEventListener("pointerdown", onDown);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("pointerdown", onDown);
+      document.removeEventListener("keydown", onKey);
+    };
   }, [open]);
+
+  useEffect(() => {
+    if (disabled) setOpen(false);
+  }, [disabled]);
 
   const toggleMonth = (y, m) => {
     const next = new Set(selected);
@@ -101,7 +141,13 @@ function MonthPicker({ years, selected, onChange }) {
 
   return (
     <div className="kpiq-picker" ref={ref}>
-      <button type="button" className="kpiq-select kpiq-picker-btn" onClick={() => setOpen((v) => !v)}>
+      <button
+        type="button"
+        className="kpiq-select kpiq-picker-btn"
+        onClick={() => setOpen((v) => !v)}
+        disabled={disabled}
+        title={disabled ? "Finish editing first" : undefined}
+      >
         <span>{summary}</span>
         <FaChevronDown className={`kpiq-chev ${open ? "open" : ""}`} />
       </button>
@@ -179,7 +225,11 @@ function CreateModal({ years, defaultYear, defaultMonth, domainList, rows, onClo
     if (!domain) return null;
     return (
       rows.find(
-        (r) => r.year === Number(year) && r.month === Number(month) && r.domain === domain && sameScope(r.scope, scope)
+        (r) =>
+          r.year === Number(year) &&
+          r.month === Number(month) &&
+          String(r.domain || "").trim().toUpperCase() === String(domain).trim().toUpperCase() &&
+          sameScope(r.scope, scope)
       ) || null
     );
   }, [rows, year, month, domain, scope]);
@@ -215,10 +265,25 @@ function CreateModal({ years, defaultYear, defaultMonth, domainList, rows, onClo
   };
 
   const handleQualityChange = (e) => {
-    const raw = sanitizeQuality(e.target.value);
-    if (raw === null) return;
-    caretRef.current = Math.min(e.target.selectionStart ?? raw.length, raw.length);
-    setQRaw(raw);
+    const input = e.target.value;
+    let next;
+
+    // User pressed Backspace while caret was after the "%": delete the last digit instead
+    const deletedPercent =
+      qRaw !== "" &&
+      e.nativeEvent?.inputType === "deleteContentBackward" &&
+      !input.includes("%") &&
+      input.length === qRaw.length;
+
+    if (deletedPercent) {
+      next = qRaw.slice(0, -1);
+      caretRef.current = next.length;
+    } else {
+      next = sanitizeQuality(input);
+      if (next === null) return;
+      caretRef.current = Math.min(e.target.selectionStart ?? next.length, next.length);
+    }
+    setQRaw(next);
     setError("");
   };
 
@@ -256,7 +321,7 @@ function CreateModal({ years, defaultYear, defaultMonth, domainList, rows, onClo
   };
 
   return (
-    <div className="kpiq-overlay" onClick={() => { if (!saving) onClose(); }}>
+    <Overlay disabled={saving} onClose={onClose}>
       <div className="kpiq-modal" onClick={(e) => e.stopPropagation()}>
         <div className="kpiq-modal-head">
           <h3>Create Quality Rating</h3>
@@ -347,6 +412,7 @@ function CreateModal({ years, defaultYear, defaultMonth, domainList, rows, onClo
                 placeholder="e.g. 85%"
                 value={qRaw === "" ? "" : `${qRaw}%`}
                 onChange={handleQualityChange}
+                onBlur={() => setQRaw((v) => normalizeQuality(v))}
                 onClick={clampCaret}
                 onKeyUp={clampCaret}
                 onKeyDown={(e) => { if (e.key === "Enter") handleSubmit(); }}
@@ -378,16 +444,24 @@ function CreateModal({ years, defaultYear, defaultMonth, domainList, rows, onClo
           </button>
         </div>
       </div>
-    </div>
+    </Overlay>
   );
 }
 
 /* ======================================
-   DELETE CONFIRM POPUP (poori month row)
+   DELETE CONFIRM POPUP (whole month row)
 ====================================== */
 function ConfirmDelete({ period, count, busy, onCancel, onConfirm }) {
+  useEffect(() => {
+    const onKey = (e) => {
+      if (e.key === "Escape" && !busy) onCancel();
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [busy, onCancel]);
+
   return (
-    <div className="kpiq-overlay confirm" onClick={() => { if (!busy) onCancel(); }}>
+    <Overlay className="kpiq-overlay confirm" disabled={busy} onClose={onCancel}>
       <div className="kpiq-modal small" onClick={(e) => e.stopPropagation()}>
         <div className="kpiq-modal-head danger">
           <h3>Delete Month Data</h3>
@@ -397,7 +471,7 @@ function ConfirmDelete({ period, count, busy, onCancel, onConfirm }) {
         </div>
         <div className="kpiq-modal-body">
           <div style={{ fontSize: 14, color: "#0f172a", lineHeight: 1.5 }}>
-            Are you sure you want to delete all <b>{count}</b> entr{count > 1 ? "ies" : "y"} of{" "}
+            Are you sure you want to delete all <b>{count}</b> {count === 1 ? "entry" : "entries"} of{" "}
             <b>{MONTH_NAMES[period.month - 1]} {period.year}</b>? This cannot be undone.
           </div>
         </div>
@@ -408,7 +482,7 @@ function ConfirmDelete({ period, count, busy, onCancel, onConfirm }) {
           </button>
         </div>
       </div>
-    </div>
+    </Overlay>
   );
 }
 
@@ -433,19 +507,32 @@ export default function KPIInsight({ domains = [] }) {
   const [deleting, setDeleting] = useState(false);
   const [toast, setToast] = useState(null);
 
+  const mountedRef = useRef(true);
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
+
+  // Only the latest request is allowed to update state (avoids out-of-order responses)
+  const loadSeq = useRef(0);
   const loadAll = useCallback(async () => {
+    const seq = ++loadSeq.current;
     try {
-      setLoadError("");
       const [rowsRes, optRes] = await Promise.all([
         axios.get(`${API_BASE_URL}/api/kpi-insight`),
         axios.get(`${API_BASE_URL}/api/kpi-insight/options`),
       ]);
+      if (!mountedRef.current || seq !== loadSeq.current) return;
+      setLoadError("");
       setRows(Array.isArray(rowsRes.data) ? rowsRes.data : []);
       setOptions(Array.isArray(optRes.data?.domains) ? optRes.data.domains : []);
     } catch (err) {
+      if (!mountedRef.current || seq !== loadSeq.current) return;
       setLoadError(err?.response?.data?.message || err.message || "Failed to load data");
     } finally {
-      setLoading(false);
+      if (mountedRef.current && seq === loadSeq.current) setLoading(false);
     }
   }, []);
 
@@ -512,6 +599,11 @@ export default function KPIInsight({ domains = [] }) {
     [rows]
   );
 
+  // If the row being edited disappears (e.g. data reloaded), leave edit mode
+  useEffect(() => {
+    if (editing && !editing.saving && !view.periods.some((p) => p.k === editing.k)) setEditing(null);
+  }, [view.periods, editing]);
+
   const handleCreated = (data, y, m) => {
     setModal(null);
     setToast({ type: "success", text: data.message || "Saved successfully" });
@@ -537,6 +629,12 @@ export default function KPIInsight({ domains = [] }) {
     setEditing((e) => (e ? { ...e, drafts: { ...e.drafts, [colKey]: raw }, error: "" } : e));
   };
 
+  const blurDraft = (colKey) => {
+    setEditing((e) =>
+      e ? { ...e, drafts: { ...e.drafts, [colKey]: normalizeQuality(e.drafts[colKey] ?? "") } } : e
+    );
+  };
+
   const saveEdit = async () => {
     if (!editing || editing.saving) return;
     const { period, drafts } = editing;
@@ -544,11 +642,7 @@ export default function KPIInsight({ domains = [] }) {
     let invalid = false;
     view.cols.forEach((c) => {
       const old = view.cell[`${period.k}|${c.key}`];
-      const raw = drafts[c.key] ?? "";
-      if (raw === ".") {
-        invalid = true;
-        return;
-      }
+      const raw = normalizeQuality(drafts[c.key] ?? "");
       if (old) {
         if (raw === "") jobs.push(axios.delete(`${API_BASE_URL}/api/kpi-insight/${old.id}`));
         else if (Number(raw) !== Number(old.quality)) {
@@ -573,6 +667,7 @@ export default function KPIInsight({ domains = [] }) {
     const results = await Promise.allSettled(jobs);
     const failed = results.find((r) => r.status === "rejected");
     await loadAll();
+    if (!mountedRef.current) return;
     if (failed) {
       const msg = failed.reason?.response?.data?.message || failed.reason?.message || "Some changes could not be saved";
       setEditing((e) => (e ? { ...e, saving: false, error: msg } : e));
@@ -593,23 +688,31 @@ export default function KPIInsight({ domains = [] }) {
       const failed = results.filter((r) => r.status === "rejected").length;
       setToast(
         failed
-          ? { type: "error", text: `${failed} entr${failed > 1 ? "ies" : "y"} could not be deleted` }
+          ? { type: "error", text: `${failed} ${failed === 1 ? "entry" : "entries"} could not be deleted` }
           : { type: "success", text: "Deleted successfully" }
       );
       setDeleteTarget(null);
       await loadAll();
     } finally {
-      setDeleting(false);
+      if (mountedRef.current) setDeleting(false);
     }
   };
 
-  /* ---------- Generate Excel (.xlsx, table jaisa, % wise colours, Action column nahi) ---------- */
+  /* ---------- Generate Excel (.xlsx, same as table, colour by %, no Action column) ---------- */
   const generateExcel = async () => {
     if (!view.cols.length || !view.periods.length || exporting) return;
+    let ExcelJS;
     try {
       setExporting(true);
-      const mod = await import("exceljs/dist/exceljs.min.js");
-      const ExcelJS = mod.default || mod;
+      try {
+        const mod = await import("exceljs/dist/exceljs.min.js");
+        ExcelJS = mod.default || mod;
+      } catch (importErr) {
+        console.error(importErr);
+        setToast({ type: "error", text: "Excel library missing. Run: npm install exceljs" });
+        return;
+      }
+
       const wb = new ExcelJS.Workbook();
       const ws = wb.addWorksheet("Quality Rating");
 
@@ -672,7 +775,9 @@ export default function KPIInsight({ domains = [] }) {
       const last = view.periods[view.periods.length - 1];
       const tag = (p) => `${MONTH_NAMES[p.month - 1]}${p.year}`;
       const fileName =
-        first.k === last.k ? `KPI_Quality_Rating_${tag(first)}.xlsx` : `KPI_Quality_Rating_${tag(first)}_to_${tag(last)}.xlsx`;
+        first.k === last.k
+          ? `KPI_Quality_Rating_${tag(first)}.xlsx`
+          : `KPI_Quality_Rating_${tag(first)}_to_${tag(last)}.xlsx`;
 
       const buffer = await wb.xlsx.writeBuffer();
       const blob = new Blob([buffer], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
@@ -687,9 +792,9 @@ export default function KPIInsight({ domains = [] }) {
       setToast({ type: "success", text: "Excel generated" });
     } catch (err) {
       console.error(err);
-      setToast({ type: "error", text: "Could not generate Excel. Run: npm install exceljs" });
+      setToast({ type: "error", text: "Could not generate Excel" });
     } finally {
-      setExporting(false);
+      if (mountedRef.current) setExporting(false);
     }
   };
 
@@ -709,7 +814,7 @@ export default function KPIInsight({ domains = [] }) {
       <div className="kpiq-top">
         <div className="kpiq-field">
           <label className="kpiq-label">Choose Month, Year</label>
-          <MonthPicker years={yearList} selected={selected} onChange={setSelected} />
+          <MonthPicker years={yearList} selected={selected} onChange={setSelected} disabled={!!editing} />
         </div>
 
         <div className="kpiq-actions">
@@ -722,7 +827,7 @@ export default function KPIInsight({ domains = [] }) {
           >
             <FaFileExcel /> {exporting ? "Generating..." : "Generate"}
           </button>
-          <button type="button" className="kpiq-btn" onClick={() => setModal({ type: "create" })}>
+          <button type="button" className="kpiq-btn" onClick={() => setModal({ type: "create" })} disabled={!!editing}>
             <FaPlus /> Create
           </button>
         </div>
@@ -742,7 +847,7 @@ export default function KPIInsight({ domains = [] }) {
 
         {loading ? (
           <div className="kpiq-empty">Loading...</div>
-        ) : loadError ? (
+        ) : loadError && rows.length === 0 ? (
           <div className="kpiq-empty">
             <div style={{ color: "#dc2626", fontWeight: 700, marginBottom: 10 }}>{loadError}</div>
             <button type="button" className="kpiq-btn" onClick={() => { setLoading(true); loadAll(); }}>Retry</button>
@@ -790,10 +895,11 @@ export default function KPIInsight({ domains = [] }) {
                                   inputMode="decimal"
                                   autoComplete="off"
                                   placeholder="-"
-                                  aria-label={`${c.domain} ${c.scope}`}
+                                  aria-label={`${c.domain} ${c.scope}`.trim()}
                                   value={raw}
                                   disabled={editing.saving}
                                   onChange={(e) => changeDraft(c.key, e.target.value)}
+                                  onBlur={() => blurDraft(c.key)}
                                   onKeyDown={(e) => {
                                     if (e.key === "Enter") saveEdit();
                                     if (e.key === "Escape") cancelEdit();
@@ -821,11 +927,11 @@ export default function KPIInsight({ domains = [] }) {
                             </>
                           ) : (
                             <>
-                              <button type="button" className="kpiq-act edit" onClick={() => startEdit(p)} disabled={!!editing} title="Edit">
-                                <FaEdit /> 
+                              <button type="button" className="kpiq-act edit" onClick={() => startEdit(p)} disabled={!!editing} title="Edit" aria-label="Edit row">
+                                <FaEdit />
                               </button>
-                              <button type="button" className="kpiq-act del" onClick={() => setDeleteTarget(p)} disabled={!!editing} title="Delete">
-                                <FaTrashAlt /> 
+                              <button type="button" className="kpiq-act del" onClick={() => setDeleteTarget(p)} disabled={!!editing} title="Delete" aria-label="Delete row">
+                                <FaTrashAlt />
                               </button>
                             </>
                           )}
