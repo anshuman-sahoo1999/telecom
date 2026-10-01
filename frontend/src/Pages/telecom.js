@@ -7,11 +7,8 @@ import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer,
   PieChart, Pie, Cell, Legend, CartesianGrid
 } from "recharts";
-// CHANGE: FaLightbulb hata ke KPI Insight ke liye naya icon FaBrain use kiya (FaChartBar ab sirf Report ke liye)
 import { FaTachometerAlt, FaChartBar, FaUsers, FaSitemap, FaPlusCircle, FaClock, FaHistory, FaLayerGroup, FaFolderOpen, FaPaperPlane, FaChartLine, FaTimes, FaBrain } from "react-icons/fa";
 import jsPDF from "jspdf";
-// FIX: html2canvas import missing tha -> Export (PNG/JPG/PDF) "html2canvas is not defined" error deta tha
-// Install: npm i html2canvas
 import html2canvas from "html2canvas";
 import geoData from "../us-states.json";
 import "../style/telecom.css";
@@ -267,8 +264,8 @@ export default function TelecomMap() {
   const [selectedKpiDomain, setSelectedKpiDomain] = useState(null);
   const [showKpiModal, setShowKpiModal] = useState(false);
   const [expandedJobMenu, setExpandedJobMenu] = useState(false);
-  // Dashboard dropdown default open: isme sirf "KPI Insight" tab dikhega
-  const [expandedDashMenu, setExpandedDashMenu] = useState(true);
+  // Dashboard dropdown default BAND rahega. Dashboard click karne par hi khulega (isme sirf "KPI Insight" tab hai)
+  const [expandedDashMenu, setExpandedDashMenu] = useState(false);
   const [showTrendModal, setShowTrendModal] = useState(false);
 
   const currentYear = new Date().getFullYear();
@@ -889,7 +886,7 @@ export default function TelecomMap() {
             <FaTachometerAlt className="menuIcon" />
             {menuOpen && <span style={{ display: "flex", justifyContent: "space-between", width: "100%", alignItems: "center" }}>Dashboard <span style={{ fontSize: "11px" }}>{expandedDashMenu ? "▲" : "▼"}</span></span>}
           </button>
-          {((menuOpen && expandedDashMenu) || !menuOpen) && (
+          {expandedDashMenu && (
             <div className="subMenuContainer" style={menuOpen ? { paddingLeft: "20px", display: "flex", flexDirection: "column", gap: "4px", marginTop: "4px" } : {}}>
               <button className={`menuBtn subMenuBtn ${activePage === "kpiinsight" ? "active" : ""}`} onClick={() => goTo("kpiinsight")}><FaBrain className="menuIcon" style={{ fontSize: "16px" }} />{menuOpen && "KPI Insight"}</button>
             </div>
