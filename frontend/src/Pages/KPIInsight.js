@@ -2,7 +2,7 @@ import { API_BASE_URL } from "../config";
 import React, { useState, useEffect, useMemo, useCallback, useRef, useLayoutEffect } from "react";
 import axios from "axios";
 import { FaPlus, FaTimes, FaInfoCircle } from "react-icons/fa";
-import "./KPIInsight.css";
+import "../style/KPIInsight.css";
 
 /* ======================================
    CONSTANTS + HELPERS
