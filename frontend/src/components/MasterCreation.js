@@ -1,12 +1,13 @@
 import { API_BASE_URL } from "../config";
-import React, { useState, useEffect, } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import axios from "axios";
 import "../style/master.css";
 
 const API_BASE =
-  process.env.REACT_APP_API_BASE ||
-  `${API_BASE_URL}/api/master`;
+  process.env.REACT_APP_API_BASE || `${API_BASE_URL}/api/master`;
+
+const EMPTY_HIDDEN = { sow: {}, jobType: {}, uom: {} };
 
 const MasterCreation = () => {
   const [domainsList, setDomainsList] = useState([]);
@@ -21,21 +22,20 @@ const MasterCreation = () => {
   const [jobType, setJobType] = useState([""]);
   const [uom, setUom] = useState([""]);
   const [deleteMode, setDeleteMode] = useState(false);
-  const [hiddenItems, setHiddenItems] = useState({
-    sow: {},
-    jobType: {},
-    uom: {},
-  });
+  const [hiddenItems, setHiddenItems] = useState(EMPTY_HIDDEN);
 
-  const fetchData = async () => {
+  /* ================= FETCH ================= */
+  const fetchData = useCallback(async () => {
     try {
       setLoading(true);
+      setError("");
       const res = await axios.get(`${API_BASE}`);
       const responseData = res.data || {};
 
       setData(responseData);
+
       const filteredDomains = Object.keys(responseData).filter((d) => {
-        const domain = responseData[d];
+        const domain = responseData[d] || {};
         return (
           (domain.sow && domain.sow.length > 0) ||
           (domain.jobType && domain.jobType.length > 0) ||
@@ -44,16 +44,27 @@ const MasterCreation = () => {
       });
 
       setDomainsList(filteredDomains);
+      setHiddenItems(EMPTY_HIDDEN);
     } catch (err) {
+      console.error(err);
       setError("Failed to fetch data");
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
     fetchData();
-  }, []);
+  }, [fetchData]);
+
+  /* ================= HELPERS ================= */
+  const resetForm = () => {
+    setSelectedDomain("");
+    setNewDomain("");
+    setSow([""]);
+    setJobType([""]);
+    setUom([""]);
+  };
 
   const loadDomainData = (domain) => {
     const current = data[domain] || {};
@@ -62,41 +73,45 @@ const MasterCreation = () => {
     setUom(current.uom?.length ? current.uom : [""]);
   };
 
-const handleDomainChange = (domain) => {
-  if (selectedDomain === domain) {
-    setSelectedDomain("");
-    setSow([""]);
-    setJobType([""]);
-    setUom([""]);
+  const handleDomainChange = (domain) => {
+    if (!domain || selectedDomain === domain) {
+      setSelectedDomain("");
+      setSow([""]);
+      setJobType([""]);
+      setUom([""]);
+      return;
+    }
+    setSelectedDomain(domain);
+    loadDomainData(domain);
+  };
 
-    return;
-  }
-  setSelectedDomain(domain);
-  loadDomainData(domain);
-};
-
+  /* ================= CREATE DOMAIN ================= */
   const createDomain = async () => {
     try {
-      if (!newDomain.trim()) {
+      const name = newDomain.trim();
+
+      if (!name) {
         alert("Domain required");
         return;
       }
 
       await axios.post(`${API_BASE}/create-domain`, {
-        domain: newDomain.trim(),
+        domain: name,
       });
 
       alert("Domain created successfully");
 
       await fetchData();
 
-      setSelectedDomain(newDomain.trim());
+      setSelectedDomain(name);
       setNewDomain("");
     } catch (err) {
-      console.log(err);
+      console.error(err);
       alert("Create failed (maybe already exists)");
     }
   };
+
+  /* ================= DELETE DOMAIN ================= */
   const deleteDomain = async () => {
     try {
       const domainToDelete = newDomain.trim() || selectedDomain;
@@ -111,25 +126,23 @@ const handleDomainChange = (domain) => {
       );
 
       if (!confirmDelete) return;
+
       await axios.delete(
-        `${API_BASE}/delete-domain/${domainToDelete}`
+        `${API_BASE}/delete-domain/${encodeURIComponent(domainToDelete)}`
       );
 
       alert("Domain deleted successfully");
 
       await fetchData();
 
-      setSelectedDomain("");
-      setNewDomain("");
-      setSow([""]);
-      setJobType([""]);
-      setUom([""]);
+      resetForm();
     } catch (err) {
-      console.log(err);
+      console.error(err);
       alert("Delete failed");
     }
   };
 
+  /* ================= FIELD HELPERS ================= */
   const updateArray = (setter, arr, i, val) => {
     const copy = [...arr];
     copy[i] = val;
@@ -140,12 +153,15 @@ const handleDomainChange = (domain) => {
 
   const removeField = (setter, arr, i) =>
     setter(arr.filter((_, idx) => idx !== i));
+
+  /* ================= SAVE ================= */
   const saveAll = async () => {
     try {
-      const clean = (arr) =>
-        [...new Set(arr.map((v) => v.trim()).filter(Boolean))];
+      const clean = (arr) => [
+        ...new Set(arr.map((v) => v.trim()).filter(Boolean)),
+      ];
 
-      const domainToSave = selectedDomain || newDomain;
+      const domainToSave = (selectedDomain || newDomain).trim();
 
       if (!domainToSave) {
         alert("Domain required");
@@ -165,18 +181,14 @@ const handleDomainChange = (domain) => {
 
       await fetchData();
 
-      setSelectedDomain("");
-      setNewDomain("");
-      setSow([""]);
-      setJobType([""]);
-      setUom([""]);
+      resetForm();
     } catch (err) {
-      console.log(err);
+      console.error(err);
       alert("Save failed");
     }
   };
 
-  /* ================= DELETE ================= */
+  /* ================= DELETE ITEM ================= */
   const hideAndDelete = async (type, domain, value) => {
     setHiddenItems((prev) => ({
       ...prev,
@@ -205,253 +217,247 @@ const handleDomainChange = (domain) => {
         });
       }
 
-      fetchData();
+      await fetchData();
     } catch (err) {
+      console.error(err);
       alert("Delete failed");
+      // delete fail hua to item wapas dikhao
+      setHiddenItems((prev) => {
+        const copy = { ...prev[type] };
+        delete copy[`${domain}-${value}`];
+        return { ...prev, [type]: copy };
+      });
     }
   };
 
-return (
-  <>
-    <div className="page-top-bar">
-      <button
-        className="back-btn standalone-back-btn"
-        onClick={() => navigate("/telecom")}
-      >
-        ⬅ Back
-      </button>
-    </div>
+  /* ================= UI ================= */
+  return (
+    <>
+      <div className="page-top-bar">
+        <button
+          className="back-btn standalone-back-btn"
+          onClick={() => navigate("/telecom")}
+        >
+          ⬅ Back
+        </button>
+      </div>
 
-    <div className="master-container flex-layout">
-      <div className="left-side">
-        <h2 className="title">Master Entry</h2>
-        <div className="card">
-          <div className="domain-header">
-            <h3>Select Domain</h3>
-            <button
-              className="create-domain-btn"
-              onClick={() => setShowCreateForm(!showCreateForm)}
+      <div className="master-container flex-layout">
+        <div className="left-side">
+          <h2 className="title">Master Entry</h2>
+
+          <div className="card">
+            <div className="domain-header">
+              <h3>Select Domain</h3>
+              <button
+                className="create-domain-btn"
+                onClick={() => setShowCreateForm(!showCreateForm)}
+              >
+                + Create Domain
+              </button>
+            </div>
+
+            <select
+              value={selectedDomain}
+              onChange={(e) => handleDomainChange(e.target.value)}
             >
-              + Create Domain
-            </button>
+              <option value="">Select Domain</option>
 
+              {Object.keys(data).map((d) => (
+                <option key={d} value={d}>
+                  {d}
+                </option>
+              ))}
+            </select>
+
+            {showCreateForm && (
+              <div className="create-domain-form">
+                <input
+                  value={newDomain}
+                  onChange={(e) => setNewDomain(e.target.value)}
+                  placeholder="Enter domain"
+                />
+
+                <div className="domain-btn-row">
+                  <button className="domain-create-btn" onClick={createDomain}>
+                    Create
+                  </button>
+
+                  <button onClick={deleteDomain} className="delete-btn">
+                    Delete
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
 
-          <select
-            value={selectedDomain}
-            onChange={(e) => handleDomainChange(e.target.value)}
-          >
-            <option value="">Select Domain</option>
-
-            {Object.keys(data).map((d) => (
-              <option key={d} value={d}>
-                {d}
-              </option>
-            ))}
-          </select>
-
-          {showCreateForm && (
-            <div className="create-domain-form">
-
-              <input
-                value={newDomain}
-                onChange={(e) => setNewDomain(e.target.value)}
-                placeholder="Enter domain"
-              />
-
-              <div className="domain-btn-row">
-
-                <button className="domain-create-btn" onClick={createDomain}>
-                  Create
-                </button>
-
-                <button
-                  onClick={deleteDomain}
-                  className="delete-btn"
-                >
-                  Delete
-                </button>
-
+          {/* SOW */}
+          <div className="card">
+            <h3>SOW</h3>
+            {sow.map((v, i) => (
+              <div key={i} className="input-row">
+                <input
+                  value={v}
+                  onChange={(e) => updateArray(setSow, sow, i, e.target.value)}
+                />
+                <button onClick={() => addField(setSow, sow)}>+</button>
+                {sow.length > 1 && (
+                  <button onClick={() => removeField(setSow, sow, i)}>-</button>
+                )}
               </div>
-
-            </div>
-          )}
-
-        </div>
-
-
-        {/* SOW */}
-        <div className="card">
-          <h3>SOW</h3>
-          {sow.map((v, i) => (
-            <div key={i} className="input-row">
-              <input
-                value={v}
-                onChange={(e) => updateArray(setSow, sow, i, e.target.value)}
-              />
-              <button onClick={() => addField(setSow, sow)}>+</button>
-              {sow.length > 1 && (
-                <button onClick={() => removeField(setSow, sow, i)}>
-                  -
-                </button>
-              )}
-            </div>
-          ))}
-        </div>
-
-        <div className="card">
-          <h3>Job Type</h3>
-          {jobType.map((v, i) => (
-            <div key={i} className="input-row">
-              <input
-                value={v}
-                onChange={(e) =>
-                  updateArray(setJobType, jobType, i, e.target.value)
-                }
-              />
-              <button onClick={() => addField(setJobType, jobType)}>+</button>
-              {jobType.length > 1 && (
-                <button onClick={() => removeField(setJobType, jobType, i)}>
-                  -
-                </button>
-              )}
-            </div>
-          ))}
-        </div>
-            
-        <div className="card">
-          <h3>UOM</h3>
-          {uom.map((v, i) => (
-            <div key={i} className="input-row">
-              <input
-                value={v}
-                onChange={(e) => updateArray(setUom, uom, i, e.target.value)}
-              />
-              <button onClick={() => addField(setUom, uom)}>+</button>
-              {uom.length > 1 && (
-                <button onClick={() => removeField(setUom, uom, i)}>
-                  -
-                </button>
-              )}
-            </div>
-          ))}
-        </div>
-
-        <div className="card">
-          <button className="save-all-btn" onClick={saveAll}>
-            Save All
-          </button>
-        </div>
-      </div>
-
-      <div className="right-side">
-        <h2 className="title">Edit Master </h2>
-        {loading && <p>Loading...</p>}
-        {error && <p>{error}</p>}
-        <table className="master-table">
-          <thead>
-            <tr>
-              <th>S.No</th>
-              <th>Domain</th>
-              <th>SOW</th>
-              <th>Job Type</th>
-              <th>UOM</th>
-              <th>Actions</th>
-            </tr>
-          </thead>
-
-          <tbody>
-            {domainsList.map((d, i) => (
-              <tr key={d}>
-                <td>{i + 1}</td>
-                <td>{d}</td>
-
-             <td>
-  {data[d]?.sow
-    ?.filter((item) => !hiddenItems.sow[`${d}-${item}`])
-    .map((item, idx, arr) => (
-      <span key={idx} className="item-chip">
-
-        {deleteMode && (
-          <button
-            className="cross-btn"
-            onClick={() => hideAndDelete("sow", d, item)}
-          >
-            ❌
-          </button>
-        )}
-
-        {item}
-
-        {idx < arr.length - 1 && ", "}
-      </span>
-    ))}
-</td>
-
-            <td>
-  {data[d]?.jobType
-    ?.filter((item) => !hiddenItems.jobType[`${d}-${item}`])
-    .map((item, idx, arr) => (
-      <span key={idx} className="item-chip">
-
-        {deleteMode && (
-          <button
-            className="cross-btn"
-            onClick={() => hideAndDelete("jobType", d, item)}
-          >
-            ❌
-          </button>
-        )}
-
-        {item}
-
-        {idx < arr.length - 1 && ", "}
-      </span>
-    ))}
-</td>
-
-<td>
-  {data[d]?.uom
-    ?.filter((item) => !hiddenItems.uom[`${d}-${item}`])
-    .map((item, idx, arr) => (
-      <span key={idx} className="item-chip">
-
-        {deleteMode && (
-          <button
-            className="cross-btn"
-            onClick={() => hideAndDelete("uom", d, item)}
-          >
-            ❌
-          </button>
-        )}
-
-        {item}
-
-        {idx < arr.length - 1 && ", "}
-      </span>
-    ))}
-</td>
-
-                <td>
-                  <button onClick={() => handleDomainChange(d)}>
-                    ✏️
-                  </button>
-
-                  <button
-                    onClick={() => setDeleteMode((p) => !p)}
-                  >
-                    🗑️
-                  </button>
-                </td>
-              </tr>
             ))}
-          </tbody>
+          </div>
 
-        </table>
+          {/* JOB TYPE */}
+          <div className="card">
+            <h3>Job Type</h3>
+            {jobType.map((v, i) => (
+              <div key={i} className="input-row">
+                <input
+                  value={v}
+                  onChange={(e) =>
+                    updateArray(setJobType, jobType, i, e.target.value)
+                  }
+                />
+                <button onClick={() => addField(setJobType, jobType)}>+</button>
+                {jobType.length > 1 && (
+                  <button onClick={() => removeField(setJobType, jobType, i)}>
+                    -
+                  </button>
+                )}
+              </div>
+            ))}
+          </div>
+
+          {/* UOM */}
+          <div className="card">
+            <h3>UOM</h3>
+            {uom.map((v, i) => (
+              <div key={i} className="input-row">
+                <input
+                  value={v}
+                  onChange={(e) => updateArray(setUom, uom, i, e.target.value)}
+                />
+                <button onClick={() => addField(setUom, uom)}>+</button>
+                {uom.length > 1 && (
+                  <button onClick={() => removeField(setUom, uom, i)}>-</button>
+                )}
+              </div>
+            ))}
+          </div>
+
+          <div className="card">
+            <button className="save-all-btn" onClick={saveAll}>
+              Save All
+            </button>
+          </div>
+        </div>
+
+        <div className="right-side">
+          <h2 className="title">Edit Master </h2>
+          {loading && <p>Loading...</p>}
+          {error && <p>{error}</p>}
+
+          <table className="master-table">
+            <thead>
+              <tr>
+                <th>S.No</th>
+                <th>Domain</th>
+                <th>SOW</th>
+                <th>Job Type</th>
+                <th>UOM</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+
+            <tbody>
+              {domainsList.map((d, i) => (
+                <tr key={d}>
+                  <td>{i + 1}</td>
+                  <td>{d}</td>
+
+                  {/* SOW CELL */}
+                  <td>
+                    {data[d]?.sow
+                      ?.filter((item) => !hiddenItems.sow[`${d}-${item}`])
+                      .map((item, idx, arr) => (
+                        <span key={`${item}-${idx}`} className="item-chip">
+                          {deleteMode && (
+                            <button
+                              className="cross-btn"
+                              onClick={() => hideAndDelete("sow", d, item)}
+                            >
+                              ❌
+                            </button>
+                          )}
+
+                          {item}
+
+                          {idx < arr.length - 1 && ", "}
+                        </span>
+                      ))}
+                  </td>
+
+                  {/* JOB TYPE CELL */}
+                  <td>
+                    {data[d]?.jobType
+                      ?.filter((item) => !hiddenItems.jobType[`${d}-${item}`])
+                      .map((item, idx, arr) => (
+                        <span key={`${item}-${idx}`} className="item-chip">
+                          {deleteMode && (
+                            <button
+                              className="cross-btn"
+                              onClick={() => hideAndDelete("jobType", d, item)}
+                            >
+                              ❌
+                            </button>
+                          )}
+
+                          {item}
+
+                          {idx < arr.length - 1 && ", "}
+                        </span>
+                      ))}
+                  </td>
+
+                  {/* UOM CELL */}
+                  <td>
+                    {data[d]?.uom
+                      ?.filter((item) => !hiddenItems.uom[`${d}-${item}`])
+                      .map((item, idx, arr) => (
+                        <span key={`${item}-${idx}`} className="item-chip">
+                          {deleteMode && (
+                            <button
+                              className="cross-btn"
+                              onClick={() => hideAndDelete("uom", d, item)}
+                            >
+                              ❌
+                            </button>
+                          )}
+
+                          {item}
+
+                          {idx < arr.length - 1 && ", "}
+                        </span>
+                      ))}
+                  </td>
+
+                  {/* ACTIONS */}
+                  <td>
+                    <button onClick={() => handleDomainChange(d)}>✏️</button>
+
+                    <button onClick={() => setDeleteMode((p) => !p)}>
+                      🗑️
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       </div>
-    </div>
-  </>
-);
+    </>
+  );
 };
 
 export default MasterCreation;
