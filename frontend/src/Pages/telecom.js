@@ -7,7 +7,8 @@ import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer,
   PieChart, Pie, Cell, Legend, CartesianGrid
 } from "recharts";
-import { FaTachometerAlt, FaChartBar, FaUsers, FaSitemap, FaPlusCircle, FaClock, FaHistory, FaLayerGroup, FaFolderOpen, FaPaperPlane, FaChartLine, FaTimes, FaLightbulb } from "react-icons/fa";
+// CHANGE: FaLightbulb hata ke KPI Insight ke liye naya icon FaBrain use kiya (FaChartBar ab sirf Report ke liye)
+import { FaTachometerAlt, FaChartBar, FaUsers, FaSitemap, FaPlusCircle, FaClock, FaHistory, FaLayerGroup, FaFolderOpen, FaPaperPlane, FaChartLine, FaTimes, FaBrain } from "react-icons/fa";
 import jsPDF from "jspdf";
 // FIX: html2canvas import missing tha -> Export (PNG/JPG/PDF) "html2canvas is not defined" error deta tha
 // Install: npm i html2canvas
@@ -266,6 +267,7 @@ export default function TelecomMap() {
   const [selectedKpiDomain, setSelectedKpiDomain] = useState(null);
   const [showKpiModal, setShowKpiModal] = useState(false);
   const [expandedJobMenu, setExpandedJobMenu] = useState(false);
+  // Dashboard dropdown default open: isme sirf "KPI Insight" tab dikhega
   const [expandedDashMenu, setExpandedDashMenu] = useState(true);
   const [showTrendModal, setShowTrendModal] = useState(false);
 
@@ -274,6 +276,7 @@ export default function TelecomMap() {
   const [selectedMonth, setSelectedMonth] = useState(null);
   const [fromDate, setFromDate] = useState("");
   const [toDate, setToDate] = useState("");
+  // Default page = dashboard
   const [activePage, setActivePage] = useState("dashboard");
 
   const [selectedRegion, setSelectedRegion] = useState("All Region");
@@ -850,6 +853,18 @@ export default function TelecomMap() {
     if (window.innerWidth <= 1100) setMenuOpen(false);
   };
 
+  // CHANGE: Dashboard button click
+  //  - Kisi aur page (ya KPI Insight) par ho -> Dashboard page khulega aur dropdown open rahega (KPI Insight tab dikhega)
+  //  - Dashboard par ho -> dropdown open/close toggle hoga
+  const handleDashboardClick = () => {
+    if (activePage !== "dashboard") {
+      setActivePage("dashboard");
+      setExpandedDashMenu(true);
+    } else {
+      setExpandedDashMenu((prev) => !prev);
+    }
+  };
+
   // ---- Map tooltip data ----
   const tooltipState = tooltip.data?.state;
   const tooltipStateData = tooltipState ? mapReportByState[lc(tooltipState)] || {} : {};
@@ -865,22 +880,18 @@ export default function TelecomMap() {
   return (
     <div className="page">
       <div className={`topMenu ${menuOpen ? "expanded" : "collapsed"}`}>
-        {/* Dashboard group: Dashboard page default rahega, uske neeche KPI Insight click karne par khulega */}
+        {/* Dashboard group: Dashboard default page. Dropdown me sirf ek tab: KPI Insight */}
         <div className="menuGroupContainer">
           <button
             className={`menuBtn ${(activePage === "dashboard" || activePage === "kpiinsight") ? "active" : ""}`}
-            onClick={() => {
-              setExpandedDashMenu((prev) => !prev);
-              if (activePage !== "dashboard" && activePage !== "kpiinsight") setActivePage("dashboard");
-            }}
+            onClick={handleDashboardClick}
           >
             <FaTachometerAlt className="menuIcon" />
             {menuOpen && <span style={{ display: "flex", justifyContent: "space-between", width: "100%", alignItems: "center" }}>Dashboard <span style={{ fontSize: "11px" }}>{expandedDashMenu ? "▲" : "▼"}</span></span>}
           </button>
           {((menuOpen && expandedDashMenu) || !menuOpen) && (
             <div className="subMenuContainer" style={menuOpen ? { paddingLeft: "20px", display: "flex", flexDirection: "column", gap: "4px", marginTop: "4px" } : {}}>
-              <button className={`menuBtn subMenuBtn ${activePage === "dashboard" ? "active" : ""}`} onClick={() => goTo("dashboard")}><FaChartBar className="menuIcon" style={{ fontSize: "16px" }} />{menuOpen && "Overview"}</button>
-              <button className={`menuBtn subMenuBtn ${activePage === "kpiinsight" ? "active" : ""}`} onClick={() => goTo("kpiinsight")}><FaLightbulb className="menuIcon" style={{ fontSize: "16px" }} />{menuOpen && "KPI Insight"}</button>
+              <button className={`menuBtn subMenuBtn ${activePage === "kpiinsight" ? "active" : ""}`} onClick={() => goTo("kpiinsight")}><FaBrain className="menuIcon" style={{ fontSize: "16px" }} />{menuOpen && "KPI Insight"}</button>
             </div>
           )}
         </div>
