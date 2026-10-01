@@ -101,15 +101,13 @@ const getPerfBoxStyle = (val) => {
   };
 };
 
+// "No.of poles" / "No. of poles" / "Number of poles" / "noof poles" -> sirf "Poles"
 const formatUomLabel = (key) => {
   const raw = String(key || "").trim();
   if (!raw) return raw;
   const m = raw.match(/^(no\.?\s*of|noof|number\s*of)\s*(.*)$/i);
-  if (m) {
-    const rest = m[2].trim().toLowerCase();
-    return rest ? `No.of ${rest}` : "No.of";
-  }
-  const low = raw.toLowerCase();
+  const base = m && m[2].trim() ? m[2].trim() : raw;
+  const low = base.toLowerCase();
   return low.charAt(0).toUpperCase() + low.slice(1);
 };
 
@@ -619,9 +617,14 @@ export default function TelecomMap() {
     const s = domainStats[normalize(domain)];
     return s && s.total > 0 ? Math.round((s.otpMet / s.total) * 100) : null;
   };
-  const getDomainUomText = (domain) => {
+  // UOM ab list of { label, value } — "No.of poles" => "Poles"
+  const getDomainUomList = (domain) => {
     const uom = domainStats[normalize(domain)]?.uom || {};
-    return Object.entries(uom).map(([key, value]) => `${formatUomLabel(key)}: ${value}`).join(" | ");
+    return Object.entries(uom).map(([key, value]) => ({
+      key,
+      label: formatUomLabel(key),
+      value,
+    }));
   };
 
   // ---- Domains list ----
@@ -886,17 +889,43 @@ export default function TelecomMap() {
                   const color = DOMAIN_COLORS[domain] || "#6366f1";
                   const qcAvg = getDomainQcAvg(domain);
                   const otpPct = getDomainOtpPercent(domain);
+                  const uomList = getDomainUomList(domain);
                   return (
                     <div key={domain} className="kpiCardModern" style={{ "--themeColor": color }}>
                       <button type="button" className="kpiEyeBtnLeft" aria-label={`${domain} status report`} title={`${domain} status report`} onClick={(e) => { e.stopPropagation(); handleKpiReport(domain); }} style={{ background: `${color}15`, border: `1px solid ${color}70`, color: color }}>𝑖</button>
                       <div className="kpiContent">
                         <div className="kpiDomainModern">{domain}</div>
-                        <div className="kpiSubModern">{getDomainUomText(domain)}</div>
                         <div className="kpiQcOtpRow" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "nowrap", gap: "6px", margin: "8px 0 4px" }}>
                           <span style={getPerfBoxStyle(qcAvg ?? 0)}>Amdocs QC: {qcAvg !== null ? `${qcAvg}%` : "0%"}</span>
                           <span style={getPerfBoxStyle(otpPct ?? 0)}>OTP: {otpPct !== null ? `${otpPct}%` : "0%"}</span>
                         </div>
-                        <div className="kpiValueModern">{getDomainJobs(domain)}<span> Jobs</span></div>
+                        {/* Jobs (left) + Sub-domain UOM chips (bilkul right side) */}
+                        <div className="kpiValueRow" style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: "6px 10px" }}>
+                          <div className="kpiValueModern">{getDomainJobs(domain)}<span> Jobs</span></div>
+                          {uomList.length > 0 && (
+                            <div className="kpiUomRight" style={{ display: "flex", flexWrap: "wrap", justifyContent: "flex-end", alignItems: "center", gap: "4px", marginLeft: "auto", minWidth: 0 }}>
+                              {uomList.map((u) => (
+                                <span
+                                  key={u.key}
+                                  title={`${u.label}: ${u.value}`}
+                                  style={{
+                                    fontSize: "10.5px",
+                                    fontWeight: 700,
+                                    color: color,
+                                    background: `${color}15`,
+                                    border: `1px solid ${color}50`,
+                                    borderRadius: "6px",
+                                    padding: "3px 7px",
+                                    whiteSpace: "nowrap",
+                                    lineHeight: 1.3,
+                                  }}
+                                >
+                                  {u.label}: {u.value}
+                                </span>
+                              ))}
+                            </div>
+                          )}
+                        </div>
                       </div>
                     </div>
                   );
