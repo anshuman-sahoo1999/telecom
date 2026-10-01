@@ -20,6 +20,7 @@ import TimesheetPage from "./Pages/TimesheetPage";
 import TimesheetManagement from "./Pages/TimesheetManagement";
 import JobHistory from "./Pages/JobHistory";
 import CapacityForecast from "./Pages/CapacityForecast";
+import KPIInsight from "./Pages/KPIInsight";
 
 function App() {
   return (
@@ -43,6 +44,7 @@ function App() {
           <Route path="/admin-dashboard/user-management" element={<UserManagement />} />
           <Route path="/admin-dashboard/organogram" element={<Organogram />} />
           <Route path="/admin-dashboard/workstatus" element={<TimesheetManagement />} />
+          <Route path="/admin-dashboard/kpiinsight" element={<KPIInsight />} />
         </Route>
 
         {/* MIS Routes */}
@@ -62,6 +64,7 @@ function App() {
           <Route path="/mis-dashboard/jobsubmission" element={<JobSubmission />} />
           <Route path="/mis-dashboard/jobhistory" element={<JobHistory />} />
           <Route path="/mis-dashboard/capacityforecast" element={<CapacityForecast />} />
+          <Route path="/mis-dashboard/kpiinsight" element={<KPIInsight />} />
         </Route>
 
         {/* Team Lead Routes */}
@@ -78,6 +81,7 @@ function App() {
           <Route path="/teamlead-dashboard/report" element={<Report />} />
           <Route path="/teamlead-dashboard/organogram" element={<Organogram />} />
           <Route path="/teamlead-dashboard/timesheet" element={<TimesheetManagement />} />
+          <Route path="/teamlead-dashboard/kpiinsight" element={<KPIInsight />} />
         </Route>
 
         {/* Team Member Routes */}
