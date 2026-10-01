@@ -55,7 +55,8 @@
   outline-offset: 2px;
 }
 .kpiq-modal-head .kpiq-x:focus-visible,
-.kpiq-toast .kpiq-x:focus-visible { outline-color: #fff; }
+.kpiq-toast .kpiq-x:focus-visible,
+.kpiq-table thead .kpiq-info-btn:focus-visible { outline-color: #fff; }
 
 /* Month / Year multi select dropdown */
 .kpiq-picker { position: relative; min-width: 220px; }
@@ -85,18 +86,29 @@
   display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 12px 16px;
   background: #f1f5f9; border-bottom: 1px solid #e2e8f0; font-size: 15px; font-weight: 800; color: #0f4a63; text-align: left;
 }
-.kpiq-card-head::after { content: "Swipe left / right"; display: none; font-size: 11px; font-weight: 600; color: #64748b; }
-.kpiq-scroll { overflow: auto; max-height: 68vh; -webkit-overflow-scrolling: touch; }
+.kpiq-card-head::after { content: "Swipe left / right"; display: none; font-size: 11px; font-weight: 600; color: #64748b; white-space: nowrap; }
+.kpiq-scroll {
+  overflow: auto;
+  max-height: 68vh;
+  max-height: 68dvh;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior-x: contain;
+}
 .kpiq-table { width: 100%; border-collapse: separate; border-spacing: 0; min-width: 640px; }
 .kpiq-table th, .kpiq-table td {
   padding: 10px 12px; font-size: 13px; text-align: center; vertical-align: middle;
   border-bottom: 1px solid #e2e8f0; border-right: 1px solid #eef2f7; white-space: nowrap;
 }
-.kpiq-table thead th { background: #0f4a63; color: #fff; font-weight: 700; text-align: center; position: sticky; top: 0; z-index: 2; border-right-color: rgba(255,255,255,0.12); }
+.kpiq-table thead th {
+  background: #0f4a63; color: #fff; font-weight: 700; text-align: center;
+  position: sticky; top: 0; z-index: 2; line-height: 1.25;
+  border-right-color: rgba(255,255,255,0.12);
+}
 
 /* 2 header rows: [Quality Rating | Domain] / [JOB Completed Month | domain names] */
 .kpiq-table thead tr.first th { height: var(--kpiq-head-h); }
-.kpiq-table thead tr.second th { top: var(--kpiq-head-h); border-top: 1px solid rgba(255,255,255,0.18); }
+/* -1px removes the thin gap that can appear between the two sticky header rows */
+.kpiq-table thead tr.second th { top: calc(var(--kpiq-head-h) - 1px); border-top: 1px solid rgba(255,255,255,0.18); }
 .kpiq-table tbody tr:last-child td { border-bottom: none; }
 
 /* Month Year column: centered */
@@ -106,14 +118,18 @@
 .kpiq-table thead .stickyRight { background: #0f4a63; color: #fff; z-index: 3; min-width: 150px; }
 .kpiq-table th:not(.stickyCol):not(.stickyRight) { min-width: 96px; }
 
-.kpiq-table tbody tr:hover td { background: #f8fafc; }
-.kpiq-table tbody tr:hover td.stickyCol,
-.kpiq-table tbody tr:hover td.stickyRight { background: #f1f5f9; }
+/* Hover only on devices that really hover (avoids "stuck" hover on touch) */
+@media (hover: hover) {
+  .kpiq-table tbody tr:hover td { background: #f8fafc; }
+  .kpiq-table tbody tr:hover td.stickyCol,
+  .kpiq-table tbody tr:hover td.stickyRight { background: #f1f5f9; }
+}
 .kpiq-colScope { display: block; font-size: 11px; font-weight: 600; opacity: 0.85; }
 
 /* Action column buttons */
 .kpiq-act-wrap { display: inline-flex; align-items: center; justify-content: center; gap: 6px; }
 .kpiq-act { display: inline-flex; align-items: center; gap: 5px; padding: 5px 10px; border-radius: 6px; border: 1px solid transparent; font-size: 12px; font-weight: 700; cursor: pointer; }
+.kpiq-act svg { flex-shrink: 0; }
 .kpiq-act.edit { background: #e0f2fe; color: #0f4a63; border-color: #bae6fd; }
 .kpiq-act.edit:hover:not(:disabled) { background: #bae6fd; }
 .kpiq-act.del { background: #fee2e2; color: #b91c1c; border-color: #fca5a5; }
@@ -147,13 +163,17 @@
 
 /* Info popup */
 .kpiq-info-wrap { position: relative; display: inline-flex; align-items: center; }
-.kpiq-info-btn { background: transparent; border: none; padding: 0 0 0 20px; cursor: pointer; color: #0f4a63; font-size: 17px; display: inline-flex; align-items: center; }
+.kpiq-info-btn { background: transparent; border: none; padding: 0 0 0 8px; cursor: pointer; color: #0f4a63; font-size: 17px; display: inline-flex; align-items: center; }
+/* Inside the dark table header the icon must be white, otherwise it is invisible */
+.kpiq-table thead .kpiq-info-btn { color: #fff; }
 .kpiq-info-pop {
-  position: absolute; top: 24px; left: -8px; z-index: 5; width: 250px; max-width: calc(100vw - 48px);
+  position: absolute; top: 24px; left: -8px; z-index: 10; width: 250px; max-width: calc(100vw - 48px);
   background: #fff; border: 1px solid #e2e8f0; border-radius: 10px; box-shadow: 0 10px 28px rgba(0,0,0,0.22);
   padding: 10px 12px; display: flex; flex-direction: column; gap: 8px;
+  /* Reset values inherited from the table header (white text, nowrap, centered) */
+  color: #0f172a; text-align: left; white-space: normal; font-weight: 600; line-height: 1.35; cursor: default;
 }
-.kpiq-info-row { display: flex; align-items: center; gap: 8px; font-size: 12.5px; font-weight: 700; }
+.kpiq-info-row { display: flex; align-items: center; gap: 8px; font-size: 12.5px; font-weight: 700; color: #0f172a; }
 .kpiq-quality-row { display: flex; align-items: center; gap: 10px; }
 .kpiq-quality-row .kpiq-pill { flex-shrink: 0; }
 
@@ -180,7 +200,10 @@
 .kpiq-cell-input {
   width: 84px; padding: 6px 22px 6px 6px; text-align: center; font-size: 13px; font-weight: 700;
   border-radius: 6px; border: 1px solid #cbd5e1; background: #fff; color: #0f172a; outline: none;
+  -moz-appearance: textfield; appearance: textfield;
 }
+.kpiq-cell-input::-webkit-outer-spin-button,
+.kpiq-cell-input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
 .kpiq-cell-input:focus { border-color: #0f4a63; box-shadow: 0 0 0 3px rgba(15,74,99,0.15); }
 .kpiq-cell-input:disabled { opacity: 0.7; }
 .kpiq-cell-pct { position: absolute; right: 7px; top: 50%; transform: translateY(-50%); font-size: 12px; font-weight: 700; color: #475569; pointer-events: none; }
@@ -191,7 +214,7 @@
 ====================================== */
 @media (max-width: 992px) {
   .kpiq-page { padding: 12px; }
-  .kpiq-scroll { max-height: 72vh; }
+  .kpiq-scroll { max-height: 72vh; max-height: 72dvh; }
   .kpiq-table th, .kpiq-table td { padding: 8px 9px; font-size: 12.5px; }
   .kpiq-table thead .stickyCol { min-width: 120px; }
   .kpiq-table thead .stickyRight { min-width: 130px; }
@@ -244,7 +267,8 @@
   .kpiq-page { padding: 8px; }
   .kpiq-btn { padding: 10px 12px; font-size: 13.5px; }
   .kpiq-card-head { padding: 10px 12px; font-size: 14px; }
-  .kpiq-card-head::after { display: none; }
+  /* Swipe hint stays visible on phones, just smaller (table scrolls sideways here too) */
+  .kpiq-card-head::after { font-size: 10.5px; }
 
   /* Bottom-sheet style modal */
   .kpiq-overlay { padding: 0; align-items: flex-end; }
