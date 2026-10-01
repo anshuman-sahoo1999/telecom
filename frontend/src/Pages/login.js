@@ -86,31 +86,40 @@ const getMonthTabs = () => {
   });
 };
 
-const parseDate = (d) => {
-  if (!d) return null;
-  if (d instanceof Date) return isNaN(d.getTime()) ? null : d;
-  let v = d;
-  if (typeof v === "string" && /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}/.test(v.trim())) {
-    v = v.trim().replace(" ", "T");
-  }
-  const parsed = new Date(v);
-  return isNaN(parsed.getTime()) ? null : parsed;
+/* Current date-time in IST, format:
+   "Thursday, 1 October 2026 at 11:24:53 am" */
+const IST_FORMATTER = new Intl.DateTimeFormat("en-GB", {
+  timeZone: "Asia/Kolkata",
+  weekday: "long",
+  day: "numeric",
+  month: "long",
+  year: "numeric",
+  hour: "2-digit",
+  minute: "2-digit",
+  second: "2-digit",
+  hour12: true,
+});
+
+const formatNow = (date) => {
+  const parts = {};
+  IST_FORMATTER.formatToParts(date).forEach((p) => {
+    parts[p.type] = p.value;
+  });
+  const period = String(parts.dayPeriod || "").toLowerCase();
+  return `${parts.weekday}, ${parts.day} ${parts.month} ${parts.year} at ${parts.hour}:${parts.minute}:${parts.second} ${period}`;
 };
 
-const pad2 = (n) => String(n).padStart(2, "0");
-const formatLastUpdated = (d) => {
-  if (!d) return "--";
-  const ist = new Date(d.getTime() + 5.5 * 60 * 60 * 1000);
-  const day = pad2(ist.getUTCDate());
-  const month = MONTH_NAMES[ist.getUTCMonth()];
-  const year = ist.getUTCFullYear();
-  let hour = ist.getUTCHours();
-  const minute = pad2(ist.getUTCMinutes());
-  const period = hour >= 12 ? "PM" : "AM";
-  hour = hour % 12 || 12;
-  return `${day} ${month} ${year} at ${pad2(hour)}:${minute} ${period} Hrs`;
-};
+/* Live ticking clock (updates every second) */
+const LiveClock = () => {
+  const [now, setNow] = useState(() => new Date());
 
+  useEffect(() => {
+    const timer = setInterval(() => setNow(new Date()), 1000);
+    return () => clearInterval(timer);
+  }, []);
+
+  return <div className="live-last-updated">As On-{formatNow(now)}</div>;
+};
 
 const extractDomainNames = (data) => {
   if (!data) return [];
@@ -175,7 +184,7 @@ const Login = () => {
   }, []);
 
   const monthTabs = getMonthTabs();
-  const currentTab = monthTabs[monthTabs.length - 1]; 
+  const currentTab = monthTabs[monthTabs.length - 1];
   const activeTab = monthTabs.find((t) => t.key === selectedKey) || currentTab;
 
   const domainRows = useMemo(() => {
@@ -218,25 +227,6 @@ const Login = () => {
       };
     });
   }, [workData, masterDomains, activeTab.idx, activeTab.year]);
-
-
-  const lastUpdated = useMemo(() => {
-    let latest = null;
-    workData.forEach((item) => {
-      const d = parseDate(
-        firstFilled(
-          item?.updated_at,
-          item?.updatedAt,
-          item?.updated_on,
-          item?.modified_at,
-          item?.created_at,
-          item?.createdAt
-        )
-      );
-      if (d && (!latest || d > latest)) latest = d;
-    });
-    return latest;
-  }, [workData]);
 
   /* ---------- Login ---------- */
   const handleLogin = async (e) => {
@@ -375,7 +365,8 @@ const Login = () => {
               })}
           </div>
 
-          <div className="live-last-updated">Last Updated: {formatLastUpdated(lastUpdated)}</div>
+          {/* Current date & time (live, IST) */}
+          <LiveClock />
         </div>
       </div>
 
