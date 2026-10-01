@@ -22,9 +22,6 @@ const isRealJobId = (v) => {
   const s = clean(v);
   return s !== "" && s !== "-";
 };
-
-// MySQL JSON column ho to driver already parsed object/array deta hai,
-// string ho to JSON.parse karna padta hai. Dono case safe.
 const safeParseJson = (val, fallback) => {
   if (val === null || val === undefined) return fallback;
   if (typeof val === "object") return val;
@@ -33,8 +30,6 @@ const safeParseJson = (val, fallback) => {
   }
   return fallback;
 };
-
-// months input (array / JSON string / plain string) -> clean array
 const parseMonthsInput = (months) => {
   let arr = [];
   if (Array.isArray(months)) {
@@ -66,9 +61,6 @@ const removeOrphanJobCreation = async (jobIds) => {
   await query("DELETE FROM job_creation WHERE TRIM(jobId) IN (?)", [toRemove]);
 };
 
-/* ======================================
-   CELL VALUE UNWRAPPER (formula / rich text / hyperlink)
-====================================== */
 const unwrapCell = (val) => {
   if (val === null || val === undefined) return val;
   if (val instanceof Date) return val;
@@ -84,9 +76,6 @@ const unwrapCell = (val) => {
   return val;
 };
 
-/* ======================================
-   STRICT MM-DD-YYYY DATE PARSER
-====================================== */
 const parseExcelDate = (value) => {
   if (!value) return null;
 
@@ -122,14 +111,10 @@ const parseExcelDate = (value) => {
   return `${month}-${day}-${year}`;
 };
 
-/* ======================================
-   FRONTEND FORMATTER
-====================================== */
 const formatDateToMMDDYYYY = (dateVal) => {
   if (!dateVal) return "";
   let strVal = dateVal.toString().trim();
-  
-  // Agar YYYY-MM-DD format me hai toh usko MM-DD-YYYY me convert karein
+
   const isoMatch = strVal.match(/^(\d{4})-(\d{2})-(\d{2})/);
   if (isoMatch) {
     const [, year, month, day] = isoMatch;
@@ -139,16 +124,11 @@ const formatDateToMMDDYYYY = (dateVal) => {
   return parseExcelDate(strVal) || strVal;
 };
 
-/* ======================================
-   PERCENTAGE FORMATTER FOR QC
-====================================== */
 const isZeroValue = (v) => {
   if (v === null || v === undefined || v === false) return false;
   const s = v.toString().trim().replace(/%$/, "").trim();
   return s !== "" && !isNaN(Number(s)) && Number(s) === 0;
 };
-
-const cleanOtp = (v) => (isZeroValue(v) ? "" : clean(v));
 
 const formatPercentage = (value) => {
   if (value === null || value === undefined || value === "") return "";
@@ -168,9 +148,8 @@ const formatPercentage = (value) => {
   return str;
 };
 
-/* ======================================
-   MONTH HELPERS
-====================================== */
+const cleanOtp = (v) => formatPercentage(v);
+const blankIfZero = (v) => (isZeroValue(v) ? "" : v);
 const getMonthValue = (row) => {
   for (const key of Object.keys(row)) {
     const k = key.toLowerCase().replace(/[^a-z0-9]/g, "");
@@ -233,7 +212,6 @@ const formatMonth = (value) => {
     }
   }
 
-  // "Oct-2024", "October-2024", "Oct/2024", "Oct 2024", "October 2024"
   m = strVal.match(/^([A-Za-z]+)[\s\-/,]+(\d{4})$/);
   if (m) {
     const key = m[1].toLowerCase();
@@ -243,13 +221,10 @@ const formatMonth = (value) => {
     }
   }
 
-  // Last resort: let the JS Date parser try (e.g. "October 2024", "2024/10/01")
   const d = new Date(strVal);
   if (!isNaN(d.getTime())) {
     return `${monthNames[d.getMonth()]},${d.getFullYear()}`;
   }
-
-  // Kuch bhi match na ho to raw value hi return karo (khali/gayab hone se behtar)
   return strVal;
 };
 
@@ -258,9 +233,6 @@ const cleanMonthArray = (arr) => {
   return arr.map(m => formatMonth(m)).filter(Boolean);
 };
 
-/* ======================================
-   DYNAMIC UOM EXTRACTION (STRICT ECD FILTER)
-====================================== */
 const extractUOM = (row) => {
   const uom = {};
 
@@ -305,9 +277,6 @@ const extractUOM = (row) => {
   return uom;
 };
 
-/* ======================================
-   HELPER TO FIND FIELD FLEXIBLY IN ROW
-====================================== */
 const findValueInRow = (row, possibleKeys) => {
   for (const key of Object.keys(row)) {
     const compressedKey = key.toLowerCase().replace(/[^a-z0-9]/g, "");
@@ -323,9 +292,6 @@ const findValueInRow = (row, possibleKeys) => {
   return "";
 };
 
-/* ======================================
-   STATE CODE -> FULL STATE
-====================================== */
 const getStateNameFromCode = (code) => {
   if (!code) return "";
   const input = code.toString().trim().toUpperCase();
@@ -339,18 +305,12 @@ const getStateNameFromCode = (code) => {
   return "";
 };
 
-/* ======================================
-   REGION FROM STATE
-====================================== */
 const getRegionFromState = (state) => {
   if (!state) return "";
   const found = stateData[state];
   return found ? found.region : "";
 };
 
-/* ======================================
-   COUNTY -> STATE
-====================================== */
 const getStateFromCounty = (countyName) => {
   if (!countyName) return { county: "", state: "" };
 
@@ -375,9 +335,6 @@ const getStateFromCounty = (countyName) => {
   return { county: countyName, state: "" };
 };
 
-/* ======================================
-   HELPER SYNC TO JOB CREATION
-====================================== */
 const helperSyncToJobCreation = (data) => {
   return new Promise((resolve) => {
     const newJobId = clean(data.cleanJobId);
@@ -458,9 +415,6 @@ const helperSyncToJobCreation = (data) => {
   });
 };
 
-/* ======================================
-   IMPORT EXCEL
-====================================== */
 const importExcel = async (req, res) => {
   try {
     if (!req.file) {
@@ -497,8 +451,6 @@ const importExcel = async (req, res) => {
             obj[headerName] = unwrapCell(row.getCell(col).value);
           }
         }
-
-        // Poori khaali row (sirf formatting wali) skip karo
         const hasAnyValue = Object.values(obj).some((v) => {
           if (v === null || v === undefined) return false;
           return v.toString().trim() !== "";
@@ -742,9 +694,6 @@ const importExcel = async (req, res) => {
   }
 };
 
-/* ======================================
-   SMALL HELPERS FOR CREATE / UPDATE
-====================================== */
 const pick = (obj, ...keys) => {
   for (const k of keys) {
     if (obj && obj[k] !== undefined) return obj[k];
@@ -757,13 +706,8 @@ const isBlank = (v) =>
 
 const flatText = (v) => (Array.isArray(v) ? v.join(", ") : v);
 
-/* ======================================
-   CREATE WORK
-====================================== */
 const createWork = async (req, res) => {
   const b = req.body || {};
-
-  // snake_case aur camelCase (month / jobId / submissionDate ...) dono accept
   const months = pick(b, "months", "month");
   const domain = pick(b, "domain");
   const sow = pick(b, "sow");
@@ -814,8 +758,6 @@ const createWork = async (req, res) => {
     let workId = existingId;
 
     if (existingId) {
-      // Job pehle se hai -> sirf wahi fields badlo jo aayi hain.
-      // (Pehle months "[]" aur baaki fields khaali hokar Report se month/date gayab ho jate the.)
       await query(
         `UPDATE work_updates
          SET months = COALESCE(?, months),
@@ -915,16 +857,9 @@ const createWork = async (req, res) => {
   }
 };
 
-/* ======================================
-   UPDATE WORK
-   Sirf wahi fields badalti hai jo request me aayi hain.
-   (Job History se update aane par months / dates ab mitte nahi.)
-   Date/field ko jaanbujh kar khaali (null / "") bhejo to wo clear hoti hai.
-====================================== */
 const updateWork = async (req, res) => {
   const { id } = req.params;
   const b = req.body || {};
-
   const monthsRaw = pick(b, "months", "month");
   const domain = pick(b, "domain");
   const sow = pick(b, "sow");
@@ -954,7 +889,6 @@ const updateWork = async (req, res) => {
     vals.push(val);
   };
 
-  // Month: khaali / na aaye to purana month rakho
   let parsedMonths = [];
   if (has(monthsRaw)) {
     parsedMonths = parseMonthsInput(monthsRaw);
@@ -980,13 +914,12 @@ const updateWork = async (req, res) => {
   if (has(internal_qc)) setCol("internal_qc", formattedInternalQc);
   if (has(amdocs_qc)) setCol("amdocs_qc", formattedAmdocsQc);
 
-  // OTP / QC jaanbujh kar khaali (ya 0) bheje to job_creation me bhi blank ho
   const clearedTextCols = [];
   if (has(otp) && cleanOtp(otp) === "") clearedTextCols.push("otp");
   if (has(amdocs_qc) && formattedAmdocsQc === "") clearedTextCols.push("amdocsQc");
   if (has(internal_qc) && formattedInternalQc === "") clearedTextCols.push("internalQc");
 
-  const clearedDateCols = []; // job_creation me bhi clear karne wali date columns
+  const clearedDateCols = []; 
   const dateVals = { receiveDate: null, ecdDate: null, submissionDate: null };
 
   if (has(receive_date)) {
@@ -1011,8 +944,6 @@ const updateWork = async (req, res) => {
       return res.status(404).json({ message: "Record not found", error: "No work row with this id" });
     }
     const oldJobId = clean(oldRows[0].job_id);
-
-    // Job ID na aaye to wahi purani Job ID maani jayegi
     const newJobId = has(job_id) ? clean(job_id) : oldJobId;
     if (has(job_id)) setCol("job_id", newJobId);
 
@@ -1021,8 +952,6 @@ const updateWork = async (req, res) => {
       `UPDATE work_updates SET ${sets.join(", ")} WHERE id = ?`,
       [...vals, id]
     );
-
-    // Job ID badli -> job_creation ki purani row rename karo (orphan na bane)
     const jobIdChanged =
       isRealJobId(oldJobId) && oldJobId.toLowerCase() !== newJobId.toLowerCase();
 
@@ -1046,8 +975,6 @@ const updateWork = async (req, res) => {
     }
 
     if (isRealJobId(newJobId)) {
-      // Report me jo date clear ki gayi, wo job_creation me bhi clear ho
-      // (warna getAllWork ka fallback purani date wapas dikha deta)
       for (const col of clearedDateCols) {
         await query(
           `UPDATE job_creation SET ${col} = NULL WHERE TRIM(jobId) = TRIM(?)`,
@@ -1089,10 +1016,6 @@ const updateWork = async (req, res) => {
   }
 };
 
-/* ======================================
-   GETTERS (Formatted to MM-DD-YYYY for Frontend)
-====================================== */
-// State (naam ya code) se region nikalo, case-insensitive
 const regionForState = (state) => {
   const raw = clean(state).toUpperCase();
   if (!raw) return "";
@@ -1105,13 +1028,10 @@ const regionForState = (state) => {
   return "";
 };
 
-// DB me pehle se jo 0 / 0% saved hai wo bhi screen par blank dikhe
-const blankIfZero = (v) => (isZeroValue(v) ? "" : v);
+const displayOtp = (v) => cleanOtp(v);
 
 const mapWorkRow = (row) => {
   const { jc_month, jc_receive, jc_ecd, jc_submission, ...work } = row;
-
-  // Region khaali ho (jaise single-create job) to state se bhar do
   if (isBlank(work.region)) {
     const derived = regionForState(work.state);
     if (derived) work.region = derived;
@@ -1120,14 +1040,11 @@ const mapWorkRow = (row) => {
   let monthsArr = safeParseJson(work.months, []);
   if (!Array.isArray(monthsArr)) monthsArr = monthsArr ? [monthsArr] : [];
   monthsArr = cleanMonthArray(monthsArr);
-
-  // work_updates me month khaali hai par Job Creation me hai -> wahi dikhao
   if (monthsArr.length === 0 && !isBlank(jc_month)) {
     monthsArr = cleanMonthArray([jc_month]);
   }
 
   const displayMonth = monthsArr.length > 0 ? monthsArr[monthsArr.length - 1] : "";
-
   const dateOf = (own, fallback) => (isBlank(own) ? fallback : own);
 
   return {
@@ -1135,7 +1052,7 @@ const mapWorkRow = (row) => {
     month: displayMonth,
     months: monthsArr,
     uom: safeParseJson(work.uom, {}),
-    otp: blankIfZero(work.otp),
+    otp: displayOtp(work.otp),
     amdocs_qc: blankIfZero(work.amdocs_qc),
     internal_qc: blankIfZero(work.internal_qc),
     receive_date: formatDateToMMDDYYYY(dateOf(work.receive_date, jc_receive)),
@@ -1148,11 +1065,6 @@ const mapWorkRow = (row) => {
 const getAllWork = async (req, res) => {
   try {
     const workRows = await query("SELECT *, updated_at FROM work_updates ORDER BY id ASC");
-
-    // Job Creation ki month / dates alag query se laate hain aur Node me jodte hain
-    // (SQL join nahi, taaki collation ki wajah se query kabhi fail na ho).
-    // Ye Job Creation data sirf fallback hai: agar work_updates me month/date khaali
-    // reh gayi ho to Report me wahi dikhe jo Job History me dikhta hai.
     const jcMap = new Map();
     try {
       const jcRows = await query(
@@ -1196,7 +1108,7 @@ const getFileData = (req, res) => {
       const { created_at, updated_at, file_name, id, ...rest } = row;
       return {
         ...rest,
-        otp: blankIfZero(rest.otp),
+        otp: displayOtp(rest.otp),
         amdocs_qc: blankIfZero(rest.amdocs_qc),
         internal_qc: blankIfZero(rest.internal_qc),
         receive_date: formatDateToMMDDYYYY(rest.receive_date),
@@ -1234,7 +1146,7 @@ const getMonthWiseReport = (req, res) => {
     if (err) return res.status(500).json([]);
     const formatted = rows.map(r => ({
       ...r,
-      otp: blankIfZero(r.otp),
+      otp: displayOtp(r.otp),
       amdocs_qc: blankIfZero(r.amdocs_qc),
       internal_qc: blankIfZero(r.internal_qc),
       receive_date: formatDateToMMDDYYYY(r.receive_date),
@@ -1282,12 +1194,6 @@ const deleteWork = async (req, res) => {
     const jobId = rows && rows.length > 0 ? clean(rows[0].job_id) : "";
 
     await query("DELETE FROM work_updates WHERE id = ?", [workId]);
-
-    // Ab job_creation ka delete bhi COMPLETE hone ke baad hi response jayega.
-    // Pehle response pehle chala jata tha aur frontend turant Job History
-    // dobara load kar leta tha, isliye purani row dikh jati thi (aur agar
-    // delete fail hota to error bhi chhup jata tha).
-    // (sirf tab jab us Job ID ki koi aur work row bachi na ho)
     await removeOrphanJobCreation([jobId]);
 
     return res.json({ message: "Deleted from both Work Controller and Job Creation successfully" });
