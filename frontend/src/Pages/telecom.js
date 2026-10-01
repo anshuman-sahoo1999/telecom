@@ -9,6 +9,7 @@ import {
 } from "recharts";
 import { FaTachometerAlt, FaChartBar, FaUsers, FaSitemap, FaPlusCircle, FaClock, FaHistory, FaLayerGroup, FaFolderOpen, FaPaperPlane, FaChartLine, FaTimes, FaLightbulb } from "react-icons/fa";
 import jsPDF from "jspdf";
+import html2canvas from "html2canvas";
 import geoData from "../us-states.json";
 import "../style/telecom.css";
 import WorkUpdate from "./WorkUpdate";
@@ -22,7 +23,7 @@ import TimesheetManagement from "../Pages/TimesheetManagement";
 import MasterDomainCreation from "../Pages/MasterDomainCreation";
 import CapacityForecast from "../Pages/CapacityForecast";
 import JobHistory from "../Pages/JobHistory";
-import KPIInsight from "./KPIInsight"; 
+import KPIInsight from "./KPIInsight";
 import KpiTrendModal from "../components/Kpitrendmodal.jsx";
 import axios from "axios";
 
@@ -147,7 +148,9 @@ const SHORT_NAMES = {
   'Oregon': 'OR', 'Pennsylvania': 'PA', 'Rhode Island': 'RI', 'South Carolina': 'SC',
   'South Dakota': 'SD', 'Tennessee': 'TN', 'Texas': 'TX', 'Utah': 'UT',
   'Vermont': 'VT', 'Virginia': 'VA', 'Washington': 'WA', 'West Virginia': 'WV',
-  'Wisconsin': 'WI', 'Wyoming': 'WY', 'District of Columbia': 'DC'
+  'Wisconsin': 'WI', 'Wyoming': 'WY', 'District of Columbia': 'DC',
+  // FIX: geojson me Puerto Rico ho to label "PU" aata tha
+  'Puerto Rico': 'PR'
 };
 const getShortStateName = (stateName) => SHORT_NAMES[stateName] || String(stateName || "").substring(0, 2).toUpperCase();
 
@@ -171,7 +174,6 @@ const REGIONS = ["All Region", "Northeast", "Southeast", "Midwest", "Southwest",
 
 const REGION_STATE_MAP = {
   Northeast: ["Maine", "New Hampshire", "Vermont", "Massachusetts", "Rhode Island", "Connecticut", "New York", "New Jersey", "Pennsylvania"],
-  // FIX: District of Columbia kisi region me nahi tha -> tooltip me "undefined - ..." aata tha
   Southeast: ["Delaware", "Maryland", "District of Columbia", "Virginia", "West Virginia", "North Carolina", "South Carolina", "Georgia", "Florida", "Alabama", "Mississippi", "Tennessee", "Arkansas", "Kentucky", "Louisiana"],
   Midwest: ["Ohio", "Michigan", "Indiana", "Illinois", "Wisconsin", "Minnesota", "Iowa", "Missouri", "North Dakota", "South Dakota", "Nebraska", "Kansas"],
   Southwest: ["Texas", "Oklahoma", "New Mexico", "Arizona"],
@@ -217,10 +219,13 @@ const tooltipCardStyle = {
 const BarChartTooltip = ({ active, payload, label }) => {
   if (!active || !payload || !payload.length) return null;
   const row = payload[0].payload;
+  // FIX: jis saal ka us month me data nahi hai, uski khali entry tooltip me "Job- undefined" dikhati thi
+  const items = payload.filter((p) => p.value !== null && p.value !== undefined);
+  if (!items.length) return null;
   return (
     <div style={tooltipCardStyle}>
       <div style={{ fontWeight: 800, marginBottom: 5, fontSize: 12.5, color: "#0f172a" }}>{label}</div>
-      {payload.map((p) => {
+      {items.map((p) => {
         const year = p.dataKey;
         const qc = row[`qc_${year}`];
         const otp = row[`otp_${year}`];
@@ -287,10 +292,17 @@ export default function TelecomMap() {
   const mapBoxRef = useRef(null);
   const pointerTypeRef = useRef("mouse");
   const lastFetchRef = useRef(0);
+  const mountedRef = useRef(true);
 
   const outletCtx = useOutletContext() || {};
   const menuOpen = outletCtx.menuOpen ?? true;
   const setMenuOpen = outletCtx.setMenuOpen || (() => {});
+
+  // FIX: unmount ke baad API response aaye to setState warning / leak na ho
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => { mountedRef.current = false; };
+  }, []);
 
   const handleKpiReport = (domain) => {
     setSelectedKpiDomain(domain);
@@ -432,6 +444,8 @@ export default function TelecomMap() {
       axios.get(`${API_BASE_URL}/api/master`),
       axios.get(`${API_BASE_URL}/api/work/state-wise-jobs`),
     ]);
+
+    if (!mountedRef.current) return;
 
     if (workRes.status === "fulfilled") {
       setAllWorkData(Array.isArray(workRes.value.data) ? workRes.value.data : []);
@@ -739,13 +753,14 @@ export default function TelecomMap() {
 
   // ---- Export ----
   const captureAndExport = async (type) => {
+    let clone = null;
     try {
       setIsExporting(true);
       setShowExport(false);
       await new Promise((res) => setTimeout(res, 200));
       const original = exportRef.current;
       if (!original) return;
-      const clone = original.cloneNode(true);
+      clone = original.cloneNode(true);
       const isCompactExport = window.innerWidth <= 1100;
       if (isCompactExport) {
         clone.classList.add("exporting");
@@ -795,13 +810,9 @@ export default function TelecomMap() {
       const exportBtn = clone.querySelector(".export");
       if (exportBtn) exportBtn.remove();
       document.body.appendChild(clone);
-      let canvas;
-      try {
-        canvas = await html2canvas(clone, { scale: 2, useCORS: true, backgroundColor: "#fff" });
-      } finally {
-        // html2canvas fail ho to bhi clone DOM se hat jaye
-        if (clone.parentNode) clone.parentNode.removeChild(clone);
-      }
+
+      const canvas = await html2canvas(clone, { scale: 2, useCORS: true, backgroundColor: "#fff" });
+
       const imgData = canvas.toDataURL(type === "jpeg" ? "image/jpeg" : "image/png");
       if (type === "pdf") {
         const pdf = new jsPDF("landscape", "mm", "a4");
@@ -823,9 +834,11 @@ export default function TelecomMap() {
         document.body.removeChild(link);
       }
     } catch (err) {
-      console.error(err);
+      console.error("Export failed:", err);
     } finally {
-      setIsExporting(false);
+      // html2canvas fail ho ya koi bhi error aaye — clone hamesha DOM se hat jaye
+      if (clone && clone.parentNode) clone.parentNode.removeChild(clone);
+      if (mountedRef.current) setIsExporting(false);
     }
   };
 
