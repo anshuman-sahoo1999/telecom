@@ -33,6 +33,9 @@ const lc = (s) => String(s ?? "").trim().toLowerCase();
 const firstFilled = (...vals) =>
   vals.find((v) => v !== null && v !== undefined && String(v).trim() !== "");
 
+// OTP / QC ka data na ho to screen par ye dikhega ("" = bilkul blank, "-" karna ho to yahan badlo)
+const BLANK_PCT = "";
+
 const parseMonthEntry = (m, fallbackYear) => {
   if (!m) return null;
   const match = String(m).trim().match(/^([A-Za-z]{3,})\W*(\d{2,4})?$/);
@@ -47,6 +50,7 @@ const parseMonthEntry = (m, fallbackYear) => {
 
 const getJobs = (item) => Number(firstFilled(item?.jobsDelivered, item?.jobs_delivered)) || 0;
 
+// "95%", "95", 0.95, 1 => 0-100 number. 1 (ya 0-1 ke beech) => percentage (1 = 100%)
 const parsePercent = (val) => {
   if (val === null || val === undefined || val === "") return null;
   const num = parseFloat(val.toString().replace("%", "").trim());
@@ -55,17 +59,33 @@ const parsePercent = (val) => {
   return Math.min(100, Math.max(0, Math.round(pct)));
 };
 
-// 0 value bhi valid (|| use karne se 0 gayab ho jata tha)
+// Amdocs QC: blank / invalid => null (calculation me count nahi hoga)
 const getQc = (item) => parsePercent(firstFilled(item?.amdocsQc, item?.amdocs_qc));
 
-const isOtpMet = (val) => {
-  if (val === null || val === undefined || val === "") return false;
-  const str = val.toString().trim().toLowerCase();
-  if (["yes", "y", "met", "true", "ok", "pass", "passed"].includes(str)) return true;
-  if (["no", "n", "not met", "false", "fail", "failed", "0"].includes(str)) return false;
-  const num = parseFloat(str.replace("%", ""));
-  return !isNaN(num) && num > 0;
+// OTP blank hai? (blank, "-", "NA", "N/A", 0, 0%) => blank maana jayega, calculation me count nahi hoga
+const isOtpBlank = (val) => {
+  if (val === null || val === undefined || val === false) return true;
+  const s = val.toString().trim().toLowerCase();
+  if (s === "" || s === "-" || s === "na" || s === "n/a") return true;
+  const n = Number(s.replace(/%$/, "").trim());
+  if (!isNaN(n) && n === 0) return true;
+  return false;
 };
+
+// OTP ki value (0-100) — QC ki tarah percentage:
+//   1 / "100%" => 100,  0.95 / "95%" => 95,  Yes/Met => 100,  No/Fail => 0,  blank => null
+const OTP_YES = ["yes", "y", "met", "true", "ok", "pass", "passed"];
+const OTP_NO = ["no", "n", "not met", "false", "fail", "failed"];
+const getOtpValue = (val) => {
+  if (isOtpBlank(val)) return null;
+  const s = val.toString().trim().toLowerCase();
+  if (OTP_YES.includes(s)) return 100;
+  if (OTP_NO.includes(s)) return 0;
+  return parsePercent(s);
+};
+
+// null / undefined => blank, warna "NN%"
+const pctText = (v) => (v === null || v === undefined || Number.isNaN(v) ? BLANK_PCT : `${v}%`);
 
 const parseUom = (raw) => {
   let uom = raw || {};
@@ -83,10 +103,12 @@ const getPerfColor = (val, fallback = "#64748b") => {
 };
 
 const getPerfBoxStyle = (val) => {
-  const v = val === null || val === undefined || isNaN(val) ? 0 : val;
-  const color = getPerfColor(v);
-  const bg = v >= 90 ? "#dcfce7" : v >= 80 ? "#ffedd5" : "#fee2e2";
-  const border = v >= 90 ? "#86efac" : v >= 80 ? "#fdba74" : "#fca5a5";
+  const isEmpty = val === null || val === undefined || isNaN(val);
+  const v = isEmpty ? 0 : val;
+  const color = isEmpty ? "#64748b" : getPerfColor(v);
+  // Data na ho to neutral grey box (red nahi)
+  const bg = isEmpty ? "#f1f5f9" : v >= 90 ? "#dcfce7" : v >= 80 ? "#ffedd5" : "#fee2e2";
+  const border = isEmpty ? "#e2e8f0" : v >= 90 ? "#86efac" : v >= 80 ? "#fdba74" : "#fca5a5";
   return {
     fontSize: "10.5px",
     fontWeight: 700,
@@ -98,6 +120,7 @@ const getPerfBoxStyle = (val) => {
     whiteSpace: "nowrap",
     display: "inline-block",
     flex: "0 0 auto",
+    minWidth: isEmpty ? "70px" : undefined,
   };
 };
 
@@ -209,8 +232,8 @@ const BarChartTooltip = ({ active, payload, label }) => {
             </div>
             <div style={{ display: "flex", gap: 10, paddingLeft: 13, whiteSpace: "nowrap" }}>
               <span style={{ color: "#2563eb" }}><b style={{ fontWeight: 800 }}>Job-</b> <b style={{ fontWeight: 800 }}>{p.value}</b></span>
-              <span style={{ color: getPerfColor(qc ?? 0) }}><b style={{ fontWeight: 800 }}>QC-</b> <b style={{ fontWeight: 800 }}>{qc !== null && qc !== undefined ? `${qc}%` : "0%"}</b></span>
-              <span style={{ color: getPerfColor(otp ?? 0) }}><b style={{ fontWeight: 800 }}>OTP-</b> <b style={{ fontWeight: 800 }}>{otp !== null && otp !== undefined ? `${otp}%` : "0%"}</b></span>
+              <span style={{ color: getPerfColor(qc) }}><b style={{ fontWeight: 800 }}>QC-</b> <b style={{ fontWeight: 800 }}>{pctText(qc)}</b></span>
+              <span style={{ color: getPerfColor(otp) }}><b style={{ fontWeight: 800 }}>OTP-</b> <b style={{ fontWeight: 800 }}>{pctText(otp)}</b></span>
             </div>
           </div>
         );
@@ -226,8 +249,8 @@ const PieChartTooltip = ({ active, payload }) => {
     <div style={{ ...tooltipCardStyle, lineHeight: 1.7 }}>
       <div style={{ fontWeight: 800, marginBottom: 4, fontSize: 12.5, color: "#0f172a" }}>{d.name}</div>
       <div style={{ color: "#2563eb" }}><b style={{ fontWeight: 800 }}>Job-</b> <b style={{ fontWeight: 800 }}>{d.jobs}</b> <span style={{ color: "#64748b", fontWeight: 600 }}>(<b style={{ fontWeight: 800 }}>{d.value}%</b>)</span></div>
-      <div style={{ color: getPerfColor(d.qc ?? 0) }}><b style={{ fontWeight: 800 }}>QC-</b> <b style={{ fontWeight: 800 }}>{d.qc !== null && d.qc !== undefined ? `${d.qc}%` : "0%"}</b></div>
-      <div style={{ color: getPerfColor(d.otp ?? 0) }}><b style={{ fontWeight: 800 }}>OTP-</b> <b style={{ fontWeight: 800 }}>{d.otp !== null && d.otp !== undefined ? `${d.otp}%` : "0%"}</b></div>
+      <div style={{ color: getPerfColor(d.qc) }}><b style={{ fontWeight: 800 }}>QC-</b> <b style={{ fontWeight: 800 }}>{pctText(d.qc)}</b></div>
+      <div style={{ color: getPerfColor(d.otp) }}><b style={{ fontWeight: 800 }}>OTP-</b> <b style={{ fontWeight: 800 }}>{pctText(d.otp)}</b></div>
     </div>
   );
 };
@@ -540,6 +563,7 @@ export default function TelecomMap() {
 
   const maxJobs = useMemo(() => Math.max(...Object.values(stateJobsMap), 1), [stateJobsMap]);
 
+  // State + domain wise: QC aur OTP sirf wahi rows count hongi jinme value bhari hai
   const stateDomainStatsMap = useMemo(() => {
     const map = {};
     currentFilterData.forEach((item) => {
@@ -548,7 +572,7 @@ export default function TelecomMap() {
       const domain = normalize(item.domain);
       if (!domain) return;
       if (!map[stateKey]) map[stateKey] = {};
-      if (!map[stateKey][domain]) map[stateKey][domain] = { jobs: 0, qcSum: 0, qcCount: 0, otp: 0, otpTotal: 0 };
+      if (!map[stateKey][domain]) map[stateKey][domain] = { jobs: 0, qcSum: 0, qcCount: 0, otpSum: 0, otpCount: 0 };
       const s = map[stateKey][domain];
       s.jobs += getJobs(item);
       const qcVal = getQc(item);
@@ -556,8 +580,12 @@ export default function TelecomMap() {
         s.qcSum += qcVal;
         s.qcCount += 1;
       }
-      s.otpTotal += 1;
-      if (isOtpMet(item.otp)) s.otp += 1;
+      // OTP ek percentage value hai (1 = 100%); blank ho to count nahi hoga
+      const otpVal = getOtpValue(item.otp);
+      if (otpVal !== null) {
+        s.otpSum += otpVal;
+        s.otpCount += 1;
+      }
     });
     return map;
   }, [currentFilterData]);
@@ -588,15 +616,19 @@ export default function TelecomMap() {
     currentFilterData.forEach((item) => {
       const domain = normalize(item.domain);
       if (!domain) return;
-      const s = map[domain] || (map[domain] = { jobs: 0, qcSum: 0, qcCount: 0, otpMet: 0, total: 0, uom: {} });
+      const s = map[domain] || (map[domain] = { jobs: 0, qcSum: 0, qcCount: 0, otpSum: 0, otpCount: 0, uom: {} });
       s.jobs += getJobs(item);
       const qcVal = getQc(item);
       if (qcVal !== null) {
         s.qcSum += qcVal;
         s.qcCount += 1;
       }
-      s.total += 1;
-      if (isOtpMet(item.otp)) s.otpMet += 1;
+      // OTP percentage value (1 = 100%); blank ho to calculation me shamil nahi
+      const otpVal = getOtpValue(item.otp);
+      if (otpVal !== null) {
+        s.otpSum += otpVal;
+        s.otpCount += 1;
+      }
 
       Object.entries(parseUom(item.uom)).forEach(([key, value]) => {
         if (!key || key === "undefined") return;
@@ -615,7 +647,7 @@ export default function TelecomMap() {
   };
   const getDomainOtpPercent = (domain) => {
     const s = domainStats[normalize(domain)];
-    return s && s.total > 0 ? Math.round((s.otpMet / s.total) * 100) : null;
+    return s && s.otpCount > 0 ? Math.round(s.otpSum / s.otpCount) : null;
   };
   // UOM ab list of { label, value } — "No.of poles" => "Poles"
   const getDomainUomList = (domain) => {
@@ -637,13 +669,13 @@ export default function TelecomMap() {
 
   // ---- Monthly chart data ----
   const { monthlyJobsSorted, allYears } = useMemo(() => {
-    const buckets = {}; // "idx-year" -> { jobs, qcSum, qcCount, otpMet, total }
+    const buckets = {}; // "idx-year" -> { jobs, qcSum, qcCount, otpSum, otpCount }
     const yearSet = new Set();
 
     currentFilterData.forEach((item) => {
       const jobs = getJobs(item);
       const qcVal = getQc(item);
-      const otpMet = isOtpMet(item.otp);
+      const otpVal = getOtpValue(item.otp);
       const seen = new Set(); // ek row me same month duplicate ho to ek hi baar
 
       (Array.isArray(item.months) ? item.months : []).forEach((m) => {
@@ -654,14 +686,17 @@ export default function TelecomMap() {
         seen.add(key);
         yearSet.add(String(p.year));
 
-        const b = buckets[key] || (buckets[key] = { jobs: 0, qcSum: 0, qcCount: 0, otpMet: 0, total: 0 });
+        const b = buckets[key] || (buckets[key] = { jobs: 0, qcSum: 0, qcCount: 0, otpSum: 0, otpCount: 0 });
         b.jobs += jobs;
         if (qcVal !== null) {
           b.qcSum += qcVal;
           b.qcCount += 1;
         }
-        b.total += 1;
-        if (otpMet) b.otpMet += 1;
+        // OTP blank ho to is month ke OTP% me count nahi hoga
+        if (otpVal !== null) {
+          b.otpSum += otpVal;
+          b.otpCount += 1;
+        }
       });
     });
 
@@ -673,7 +708,7 @@ export default function TelecomMap() {
         if (!b) return;
         row[year] = b.jobs;
         row[`qc_${year}`] = b.qcCount > 0 ? Math.round(b.qcSum / b.qcCount) : null;
-        row[`otp_${year}`] = b.total > 0 ? Math.round((b.otpMet / b.total) * 100) : null;
+        row[`otp_${year}`] = b.otpCount > 0 ? Math.round(b.otpSum / b.otpCount) : null;
       });
       return row;
     });
@@ -692,7 +727,7 @@ export default function TelecomMap() {
       jobs: s.jobs,
       value: grandTotal ? Number(((s.jobs / grandTotal) * 100).toFixed(2)) : 0,
       qc: s.qcCount > 0 ? Math.round(s.qcSum / s.qcCount) : null,
-      otp: s.total > 0 ? Math.round((s.otpMet / s.total) * 100) : null,
+      otp: s.otpCount > 0 ? Math.round(s.otpSum / s.otpCount) : null,
       color: COLORS[index % COLORS.length],
     }));
   }, [domainStats]);
@@ -896,8 +931,8 @@ export default function TelecomMap() {
                       <div className="kpiContent" style={{ minWidth: 0, maxWidth: "100%" }}>
                         <div className="kpiDomainModern">{domain}</div>
                         <div className="kpiQcOtpRow" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "nowrap", gap: "6px", margin: "8px 0 4px" }}>
-                          <span style={getPerfBoxStyle(qcAvg ?? 0)}>Amdocs QC: {qcAvg !== null ? `${qcAvg}%` : "0%"}</span>
-                          <span style={getPerfBoxStyle(otpPct ?? 0)}>OTP: {otpPct !== null ? `${otpPct}%` : "0%"}</span>
+                          <span style={getPerfBoxStyle(qcAvg)}>Amdocs QC: {pctText(qcAvg)}</span>
+                          <span style={getPerfBoxStyle(otpPct)}>OTP: {pctText(otpPct)}</span>
                         </div>
                         {/* Jobs aur UOM ek hi line me: UOM Jobs ke seedha right side me, plain text (no box / no color) */}
                         <div className="kpiValueRow" style={{ display: "flex", flexWrap: "nowrap", alignItems: "center", justifyContent: "flex-start", gap: "14px", width: "100%", maxWidth: "100%", minWidth: 0, boxSizing: "border-box", overflow: "hidden" }}>
@@ -1139,7 +1174,7 @@ export default function TelecomMap() {
                 // state + domain lookup case-insensitive
                 const domainStat = stateDomainStatsMap[lc(tooltipState)]?.[normalize(d)];
                 const qc = domainStat && domainStat.qcCount > 0 ? Math.round(domainStat.qcSum / domainStat.qcCount) : null;
-                const otp = domainStat && domainStat.otpTotal > 0 ? Math.round((domainStat.otp / domainStat.otpTotal) * 100) : null;
+                const otp = domainStat && domainStat.otpCount > 0 ? Math.round(domainStat.otpSum / domainStat.otpCount) : null;
                 return (
                   <div key={d} style={{ marginBottom: "8px", borderBottom: "1px solid #eee", paddingBottom: "5px" }}>
                     <div style={{ display: "flex", justifyContent: "space-between", fontWeight: "700", fontSize: "13px", marginBottom: "2px" }}>
@@ -1147,8 +1182,8 @@ export default function TelecomMap() {
                       <span style={{ color: "#16a34a", fontWeight: "700" }}>{jobs} Jobs</span>
                     </div>
                     <div style={{ display: "flex", justifyContent: "space-between", fontSize: "11px", fontWeight: "600" }}>
-                      <span style={{ color: getPerfColor(qc ?? 0) }}>QC: {qc !== null ? `${qc}%` : "0%"}</span>
-                      <span style={{ color: getPerfColor(otp ?? 0) }}>OTP: {otp !== null ? `${otp}%` : "0%"}</span>
+                      <span style={{ color: getPerfColor(qc) }}>QC: {pctText(qc)}</span>
+                      <span style={{ color: getPerfColor(otp) }}>OTP: {pctText(otp)}</span>
                     </div>
                   </div>
                 );
