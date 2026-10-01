@@ -893,19 +893,19 @@ export default function TelecomMap() {
                   return (
                     <div key={domain} className="kpiCardModern" style={{ "--themeColor": color }}>
                       <button type="button" className="kpiEyeBtnLeft" aria-label={`${domain} status report`} title={`${domain} status report`} onClick={(e) => { e.stopPropagation(); handleKpiReport(domain); }} style={{ background: `${color}15`, border: `1px solid ${color}70`, color: color }}>𝑖</button>
-                      <div className="kpiContent">
+                      <div className="kpiContent" style={{ minWidth: 0, maxWidth: "100%" }}>
                         <div className="kpiDomainModern">{domain}</div>
                         <div className="kpiQcOtpRow" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "nowrap", gap: "6px", margin: "8px 0 4px" }}>
                           <span style={getPerfBoxStyle(qcAvg ?? 0)}>Amdocs QC: {qcAvg !== null ? `${qcAvg}%` : "0%"}</span>
                           <span style={getPerfBoxStyle(otpPct ?? 0)}>OTP: {otpPct !== null ? `${otpPct}%` : "0%"}</span>
                         </div>
                         {/* Jobs aur UOM ek hi line me: UOM Jobs ke seedha right side me, plain text (no box / no color) */}
-                        <div className="kpiValueRow" style={{ display: "flex", flexWrap: "nowrap", alignItems: "center", justifyContent: "flex-start", gap: "10px" }}>
-                          <div className="kpiValueModern" style={{ flex: "0 0 auto", whiteSpace: "nowrap" }}>{getDomainJobs(domain)}<span> Jobs</span></div>
+                        <div className="kpiValueRow" style={{ display: "flex", flexWrap: "nowrap", alignItems: "center", justifyContent: "flex-start", gap: "14px", width: "100%", maxWidth: "100%", minWidth: 0, boxSizing: "border-box", overflow: "hidden" }}>
+                          <div className="kpiValueModern" style={{ flex: "0 0 auto", whiteSpace: "nowrap", minWidth: "64px" }}>{getDomainJobs(domain)}<span> Jobs</span></div>
                           {uomList.length > 0 && (
-                            <div className="kpiUomRight" style={{ flex: "1 1 0", minWidth: 0, display: "flex", flexWrap: "wrap", alignItems: "center", columnGap: "6px", rowGap: "2px", fontSize: "11px", fontWeight: 600, lineHeight: 1.35 }}>
+                            <div className="kpiUomRight" style={{ flex: "0 1 auto", marginLeft: "auto", maxWidth: "calc(100% - 78px)", textAlign: "right", justifyContent: "flex-end", minWidth: 0, display: "flex", flexWrap: "wrap", alignItems: "center", columnGap: "8px", rowGap: "4px", fontSize: "11px", fontWeight: 600, lineHeight: 1.35, overflowWrap: "anywhere", wordBreak: "break-word" }}>
                               {uomList.map((u, i) => (
-                                <span key={u.key} style={{ whiteSpace: "nowrap" }}>
+                                <span key={u.key} style={{ whiteSpace: "normal", maxWidth: "100%", overflowWrap: "anywhere" }}>
                                   {u.label}: {u.value}{i < uomList.length - 1 ? " |" : ""}
                                 </span>
                               ))}
