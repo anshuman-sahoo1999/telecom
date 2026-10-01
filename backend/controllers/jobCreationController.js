@@ -9,12 +9,30 @@ const isZeroValue = (v) => {
 };
 
 const blankIfZero = (v) => (isZeroValue(v) ? "" : v);
+const formatPercentage = (value) => {
+  if (value === null || value === undefined || value === "") return "";
+  const str = value.toString().trim();
+  if (str === "") return "";
+  if (isZeroValue(str)) return "";
+  if (str.endsWith("%")) return str;
 
+  const num = Number(str);
+  if (!isNaN(num)) {
+    if (num > 0 && num <= 1) {
+      return `${Number((num * 100).toFixed(2))}%`;
+    }
+    return `${num}%`;
+  }
+  return str;
+};
+
+const displayPct = (v) => formatPercentage(v);
 const qcVal = (v) => {
   if (v === undefined || v === null) return null;
   if (isZeroValue(v)) return null;
   if (clean(v) === "") return null;
-  return v;
+  const f = formatPercentage(v);
+  return f === "" ? null : f;
 };
 
 let stateData = {};
@@ -264,15 +282,16 @@ exports.getAllJobs = (req, res) => {
         return v || null;
       };
 
+      // OTP / QC hamesha percentage: DB me "1" ho to "100%", 0 / blank => ""
       jcRows.forEach((row) => {
-        row.otp = blankIfZero(row.otp);
-        row.amdocsQc = blankIfZero(row.amdocsQc);
-        row.internalQc = blankIfZero(row.internalQc);
+        row.otp = displayPct(row.otp);
+        row.amdocsQc = displayPct(row.amdocsQc);
+        row.internalQc = displayPct(row.internalQc);
       });
       wuRows.forEach((row) => {
-        row.otp = blankIfZero(row.otp);
-        row.amdocs_qc = blankIfZero(row.amdocs_qc);
-        row.internal_qc = blankIfZero(row.internal_qc);
+        row.otp = displayPct(row.otp);
+        row.amdocs_qc = displayPct(row.amdocs_qc);
+        row.internal_qc = displayPct(row.internal_qc);
       });
 
       const jobMap = new Map();
@@ -308,6 +327,9 @@ exports.getAllJobs = (req, res) => {
             ecdDate: row.ecdDate || existing.ecdDate,
             amdocs_qc: row.amdocs_qc || existing.amdocs_qc,
             internal_qc: row.internal_qc || existing.internal_qc,
+            // camelCase fields bhi same merged value (Job History / Report dono me same dikhe)
+            amdocsQc: row.amdocs_qc || existing.amdocsQc,
+            internalQc: row.internal_qc || existing.internalQc,
             otp: row.otp || existing.otp,
             updated_at: row.updated_at || existing.updated_at,
             workId: row.id,
@@ -317,6 +339,8 @@ exports.getAllJobs = (req, res) => {
           jobMap.set(k, {
             ...rowNoMonths,
             month: monthFromWork(workMonths),
+            amdocsQc: row.amdocs_qc,
+            internalQc: row.internal_qc,
             jobId: row.jobId.toString().trim(),
             id: row.id,
             jcId: null,
