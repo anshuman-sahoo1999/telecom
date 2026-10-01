@@ -899,28 +899,14 @@ export default function TelecomMap() {
                           <span style={getPerfBoxStyle(qcAvg ?? 0)}>Amdocs QC: {qcAvg !== null ? `${qcAvg}%` : "0%"}</span>
                           <span style={getPerfBoxStyle(otpPct ?? 0)}>OTP: {otpPct !== null ? `${otpPct}%` : "0%"}</span>
                         </div>
-                        {/* Jobs (left) + Sub-domain UOM chips (bilkul right side) */}
-                        <div className="kpiValueRow" style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: "6px 10px" }}>
-                          <div className="kpiValueModern">{getDomainJobs(domain)}<span> Jobs</span></div>
+                        {/* Jobs aur UOM ek hi line me: UOM Jobs ke seedha right side me, plain text (no box / no color) */}
+                        <div className="kpiValueRow" style={{ display: "flex", flexWrap: "nowrap", alignItems: "center", justifyContent: "flex-start", gap: "10px" }}>
+                          <div className="kpiValueModern" style={{ flex: "0 0 auto", whiteSpace: "nowrap" }}>{getDomainJobs(domain)}<span> Jobs</span></div>
                           {uomList.length > 0 && (
-                            <div className="kpiUomRight" style={{ display: "flex", flexWrap: "wrap", justifyContent: "flex-end", alignItems: "center", gap: "4px", marginLeft: "auto", minWidth: 0 }}>
-                              {uomList.map((u) => (
-                                <span
-                                  key={u.key}
-                                  title={`${u.label}: ${u.value}`}
-                                  style={{
-                                    fontSize: "10.5px",
-                                    fontWeight: 700,
-                                    color: color,
-                                    background: `${color}15`,
-                                    border: `1px solid ${color}50`,
-                                    borderRadius: "6px",
-                                    padding: "3px 7px",
-                                    whiteSpace: "nowrap",
-                                    lineHeight: 1.3,
-                                  }}
-                                >
-                                  {u.label}: {u.value}
+                            <div className="kpiUomRight" style={{ flex: "1 1 0", minWidth: 0, display: "flex", flexWrap: "wrap", alignItems: "center", columnGap: "6px", rowGap: "2px", fontSize: "11px", fontWeight: 600, lineHeight: 1.35 }}>
+                              {uomList.map((u, i) => (
+                                <span key={u.key} style={{ whiteSpace: "nowrap" }}>
+                                  {u.label}: {u.value}{i < uomList.length - 1 ? " |" : ""}
                                 </span>
                               ))}
                             </div>
