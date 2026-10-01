@@ -1,6 +1,5 @@
-
 .kpiq-page {
-  --kpiq-head-h: 40px; 
+  --kpiq-head-h: 40px;
   width: 100%;
   box-sizing: border-box;
 }
@@ -94,11 +93,14 @@
   border-bottom: 1px solid #e2e8f0; border-right: 1px solid #eef2f7; white-space: nowrap;
 }
 .kpiq-table thead th { background: #0f4a63; color: #fff; font-weight: 700; text-align: center; position: sticky; top: 0; z-index: 2; border-right-color: rgba(255,255,255,0.12); }
+
+/* 2 header rows: [Quality Rating | Domain] / [JOB Completed Month | domain names] */
 .kpiq-table thead tr.first th { height: var(--kpiq-head-h); }
-.kpiq-table thead tr.second th { top: var(--kpiq-head-h); }
+.kpiq-table thead tr.second th { top: var(--kpiq-head-h); border-top: 1px solid rgba(255,255,255,0.18); }
 .kpiq-table tbody tr:last-child td { border-bottom: none; }
 
-.kpiq-table .stickyCol { position: sticky; left: 0; z-index: 1; background: #fff; font-weight: 800; text-align: left; color: #0f172a; border-right: 1px solid #e2e8f0; }
+/* Month Year column: centered */
+.kpiq-table .stickyCol { position: sticky; left: 0; z-index: 1; background: #fff; font-weight: 800; text-align: center; color: #0f172a; border-right: 1px solid #e2e8f0; }
 .kpiq-table thead .stickyCol { background: #0f4a63; color: #fff; z-index: 3; text-align: center; min-width: 150px; }
 .kpiq-table .stickyRight { position: sticky; right: 0; z-index: 1; background: #fff; border-left: 1px solid #e2e8f0; }
 .kpiq-table thead .stickyRight { background: #0f4a63; color: #fff; z-index: 3; min-width: 150px; }
@@ -145,7 +147,7 @@
 
 /* Info popup */
 .kpiq-info-wrap { position: relative; display: inline-flex; align-items: center; }
-.kpiq-info-btn { background: transparent; border: none; padding: 0 0 0 6px; cursor: pointer; color: #0f4a63; font-size: 15px; display: inline-flex; align-items: center; }
+.kpiq-info-btn { background: transparent; border: none; padding: 0 0 0 20px; cursor: pointer; color: #0f4a63; font-size: 17px; display: inline-flex; align-items: center; }
 .kpiq-info-pop {
   position: absolute; top: 24px; left: -8px; z-index: 5; width: 250px; max-width: calc(100vw - 48px);
   background: #fff; border: 1px solid #e2e8f0; border-radius: 10px; box-shadow: 0 10px 28px rgba(0,0,0,0.22);
@@ -202,6 +204,7 @@
    MOBILE (up to 768px)
 ====================================== */
 @media (max-width: 768px) {
+  .kpiq-page { --kpiq-head-h: 36px; }
   .kpiq-title { font-size: 22px; margin-bottom: 14px; }
   .kpiq-top { align-items: stretch; }
   .kpiq-top .kpiq-field { flex: 1 1 100%; }
