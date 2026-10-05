@@ -495,7 +495,7 @@ function CreateModal({ currentYear, defaultMonth, domainList, rows, onClose, onS
 /* ======================================
    DELETE CONFIRM POPUP (whole month row)
 ====================================== */
-function ConfirmDelete({ period, count, busy, onCancel, onConfirm }) {
+function ConfirmDelete({ period, kpi, count, busy, onCancel, onConfirm }) {
   useEffect(() => {
     const onKey = (e) => {
       if (e.key === "Escape" && !busy) onCancel();
@@ -516,7 +516,7 @@ function ConfirmDelete({ period, count, busy, onCancel, onConfirm }) {
         <div className="kpiq-modal-body">
           <div style={{ fontSize: 14, color: "#0f172a", lineHeight: 1.5 }}>
             Are you sure you want to delete all <b>{count}</b> {count === 1 ? "entry" : "entries"} of{" "}
-            <b>{MONTH_NAMES[period.month - 1]} {period.year}</b>? This cannot be undone.
+            <b>{MONTH_NAMES[period.month - 1]} {period.year}</b> from <b>{kpi}</b>? This cannot be undone.
           </div>
         </div>
         <div className="kpiq-modal-foot">
@@ -624,44 +624,53 @@ export default function KPIInsight({ domains = [] }) {
     return [...set].sort((a, b) => b - a);
   }, [rows, currentYear]);
 
-  // Table abhi sirf Quality Rating ka hai (baaki KPIs database me save hote hain)
-  const qualityRows = useMemo(() => rows.filter((r) => (r.kpi || "Quality Rating") === "Quality Rating"), [rows]);
+  // Har KPI ka apna table: rows = Month + Year, columns = domain + scope
+  const views = useMemo(() => {
+    const out = {};
+    KPI_OPTIONS.forEach((kpi) => {
+      const yearRows = rows.filter(
+        (r) => (r.kpi || "Quality Rating") === kpi && selected.has(mk(r.year, r.month))
+      );
 
-  // Table: rows = Month + Year, columns = domain + scope
-  const view = useMemo(() => {
-    const yearRows = qualityRows.filter((r) => selected.has(mk(r.year, r.month)));
+      const colMap = new Map();
+      yearRows.forEach((r) => {
+        const key = colKeyOf(r);
+        if (!colMap.has(key)) colMap.set(key, { key, domain: r.domain, scope: r.scope || "" });
+      });
+      const cols = [...colMap.values()].sort(byDomainScope);
 
-    const colMap = new Map();
-    yearRows.forEach((r) => {
-      const key = colKeyOf(r);
-      if (!colMap.has(key)) colMap.set(key, { key, domain: r.domain, scope: r.scope || "" });
+      const periodMap = new Map();
+      yearRows.forEach((r) => {
+        const k = mk(r.year, r.month);
+        if (!periodMap.has(k)) periodMap.set(k, { k, year: r.year, month: r.month });
+      });
+      const periods = [...periodMap.values()].sort((a, b) => a.year - b.year || a.month - b.month);
+
+      const cell = {};
+      yearRows.forEach((r) => {
+        cell[`${mk(r.year, r.month)}|${colKeyOf(r)}`] = r;
+      });
+
+      out[kpi] = { cols, periods, cell };
     });
-    const cols = [...colMap.values()].sort(byDomainScope);
+    return out;
+  }, [rows, selected]);
 
-    const periodMap = new Map();
-    yearRows.forEach((r) => {
-      const k = mk(r.year, r.month);
-      if (!periodMap.has(k)) periodMap.set(k, { k, year: r.year, month: r.month });
-    });
-    const periods = [...periodMap.values()].sort((a, b) => a.year - b.year || a.month - b.month);
-
-    const cell = {};
-    yearRows.forEach((r) => {
-      cell[`${mk(r.year, r.month)}|${colKeyOf(r)}`] = r;
-    });
-
-    return { cols, periods, cell };
-  }, [qualityRows, selected]);
+  // Sirf wahi KPI tables dikhenge jinka data hai (Quality Rating, On Time Delivery, Repeat - isi order me)
+  const visibleKpis = KPI_OPTIONS.filter((k) => views[k].cols.length > 0);
 
   const entriesOf = useCallback(
-    (p) => qualityRows.filter((r) => r.year === p.year && r.month === p.month).sort(byDomainScope),
-    [qualityRows]
+    (kpi, p) =>
+      rows
+        .filter((r) => (r.kpi || "Quality Rating") === kpi && r.year === p.year && r.month === p.month)
+        .sort(byDomainScope),
+    [rows]
   );
 
   // If the row being edited disappears (e.g. data reloaded), leave edit mode
   useEffect(() => {
-    if (editing && !editing.saving && !view.periods.some((p) => p.k === editing.k)) setEditing(null);
-  }, [view.periods, editing]);
+    if (editing && !editing.saving && !views[editing.kpi].periods.some((p) => p.k === editing.k)) setEditing(null);
+  }, [views, editing]);
 
   const handleCreated = (data, y, m) => {
     setModal(null);
@@ -671,13 +680,14 @@ export default function KPIInsight({ domains = [] }) {
   };
 
   /* ---------- Inline row edit ---------- */
-  const startEdit = (p) => {
+  const startEdit = (kpi, p) => {
+    const view = views[kpi];
     const drafts = {};
     view.cols.forEach((c) => {
       const r = view.cell[`${p.k}|${c.key}`];
       drafts[c.key] = r ? String(Number(r.quality)) : "";
     });
-    setEditing({ k: p.k, period: p, drafts, saving: false, error: "" });
+    setEditing({ kpi, k: p.k, period: p, drafts, saving: false, error: "" });
   };
 
   const cancelEdit = () => setEditing(null);
@@ -696,7 +706,8 @@ export default function KPIInsight({ domains = [] }) {
 
   const saveEdit = async () => {
     if (!editing || editing.saving) return;
-    const { period, drafts } = editing;
+    const { kpi, period, drafts } = editing;
+    const view = views[kpi];
     const jobs = [];
     view.cols.forEach((c) => {
       const old = view.cell[`${period.k}|${c.key}`];
@@ -709,7 +720,7 @@ export default function KPIInsight({ domains = [] }) {
       } else if (raw !== "") {
         jobs.push(
           axios.post(`${API_BASE_URL}/api/kpi-insight`, {
-            kpi: "Quality Rating",
+            kpi,
             year: period.year,
             month: period.month,
             domain: c.domain,
@@ -737,7 +748,7 @@ export default function KPIInsight({ domains = [] }) {
 
   const confirmDelete = async () => {
     if (!deleteTarget || deleting) return;
-    const list = entriesOf(deleteTarget);
+    const list = entriesOf(deleteTarget.kpi, deleteTarget);
     try {
       setDeleting(true);
       const results = await Promise.allSettled(
@@ -758,7 +769,7 @@ export default function KPIInsight({ domains = [] }) {
 
   /* ---------- Generate Excel (.xlsx, same as table, colour by %, no Action column) ---------- */
   const generateExcel = async () => {
-    if (!view.cols.length || !view.periods.length || exporting) return;
+    if (!visibleKpis.length || exporting) return;
     let ExcelJS;
     try {
       setExporting(true);
@@ -778,70 +789,80 @@ export default function KPIInsight({ domains = [] }) {
       const side = (hex) => ({ style: "thin", color: { argb: argb(hex) } });
       const box = (hex) => ({ top: side(hex), left: side(hex), bottom: side(hex), right: side(hex) });
       const center = { horizontal: "center", vertical: "middle", wrapText: true };
-      const lastCol = view.cols.length + 1;
-      const HEAD_ROWS = 2; // row 1: Quality Rating | Domain, row 2: JOB Completed Month | domain names
 
-      // ---- Header (2 rows) ----
-      ws.getCell(1, 1).value = "Quality Rating";
-      ws.getCell(1, 2).value = "Domain";
-      if (lastCol > 2) ws.mergeCells(1, 2, 1, lastCol);
+      // Teeno KPI tables ek ke niche ek (beech me 1 khali row), same look as screen
+      let startRow = 1;
+      let maxCols = 2;
+      visibleKpis.forEach((kpi) => {
+        const v = views[kpi];
+        const lastCol = v.cols.length + 1;
+        maxCols = Math.max(maxCols, lastCol);
+        const r1 = startRow;
+        const r2 = startRow + 1;
 
-      ws.getCell(2, 1).value = "JOB Completed Month";
-      view.cols.forEach((c, i) => {
-        ws.getCell(2, i + 2).value = c.scope ? `${c.domain}\n${c.scope}` : c.domain;
-      });
+        ws.getCell(r1, 1).value = kpi;
+        ws.getCell(r1, 2).value = "Domain";
+        if (lastCol > 2) ws.mergeCells(r1, 2, r1, lastCol);
 
-      for (let r = 1; r <= HEAD_ROWS; r++) {
-        for (let c = 1; c <= lastCol; c++) {
-          const cell = ws.getCell(r, c);
-          cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF0F4A63" } };
-          cell.font = { bold: true, color: { argb: "FFFFFFFF" }, size: 11 };
-          cell.alignment = center;
-          cell.border = box("#CBD5E1");
-        }
-      }
-      ws.getRow(1).height = 24;
-      ws.getRow(2).height = 34;
-
-      // ---- Data rows ----
-      view.periods.forEach((p, ri) => {
-        const rowNo = ri + HEAD_ROWS + 1;
-        const label = ws.getCell(rowNo, 1);
-        label.value = `${MONTH_NAMES[p.month - 1]} ${p.year}`;
-        label.font = { bold: true };
-        label.alignment = { horizontal: "center", vertical: "middle" };
-        label.border = box("#CBD5E1");
-
-        view.cols.forEach((c, ci) => {
-          const cell = ws.getCell(rowNo, ci + 2);
-          const r = view.cell[`${p.k}|${c.key}`];
-          if (!r) {
-            cell.border = box("#CBD5E1");
-            return;
-          }
-          const q = Number(Number(r.quality).toFixed(2));
-          const b = getBand(q);
-          const decimals = (String(q).split(".")[1] || "").length;
-          cell.value = Math.round(q * 100) / 10000;
-          cell.numFmt = decimals === 0 ? "0%" : decimals === 1 ? "0.0%" : "0.00%";
-          cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: argb(b.bg) } };
-          cell.font = { bold: true, color: { argb: argb(b.color) } };
-          cell.alignment = center;
-          cell.border = box(b.border);
+        ws.getCell(r2, 1).value = "JOB Completed Month";
+        v.cols.forEach((c, i) => {
+          ws.getCell(r2, i + 2).value = c.scope ? `${c.domain}\n${c.scope}` : c.domain;
         });
+
+        for (let r = r1; r <= r2; r++) {
+          for (let c = 1; c <= lastCol; c++) {
+            const cell = ws.getCell(r, c);
+            cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF0F4A63" } };
+            cell.font = { bold: true, color: { argb: "FFFFFFFF" }, size: 11 };
+            cell.alignment = center;
+            cell.border = box("#CBD5E1");
+          }
+        }
+        ws.getRow(r1).height = 24;
+        ws.getRow(r2).height = 34;
+
+        v.periods.forEach((p, ri) => {
+          const rowNo = r2 + 1 + ri;
+          const label = ws.getCell(rowNo, 1);
+          label.value = `${MONTH_NAMES[p.month - 1]} ${p.year}`;
+          label.font = { bold: true };
+          label.alignment = { horizontal: "center", vertical: "middle" };
+          label.border = box("#CBD5E1");
+
+          v.cols.forEach((c, ci) => {
+            const cell = ws.getCell(rowNo, ci + 2);
+            const r = v.cell[`${p.k}|${c.key}`];
+            if (!r) {
+              cell.border = box("#CBD5E1");
+              return;
+            }
+            const q = Number(Number(r.quality).toFixed(2));
+            const b = getBand(q);
+            const decimals = (String(q).split(".")[1] || "").length;
+            cell.value = Math.round(q * 100) / 10000;
+            cell.numFmt = decimals === 0 ? "0%" : decimals === 1 ? "0.0%" : "0.00%";
+            cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: argb(b.bg) } };
+            cell.font = { bold: true, color: { argb: argb(b.color) } };
+            cell.alignment = center;
+            cell.border = box(b.border);
+          });
+        });
+
+        startRow = r2 + v.periods.length + 2; // next table starts after 1 blank row
       });
 
       ws.getColumn(1).width = 22;
-      for (let c = 2; c <= lastCol; c++) ws.getColumn(c).width = 18;
-      ws.views = [{ state: "frozen", xSplit: 1, ySplit: HEAD_ROWS }];
+      for (let c = 2; c <= maxCols; c++) ws.getColumn(c).width = 18;
+      ws.views = [{ state: "frozen", xSplit: 1 }];
 
-      const first = view.periods[0];
-      const last = view.periods[view.periods.length - 1];
+      const allPeriods = visibleKpis
+        .flatMap((k) => views[k].periods)
+        .sort((a, b) => a.year - b.year || a.month - b.month);
+      const first = allPeriods[0];
+      const last = allPeriods[allPeriods.length - 1];
       const tag = (p) => `${MONTH_NAMES[p.month - 1]}${p.year}`;
       const fileName =
-        first.k === last.k
-          ? `KPI_Quality_Rating_${tag(first)}.xlsx`
-          : `KPI_Quality_Rating_${tag(first)}_to_${tag(last)}.xlsx`;
+        first.k === last.k ? `KPI_Insight_${tag(first)}.xlsx` : `KPI_Insight_${tag(first)}_to_${tag(last)}.xlsx`;
 
       const buffer = await wb.xlsx.writeBuffer();
       const blob = new Blob([buffer], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
@@ -886,8 +907,8 @@ export default function KPIInsight({ domains = [] }) {
             type="button"
             className="kpiq-btn excel"
             onClick={generateExcel}
-            disabled={loading || exporting || view.cols.length === 0}
-            title="Generate Excel of the table"
+            disabled={loading || exporting || visibleKpis.length === 0}
+            title="Generate Excel of all KPI tables"
           >
             <FaFileExcel /> {exporting ? "Generating..." : "Generate"}
           </button>
@@ -901,7 +922,7 @@ export default function KPIInsight({ domains = [] }) {
         {editing && (
           <div className="kpiq-edit-note">
             <span>
-              Editing {MONTH_NAMES[editing.period.month - 1]} {editing.period.year}: change a value, fill an empty box to add, or clear a box to remove it. Then click Save.
+              Editing {editing.kpi} - {MONTH_NAMES[editing.period.month - 1]} {editing.period.year}: change a value, fill an empty box to add, or clear a box to remove it. Then click Save.
             </span>
             {editing.error && <span className="kpiq-err">{editing.error}</span>}
           </div>
@@ -914,18 +935,21 @@ export default function KPIInsight({ domains = [] }) {
             <div style={{ color: "#dc2626", fontWeight: 700, marginBottom: 10 }}>{loadError}</div>
             <button type="button" className="kpiq-btn" onClick={() => { setLoading(true); loadAll(); }}>Retry</button>
           </div>
-        ) : view.cols.length === 0 ? (
+        ) : visibleKpis.length === 0 ? (
           <div className="kpiq-empty">
             {selected.size === 0
               ? "Please select at least one month."
-              : "No Quality Rating data for this selection. Click Create to add."}
+              : "No KPI data for this selection. Click Create to add."}
           </div>
         ) : (
-          <div className="kpiq-scroll">
+          visibleKpis.map((kpi, idx) => {
+          const view = views[kpi];
+          return (
+          <div className="kpiq-scroll" key={kpi} style={idx > 0 ? { marginTop: 22 } : undefined}>
             <table className="kpiq-table">
               <thead>
                 <tr className="first">
-                  <th className="stickyCol">Quality Rating</th>
+                  <th className="stickyCol">{kpi}</th>
                   <th colSpan={view.cols.length}>Domain</th>
                   <th className="stickyRight" rowSpan={2}>Action</th>
                 </tr>
@@ -941,7 +965,7 @@ export default function KPIInsight({ domains = [] }) {
               </thead>
               <tbody>
                 {view.periods.map((p) => {
-                  const isEdit = !!editing && editing.k === p.k;
+                  const isEdit = !!editing && editing.kpi === kpi && editing.k === p.k;
                   return (
                     <tr key={p.k} className={isEdit ? "editing" : ""}>
                       <td className="stickyCol">{MONTH_NAMES[p.month - 1]} {p.year}</td>
@@ -990,10 +1014,10 @@ export default function KPIInsight({ domains = [] }) {
                             </>
                           ) : (
                             <>
-                              <button type="button" className="kpiq-act edit" onClick={() => startEdit(p)} disabled={!!editing} title="Edit" aria-label="Edit row">
+                              <button type="button" className="kpiq-act edit" onClick={() => startEdit(kpi, p)} disabled={!!editing} title="Edit" aria-label="Edit row">
                                 <FaEdit />
                               </button>
-                              <button type="button" className="kpiq-act del" onClick={() => setDeleteTarget(p)} disabled={!!editing} title="Delete" aria-label="Delete row">
+                              <button type="button" className="kpiq-act del" onClick={() => setDeleteTarget({ ...p, kpi })} disabled={!!editing} title="Delete" aria-label="Delete row">
                                 <FaTrashAlt />
                               </button>
                             </>
@@ -1006,6 +1030,8 @@ export default function KPIInsight({ domains = [] }) {
               </tbody>
             </table>
           </div>
+          );
+          })
         )}
       </div>
 
@@ -1029,7 +1055,8 @@ export default function KPIInsight({ domains = [] }) {
       {deleteTarget && (
         <ConfirmDelete
           period={deleteTarget}
-          count={entriesOf(deleteTarget).length}
+          kpi={deleteTarget.kpi}
+          count={entriesOf(deleteTarget.kpi, deleteTarget).length}
           busy={deleting}
           onCancel={() => setDeleteTarget(null)}
           onConfirm={confirmDelete}
