@@ -372,7 +372,7 @@ function CreateModal({ currentYear, defaultMonth, domainList, rows, onClose, onS
         scope,
         quality: qualityNumber,
       });
-      onSaved(res.data || {}, Number(year), Number(month));
+      onSaved(res.data || {}, Number(year), Number(month), kpi);
     } catch (err) {
       setError(err?.response?.data?.message || err.message || "Failed to save");
       setSaving(false);
@@ -699,9 +699,9 @@ export default function KPIInsight({ domains = [] }) {
     if (editing && !editing.saving && !views[editing.kpi].periods.some((p) => p.k === editing.k)) setEditing(null);
   }, [views, editing]);
 
-  const handleCreated = (data, y, m) => {
+  const handleCreated = (data, y, m, kpi) => {
     setModal(null);
-    setToast({ type: "success", text: data.message || "Saved successfully" });
+    setToast({ type: "success", text: `${kpi} ${data.action === "updated" ? "updated" : "created"} successfully` });
     setSelected((prev) => new Set(prev).add(mk(y, m)));
     loadAll();
   };
