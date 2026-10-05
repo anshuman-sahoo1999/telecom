@@ -242,7 +242,7 @@ function MonthPicker({ years, selected, onChange, disabled }) {
 
 /* ======================================
    CREATE POPUP
-   CHANGE: "Choose Month, Year" me ab sirf CURRENT YEAR ke 12 months aate hain.
+   "Choose Month, Year" me sirf CURRENT YEAR ke 12 months aate hain.
    Default = current month + current year.
 ====================================== */
 function CreateModal({ currentYear, defaultMonth, domainList, rows, onClose, onSaved }) {
@@ -1008,7 +1008,7 @@ export default function KPIInsight({ domains = [] }) {
                                   type="text"
                                   inputMode="decimal"
                                   autoComplete="off"
-                                  placeholder="-"
+                                  placeholder="_"
                                   aria-label={`${c.domain} ${c.scope}`.trim()}
                                   value={raw}
                                   disabled={editing.saving}
@@ -1026,7 +1026,11 @@ export default function KPIInsight({ domains = [] }) {
                           );
                         }
                         const r = view.cell[`${p.k}|${c.key}`];
-                        return <td key={c.key}>{r ? pill(r.quality) : ""}</td>;
+                        return (
+                          <td key={c.key}>
+                            {r ? pill(r.quality) : <span className="kpiq-blank" title="No data">_</span>}
+                          </td>
+                        );
                       })}
                       <td className="stickyRight">
                         <div className="kpiq-act-wrap">
