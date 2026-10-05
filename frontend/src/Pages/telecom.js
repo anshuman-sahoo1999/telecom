@@ -135,6 +135,17 @@ const formatUomLabel = (key) => {
   return low.charAt(0).toUpperCase() + low.slice(1);
 };
 
+// Jin domains me kuch UOM (jaise Poles) hota hi nahi, wahan wo kabhi nahi dikhega.
+// Aage koi aur domain/UOM chhupana ho to sirf yahan add karna (label lowercase me likhna).
+const HIDDEN_UOM_BY_DOMAIN = {
+  F2: ["poles"],
+  PERMIT: ["poles"],
+};
+const isUomHidden = (domain, key) => {
+  const list = HIDDEN_UOM_BY_DOMAIN[normalize(domain)];
+  return !!list && list.includes(formatUomLabel(key).toLowerCase());
+};
+
 const SHORT_NAMES = {
   'Alabama': 'AL', 'Alaska': 'AK', 'Arizona': 'AZ', 'Arkansas': 'AR',
   'California': 'CA', 'Colorado': 'CO', 'Connecticut': 'CT', 'Delaware': 'DE',
@@ -651,7 +662,12 @@ export default function TelecomMap() {
         if (!key || key === "undefined") return;
         const lowerKey = key.toString().toLowerCase();
         if (lowerKey.includes("date") || lowerKey.includes("submission") || lowerKey.includes("time")) return;
-        s.uom[key] = (s.uom[key] || 0) + (Number(value) || 0);
+        // FIX: is domain me ye UOM hota hi nahi (jaise F2 / PERMIT me Poles)
+        if (isUomHidden(domain, key)) return;
+        // FIX: sirf real number > 0 count hoga (0 / text / blank se "Poles: 0" nahi banega)
+        const n = Number(value);
+        if (!Number.isFinite(n) || n === 0) return;
+        s.uom[key] = (s.uom[key] || 0) + n;
       });
     });
     return map;
