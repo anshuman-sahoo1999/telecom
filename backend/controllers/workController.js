@@ -615,7 +615,9 @@ const importExcel = async (req, res) => {
                   }
 
                   const mergedUOM = { ...existingUOM, ...uom };
-                  const newJobsDelivered = (Number(existing.jobs_delivered) || 0) + 1;
+
+                  // CHANGED: pehle yahan +1 hota tha (2, 3...). Ab ek row = hamesha 1 job delivered.
+                  const newJobsDelivered = 1;
 
                   const updateSql = `
                     UPDATE work_updates
@@ -795,9 +797,7 @@ const createWork = async (req, res) => {
           clean(flatText(qc_engineers)),
           formattedInternalQc,
           formattedAmdocsQc,
-          jobs_delivered !== undefined && jobs_delivered !== null && jobs_delivered !== ""
-            ? Number(jobs_delivered) || 1
-            : null,
+          1, // CHANGED: ek row = hamesha 1 job delivered
           formattedReceiveDate,
           formattedEcdDate,
           formattedSubmissionDate,
@@ -824,7 +824,7 @@ const createWork = async (req, res) => {
           clean(flatText(qc_engineers)),
           formattedInternalQc,
           formattedAmdocsQc,
-          Number(jobs_delivered || 1),
+          1, // CHANGED: ek row = hamesha 1 job delivered
           cleanJobId,
           formattedReceiveDate,
           formattedEcdDate,
@@ -903,7 +903,7 @@ const updateWork = async (req, res) => {
   if (has(state)) setCol("state", state);
   if (has(county)) setCol("county", county);
   if (has(uom)) setCol("uom", JSON.stringify(uom || {}));
-  if (has(jobs_delivered)) setCol("jobs_delivered", Number(jobs_delivered || 0));
+  if (has(jobs_delivered)) setCol("jobs_delivered", 1); // CHANGED: ek row = hamesha 1 job delivered
   if (has(current_status)) setCol("current_status", clean(current_status));
   if (has(production_engineers)) setCol("production_engineers", clean(production_engineers));
   if (has(qc_engineers)) setCol("qc_engineers", clean(qc_engineers));
