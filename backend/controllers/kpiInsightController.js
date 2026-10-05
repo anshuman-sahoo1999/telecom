@@ -9,6 +9,7 @@ const run = (sql, params = []) =>
 const TABLE_SQL = isMySQL
   ? `CREATE TABLE IF NOT EXISTS kpi_quality (
       id INT AUTO_INCREMENT PRIMARY KEY,
+      kpi_type VARCHAR(50) NOT NULL DEFAULT 'Quality Rating',
       kpi_year INT NOT NULL,
       kpi_month INT NOT NULL,
       domain VARCHAR(100) NOT NULL,
@@ -16,19 +17,21 @@ const TABLE_SQL = isMySQL
       quality_pct DECIMAL(6,2) NOT NULL,
       created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
       updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-      UNIQUE KEY uq_kpi_quality (kpi_year, kpi_month, domain, scope_name)
+      UNIQUE KEY uq_kpi_quality_v2 (kpi_type, kpi_year, kpi_month, domain, scope_name)
     )`
   : `CREATE TABLE IF NOT EXISTS kpi_quality (
       id SERIAL PRIMARY KEY,
+      kpi_type VARCHAR(50) NOT NULL DEFAULT 'Quality Rating',
       kpi_year INT NOT NULL,
       kpi_month INT NOT NULL,
       domain VARCHAR(100) NOT NULL,
       scope_name VARCHAR(150) NOT NULL DEFAULT '',
       quality_pct NUMERIC(6,2) NOT NULL,
       created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-      updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-      UNIQUE (kpi_year, kpi_month, domain, scope_name)
-    )`;
+      updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+    )`; // Postgres: unique index is created in migrateTable()
+
+const KPI_TYPES = ["Quality Rating", "On Time Delivery", "Repeat"];
 const DEFAULT_SCOPES = {
   ASE: [],
   F2: [],
@@ -60,11 +63,33 @@ const isDuplicateError = (err) =>
   !!err && (err.code === "ER_DUP_ENTRY" || err.errno === 1062 || err.code === "23505");
 
 
+// Old table (without kpi_type) ko safely upgrade karta hai. Purana data "Quality Rating" ban jata hai.
+const migrateTable = async () => {
+  if (isMySQL) {
+    const col = await run("SHOW COLUMNS FROM kpi_quality LIKE 'kpi_type'");
+    if (!col || col.length === 0) {
+      await run("ALTER TABLE kpi_quality ADD COLUMN kpi_type VARCHAR(50) NOT NULL DEFAULT 'Quality Rating' AFTER id");
+    }
+    const oldKey = await run("SHOW INDEX FROM kpi_quality WHERE Key_name = 'uq_kpi_quality'");
+    if (oldKey && oldKey.length > 0) {
+      await run(
+        "ALTER TABLE kpi_quality DROP INDEX uq_kpi_quality, ADD UNIQUE KEY uq_kpi_quality_v2 (kpi_type, kpi_year, kpi_month, domain, scope_name)"
+      );
+    }
+  } else {
+    await run("ALTER TABLE kpi_quality ADD COLUMN IF NOT EXISTS kpi_type VARCHAR(50) NOT NULL DEFAULT 'Quality Rating'");
+    await run("ALTER TABLE kpi_quality DROP CONSTRAINT IF EXISTS kpi_quality_kpi_year_kpi_month_domain_scope_name_key");
+    await run(
+      "CREATE UNIQUE INDEX IF NOT EXISTS uq_kpi_quality_v2 ON kpi_quality (kpi_type, kpi_year, kpi_month, domain, scope_name)"
+    );
+  }
+};
+
 let readyPromise = null;
 
 const ensureReady = () => {
   if (!readyPromise) {
-    readyPromise = run(TABLE_SQL).catch((err) => {
+    readyPromise = run(TABLE_SQL).then(migrateTable).catch((err) => {
       readyPromise = null; 
       throw err;
     });
@@ -74,6 +99,7 @@ const ensureReady = () => {
 
 const mapRow = (r) => ({
   id: r.id,
+  kpi: r.kpi_type || "Quality Rating",
   year: Number(r.kpi_year),
   month: Number(r.kpi_month),
   domain: r.domain,
@@ -91,8 +117,17 @@ const parseId = (v) => {
 
 // body se year / month / domain / scope / quality nikal kar validate karta hai.
 // defaults: update me jo field na aaye wo purani value se bhar jati hai.
+const normalizeKpi = (v) => {
+  const name = clean(v);
+  if (!name) return KPI_TYPES[0]; // kpi na aaye to Quality Rating (purana behaviour)
+  return KPI_TYPES.find((k) => k.toLowerCase() === name.toLowerCase()) || null;
+};
+
 const parsePayload = (body = {}, defaults = {}) => {
   const pick = (key) => (body[key] !== undefined ? body[key] : defaults[key]);
+
+  const kpi = normalizeKpi(pick("kpi"));
+  if (!kpi) return { error: "Valid KPI is required" };
 
   const year = parseInt(pick("year"), 10);
   const month = parseInt(pick("month"), 10);
@@ -108,7 +143,7 @@ const parsePayload = (body = {}, defaults = {}) => {
     return { error: "Quality % must be between 0 and 100" };
   }
 
-  return { year, month, domain, scope, pct: Math.round(quality * 100) / 100 };
+  return { kpi, year, month, domain, scope, pct: Math.round(quality * 100) / 100 };
 };
 
 const resolveScopeSpelling = async (domain, scope) => {
@@ -118,10 +153,10 @@ const resolveScopeSpelling = async (domain, scope) => {
   return match ? clean(match.scope_name) : scope;
 };
 
-const findByKey = async (year, month, domain, scope) => {
+const findByKey = async (kpi, year, month, domain, scope) => {
   const rows = await run(
-    "SELECT id FROM kpi_quality WHERE kpi_year = ? AND kpi_month = ? AND domain = ? AND scope_name = ?",
-    [year, month, domain, scope]
+    "SELECT id FROM kpi_quality WHERE kpi_type = ? AND kpi_year = ? AND kpi_month = ? AND domain = ? AND scope_name = ?",
+    [kpi, year, month, domain, scope]
   );
   return rows && rows.length > 0 ? rows[0] : null;
 };
@@ -130,7 +165,7 @@ const getAllQuality = async (req, res) => {
   try {
     await ensureReady();
     const rows = await run(
-      "SELECT id, kpi_year, kpi_month, domain, scope_name, quality_pct FROM kpi_quality ORDER BY kpi_year, kpi_month, domain, scope_name"
+      "SELECT id, kpi_type, kpi_year, kpi_month, domain, scope_name, quality_pct FROM kpi_quality ORDER BY kpi_year, kpi_month, domain, scope_name"
     );
     res.json((rows || []).map(mapRow));
   } catch (err) {
@@ -191,12 +226,12 @@ const saveQuality = async (req, res) => {
     const parsed = parsePayload(req.body);
     if (parsed.error) return res.status(400).json({ message: parsed.error });
 
-    const { year, month, domain, pct } = parsed;
+    const { kpi, year, month, domain, pct } = parsed;
 
     await ensureReady();
     const scope = await resolveScopeSpelling(domain, parsed.scope);
 
-    const existing = await findByKey(year, month, domain, scope);
+    const existing = await findByKey(kpi, year, month, domain, scope);
     if (existing) {
       await run("UPDATE kpi_quality SET quality_pct = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?", [
         pct,
@@ -207,13 +242,13 @@ const saveQuality = async (req, res) => {
 
     try {
       await run(
-        "INSERT INTO kpi_quality (kpi_year, kpi_month, domain, scope_name, quality_pct) VALUES (?, ?, ?, ?, ?)",
-        [year, month, domain, scope, pct]
+        "INSERT INTO kpi_quality (kpi_type, kpi_year, kpi_month, domain, scope_name, quality_pct) VALUES (?, ?, ?, ?, ?, ?)",
+        [kpi, year, month, domain, scope, pct]
       );
     } catch (err) {
       // do request ek saath aayein to unique key fail hogi -> update kar do
       if (!isDuplicateError(err)) throw err;
-      const again = await findByKey(year, month, domain, scope);
+      const again = await findByKey(kpi, year, month, domain, scope);
       if (!again) throw err;
       await run("UPDATE kpi_quality SET quality_pct = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?", [
         pct,
@@ -223,7 +258,7 @@ const saveQuality = async (req, res) => {
     }
 
     // id wapas select se (MySQL insertId / Postgres RETURNING dono ki zarurat nahi)
-    const created = await findByKey(year, month, domain, scope);
+    const created = await findByKey(kpi, year, month, domain, scope);
     res.status(201).json({ message: "Quality % created successfully", action: "created", id: created ? created.id : null });
   } catch (err) {
     res.status(500).json({ message: "Failed to save quality %", error: err.message });
@@ -242,13 +277,14 @@ const updateQuality = async (req, res) => {
     await ensureReady();
 
     const rows = await run(
-      "SELECT id, kpi_year, kpi_month, domain, scope_name, quality_pct FROM kpi_quality WHERE id = ?",
+      "SELECT id, kpi_type, kpi_year, kpi_month, domain, scope_name, quality_pct FROM kpi_quality WHERE id = ?",
       [id]
     );
     if (!rows || rows.length === 0) return res.status(404).json({ message: "Quality entry not found" });
     const current = mapRow(rows[0]);
 
     const parsed = parsePayload(req.body, {
+      kpi: current.kpi,
       year: current.year,
       month: current.month,
       domain: current.domain,
@@ -257,19 +293,19 @@ const updateQuality = async (req, res) => {
     });
     if (parsed.error) return res.status(400).json({ message: parsed.error });
 
-    const { year, month, domain, pct } = parsed;
+    const { kpi, year, month, domain, pct } = parsed;
     const scope = await resolveScopeSpelling(domain, parsed.scope);
 
     // Month / domain / scope badalne par kisi aur entry se takraye to mana karo
-    const clash = await findByKey(year, month, domain, scope);
+    const clash = await findByKey(kpi, year, month, domain, scope);
     if (clash && Number(clash.id) !== id) {
       return res.status(409).json({ message: "An entry already exists for this month, domain and scope" });
     }
 
     try {
       await run(
-        "UPDATE kpi_quality SET kpi_year = ?, kpi_month = ?, domain = ?, scope_name = ?, quality_pct = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
-        [year, month, domain, scope, pct, id]
+        "UPDATE kpi_quality SET kpi_type = ?, kpi_year = ?, kpi_month = ?, domain = ?, scope_name = ?, quality_pct = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+        [kpi, year, month, domain, scope, pct, id]
       );
     } catch (err) {
       if (isDuplicateError(err)) {
@@ -282,7 +318,7 @@ const updateQuality = async (req, res) => {
       message: "Quality % updated successfully",
       action: "updated",
       id,
-      entry: { id, year, month, domain, scope, quality: pct },
+      entry: { id, kpi, year, month, domain, scope, quality: pct },
     });
   } catch (err) {
     res.status(500).json({ message: "Failed to update quality %", error: err.message });
