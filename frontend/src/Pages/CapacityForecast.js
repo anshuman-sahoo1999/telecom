@@ -34,6 +34,29 @@ const dateInputToIndex = (dateStr) => {
 
 const getRowId = (row) => row.id ?? row._id;
 
+// Popup ki positioning inline hai, taaki CSS file load na ho / override ho
+// to bhi popup screen ke upar dikhe.
+const overlayCritical = (z) => ({
+  position: "fixed",
+  top: 0,
+  left: 0,
+  right: 0,
+  bottom: 0,
+  zIndex: z,
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
+  padding: 16,
+  background: "rgba(0, 0, 0, 0.5)"
+});
+
+const toastCritical = {
+  position: "fixed",
+  top: 20,
+  right: 20,
+  zIndex: 2147483600
+};
+
 const toastIcons = {
   success: "✅",
   error: "❌",
@@ -541,7 +564,7 @@ export default function CapacityForecast() {
   const overlays = (
     <>
       {toast && (
-        <div role="status" className={`cvf-toast cvf-toast--${toast.type}`}>
+        <div role="status" className={`cvf-toast cvf-toast--${toast.type}`} style={toastCritical}>
           <span>
             {toastIcons[toast.type]} {toast.text}
           </span>
@@ -557,7 +580,11 @@ export default function CapacityForecast() {
       )}
 
       {deleteId !== null && (
-        <div className="cvf-confirm-overlay" onClick={() => setDeleteId(null)}>
+        <div
+          className="cvf-confirm-overlay"
+          style={overlayCritical(2147483500)}
+          onClick={() => setDeleteId(null)}
+        >
           <div
             className="cvf-confirm-box"
             role="alertdialog"
@@ -582,7 +609,11 @@ export default function CapacityForecast() {
       )}
 
       {showForm && (
-        <div className="cvf-modal-overlay" onClick={() => setShowForm(false)}>
+        <div
+          className="cvf-modal-overlay"
+          style={overlayCritical(2147483000)}
+          onClick={() => setShowForm(false)}
+        >
           <div
             className="cvf-modal"
             role="dialog"
