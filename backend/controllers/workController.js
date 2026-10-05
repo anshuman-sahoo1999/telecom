@@ -239,7 +239,7 @@ const cleanMonthArray = (arr) => {
    Aage koi aur domain/UOM chhupana ho to sirf is map me add karna.
 ====================================== */
 const UOM_HIDDEN_BY_DOMAIN = {
-  F2: ["poles"],
+  F2: ["poles", "pages", "page"],
   PERMIT: ["poles"],
 };
 
