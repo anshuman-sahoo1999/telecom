@@ -138,7 +138,7 @@ const formatUomLabel = (key) => {
 // Jin domains me kuch UOM (jaise Poles) hota hi nahi, wahan wo kabhi nahi dikhega.
 // Aage koi aur domain/UOM chhupana ho to sirf yahan add karna (label lowercase me likhna).
 const HIDDEN_UOM_BY_DOMAIN = {
-  F2: ["poles"],
+  F2: ["poles", "pages", "page"],
   PERMIT: ["poles"],
 };
 const isUomHidden = (domain, key) => {
