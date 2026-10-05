@@ -57,6 +57,22 @@ const normalizeQuality = (raw) => {
 
 const KPI_OPTIONS = ["Quality Rating", "On Time Delivery", "Repeat"];
 
+// Current month + previous 5 months, e.g. Oct 2026 -> May..Oct 2026, Feb 2027 -> Sep 2026..Feb 2027
+const lastSixMonths = (year, month) => {
+  const out = new Set();
+  for (let i = 0; i < 6; i++) {
+    let m = month - i;
+    let y = year;
+    while (m < 1) {
+      m += 12;
+      y -= 1;
+    }
+    out.add(mk(y, m));
+  }
+  return out;
+};
+const sameSet = (a, b) => a.size === b.size && [...a].every((k) => b.has(k));
+
 // Current date that refreshes itself at 12:00 AM (e.g. 31 Dec -> 1 Jan 2027),
 // so month / year update automatically even if the page stays open.
 function useToday() {
@@ -149,11 +165,20 @@ function MonthPicker({ years, selected, onChange, disabled }) {
     const list = [...selected].map((k) => k.split("-").map(Number));
     if (!list.length) return "Select month(s)";
     const ys = [...new Set(list.map((x) => x[0]))];
+    const idx = list.map(([y, m]) => y * 12 + m).sort((a, b) => a - b);
+    const contiguous = idx.every((v, i) => i === 0 || v === idx[i - 1] + 1);
+    const at = (v) => ({ y: Math.floor((v - 1) / 12), m: ((v - 1) % 12) + 1 });
     if (ys.length === 1) {
       const ms = list.map((x) => x[1]).sort((a, b) => a - b);
       if (ms.length === 12) return `All Months - ${ys[0]}`;
       if (ms.length <= 3) return `${ms.map((m) => MONTH_NAMES[m - 1]).join(", ")} - ${ys[0]}`;
+      if (contiguous) return `${MONTH_NAMES[ms[0] - 1]} - ${MONTH_NAMES[ms[ms.length - 1] - 1]} ${ys[0]}`;
       return `${ms.length} months - ${ys[0]}`;
+    }
+    if (contiguous) {
+      const a = at(idx[0]);
+      const b = at(idx[idx.length - 1]);
+      return `${MONTH_NAMES[a.m - 1]} ${a.y} - ${MONTH_NAMES[b.m - 1]} ${b.y}`;
     }
     return `${list.length} months selected`;
   }, [selected]);
@@ -543,23 +568,24 @@ export default function KPIInsight({ domains = [] }) {
   const [options, setOptions] = useState([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState("");
-  const [selected, setSelected] = useState(
-    () => new Set(MONTH_NAMES.map((_, i) => mk(currentYear, i + 1)))
-  );
-  // When the year changes at midnight: if the full current year was selected, move to the new year
-  const prevYearRef = useRef(currentYear);
+  // Default = last 6 months including the current month
+  const [selected, setSelected] = useState(() => lastSixMonths(currentYear, currentMonth));
+  // When the month/year changes at midnight (e.g. Oct -> Nov, Dec -> Jan):
+  // if the selection was the default last-6-months (or the full previous year), move it forward automatically.
+  const prevDateRef = useRef({ y: currentYear, m: currentMonth });
   useEffect(() => {
-    const prev = prevYearRef.current;
-    if (prev === currentYear) return;
-    prevYearRef.current = currentYear;
+    const prev = prevDateRef.current;
+    if (prev.y === currentYear && prev.m === currentMonth) return;
+    prevDateRef.current = { y: currentYear, m: currentMonth };
     setSelected((sel) => {
-      const oldKeys = MONTH_NAMES.map((_, i) => mk(prev, i + 1));
-      if (sel.size === 12 && oldKeys.every((k) => sel.has(k))) {
-        return new Set(MONTH_NAMES.map((_, i) => mk(currentYear, i + 1)));
+      if (sameSet(sel, lastSixMonths(prev.y, prev.m))) return lastSixMonths(currentYear, currentMonth);
+      if (prev.y !== currentYear) {
+        const oldYear = new Set(MONTH_NAMES.map((_, k) => mk(prev.y, k + 1)));
+        if (sameSet(sel, oldYear)) return new Set(MONTH_NAMES.map((_, k) => mk(currentYear, k + 1)));
       }
       return sel;
     });
-  }, [currentYear]);
+  }, [currentYear, currentMonth]);
 
   const [modal, setModal] = useState(null); // null | { type: "create" }
   const [editing, setEditing] = useState(null); // { k, period, drafts, saving, error }
@@ -620,9 +646,10 @@ export default function KPIInsight({ domains = [] }) {
   // Top filter (MonthPicker) me purane saalon ka data dekhne ke liye saare available years rahenge
   const yearList = useMemo(() => {
     const set = new Set([currentYear]);
+    lastSixMonths(currentYear, currentMonth).forEach((k) => set.add(Number(k.split("-")[0])));
     rows.forEach((r) => set.add(r.year));
     return [...set].sort((a, b) => b - a);
-  }, [rows, currentYear]);
+  }, [rows, currentYear, currentMonth]);
 
   // Har KPI ka apna table: rows = Month + Year, columns = domain + scope
   const views = useMemo(() => {
