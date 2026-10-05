@@ -37,6 +37,14 @@
   background: #0f4a63; color: #fff; font-size: 14px; font-weight: 700; cursor: pointer;
   transition: background .15s;
 }
+.kpiq-blank {
+  display: inline-block;
+  color: #94a3b8;
+  font-weight: 700;
+  font-size: 14px;
+  line-height: 1;
+  user-select: none;
+}
 .kpiq-btn:hover:not(:disabled) { background: #0b3a4e; }
 .kpiq-btn:disabled { opacity: 0.6; cursor: not-allowed; }
 .kpiq-btn.ghost { background: #e2e8f0; color: #0f172a; }
