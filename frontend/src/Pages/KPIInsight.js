@@ -835,8 +835,6 @@ export default function KPIInsight({ domains = [] }) {
       </div>
 
       <div className="kpiq-card">
-        <div className="kpiq-card-head">Quality Rating</div>
-
         {editing && (
           <div className="kpiq-edit-note">
             <span>
