@@ -55,6 +55,25 @@ const normalizeQuality = (raw) => {
   return raw;
 };
 
+const KPI_OPTIONS = ["Quality Rating", "On Time Delivery", "Repeat"];
+
+// Current date that refreshes itself at 12:00 AM (e.g. 31 Dec -> 1 Jan 2027),
+// so month / year update automatically even if the page stays open.
+function useToday() {
+  const [today, setToday] = useState(() => new Date());
+  useEffect(() => {
+    const refresh = () => setToday(new Date());
+    const nextMidnight = new Date(today.getFullYear(), today.getMonth(), today.getDate() + 1).getTime();
+    const timer = setTimeout(refresh, Math.max(nextMidnight - Date.now(), 0) + 500);
+    document.addEventListener("visibilitychange", refresh); // laptop sleep / tab in background
+    return () => {
+      clearTimeout(timer);
+      document.removeEventListener("visibilitychange", refresh);
+    };
+  }, [today]);
+  return today;
+}
+
 /* ======================================
    OVERLAY (closes only if mousedown AND click both happen on the backdrop,
    so selecting text inside an input and releasing outside doesn't close it)
@@ -204,6 +223,7 @@ function MonthPicker({ years, selected, onChange, disabled }) {
 function CreateModal({ currentYear, defaultMonth, domainList, rows, onClose, onSaved }) {
   // Single "Choose Month, Year" value, e.g. "2026-3". Default = current month + current year.
   const [ym, setYm] = useState(mk(currentYear, defaultMonth));
+  const [kpi, setKpi] = useState(KPI_OPTIONS[0]); // Quality Rating / On Time Delivery / Repeat
   const [domain, setDomain] = useState("");
   const [scope, setScope] = useState("");
   const [qRaw, setQRaw] = useState("");
@@ -216,6 +236,14 @@ function CreateModal({ currentYear, defaultMonth, domainList, rows, onClose, onS
   const infoRef = useRef(null);
 
   const [year, month] = useMemo(() => ym.split("-").map(Number), [ym]);
+
+  const isQuality = kpi === "Quality Rating";
+  const valueLabel = isQuality ? "Quality %" : `${kpi} %`;
+
+  // If the year changes at midnight while this popup is open, move to the new year (same month)
+  useEffect(() => {
+    setYm((prev) => mk(currentYear, Number(prev.split("-")[1])));
+  }, [currentYear]);
 
   const scopesForDomain = useMemo(() => {
     const d = domainList.find((x) => x.domain === domain);
@@ -230,13 +258,14 @@ function CreateModal({ currentYear, defaultMonth, domainList, rows, onClose, onS
     return (
       rows.find(
         (r) =>
+          (r.kpi || "Quality Rating") === kpi &&
           r.year === Number(year) &&
           r.month === Number(month) &&
           String(r.domain || "").trim().toUpperCase() === String(domain).trim().toUpperCase() &&
           sameScope(r.scope, scope)
       ) || null
     );
-  }, [rows, year, month, domain, scope]);
+  }, [rows, kpi, year, month, domain, scope]);
 
   useEffect(() => {
     const onKey = (e) => {
@@ -304,13 +333,14 @@ function CreateModal({ currentYear, defaultMonth, domainList, rows, onClose, onS
     if (saving) return;
     if (!domain) return setError("Please choose a domain");
     if (scopesForDomain.length > 0 && !scope) return setError("Please choose a scope");
-    if (qualityNumber === null || Number.isNaN(qualityNumber)) return setError("Please enter Quality %");
-    if (qualityNumber < 0 || qualityNumber > 100) return setError("Quality % must be between 0 and 100");
+    if (qualityNumber === null || Number.isNaN(qualityNumber)) return setError(`Please enter ${valueLabel}`);
+    if (qualityNumber < 0 || qualityNumber > 100) return setError(`${valueLabel} must be between 0 and 100`);
 
     try {
       setSaving(true);
       setError("");
       const res = await axios.post(`${API_BASE_URL}/api/kpi-insight`, {
+        kpi,
         year: Number(year),
         month: Number(month),
         domain,
@@ -328,7 +358,7 @@ function CreateModal({ currentYear, defaultMonth, domainList, rows, onClose, onS
     <Overlay disabled={saving} onClose={onClose}>
       <div className="kpiq-modal" onClick={(e) => e.stopPropagation()}>
         <div className="kpiq-modal-head">
-          <h3>Create Quality Rating</h3>
+          <h3>Create {kpi}</h3>
           <button type="button" className="kpiq-x" aria-label="Close" onClick={onClose} disabled={saving}>
             <FaTimes />
           </button>
@@ -347,6 +377,19 @@ function CreateModal({ currentYear, defaultMonth, domainList, rows, onClose, onS
                 <option key={mk(currentYear, i + 1)} value={mk(currentYear, i + 1)}>
                   {m} {currentYear}
                 </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="kpiq-field">
+            <label className="kpiq-label">Choose KPIs</label>
+            <select
+              className="kpiq-select"
+              value={kpi}
+              onChange={(e) => { setKpi(e.target.value); setError(""); }}
+            >
+              {KPI_OPTIONS.map((k) => (
+                <option key={k} value={k}>{k}</option>
               ))}
             </select>
           </div>
@@ -380,13 +423,13 @@ function CreateModal({ currentYear, defaultMonth, domainList, rows, onClose, onS
 
           <div className="kpiq-field">
             <div style={{ display: "flex", alignItems: "center" }}>
-              <label className="kpiq-label">Enter Quality %</label>
+              <label className="kpiq-label">Enter {valueLabel}</label>
               <span className="kpiq-info-wrap" ref={infoRef}>
                 <button
                   type="button"
                   className="kpiq-info-btn"
-                  aria-label="Quality % colour guide"
-                  title="Quality % colour guide"
+                  aria-label={`${valueLabel} colour guide`}
+                  title={`${valueLabel} colour guide`}
                   onClick={() => setShowInfo((v) => !v)}
                 >
                   <FaInfoCircle />
@@ -492,8 +535,9 @@ function ConfirmDelete({ period, count, busy, onCancel, onConfirm }) {
 ====================================== */
 export default function KPIInsight({ domains = [] }) {
   // Always taken from the system date, so it rolls over to 2027 automatically.
-  const currentYear = new Date().getFullYear();
-  const currentMonth = new Date().getMonth() + 1;
+  const today = useToday();
+  const currentYear = today.getFullYear();
+  const currentMonth = today.getMonth() + 1;
 
   const [rows, setRows] = useState([]);
   const [options, setOptions] = useState([]);
@@ -502,6 +546,21 @@ export default function KPIInsight({ domains = [] }) {
   const [selected, setSelected] = useState(
     () => new Set(MONTH_NAMES.map((_, i) => mk(currentYear, i + 1)))
   );
+  // When the year changes at midnight: if the full current year was selected, move to the new year
+  const prevYearRef = useRef(currentYear);
+  useEffect(() => {
+    const prev = prevYearRef.current;
+    if (prev === currentYear) return;
+    prevYearRef.current = currentYear;
+    setSelected((sel) => {
+      const oldKeys = MONTH_NAMES.map((_, i) => mk(prev, i + 1));
+      if (sel.size === 12 && oldKeys.every((k) => sel.has(k))) {
+        return new Set(MONTH_NAMES.map((_, i) => mk(currentYear, i + 1)));
+      }
+      return sel;
+    });
+  }, [currentYear]);
+
   const [modal, setModal] = useState(null); // null | { type: "create" }
   const [editing, setEditing] = useState(null); // { k, period, drafts, saving, error }
   const [exporting, setExporting] = useState(false);
@@ -565,9 +624,12 @@ export default function KPIInsight({ domains = [] }) {
     return [...set].sort((a, b) => b - a);
   }, [rows, currentYear]);
 
+  // Table abhi sirf Quality Rating ka hai (baaki KPIs database me save hote hain)
+  const qualityRows = useMemo(() => rows.filter((r) => (r.kpi || "Quality Rating") === "Quality Rating"), [rows]);
+
   // Table: rows = Month + Year, columns = domain + scope
   const view = useMemo(() => {
-    const yearRows = rows.filter((r) => selected.has(mk(r.year, r.month)));
+    const yearRows = qualityRows.filter((r) => selected.has(mk(r.year, r.month)));
 
     const colMap = new Map();
     yearRows.forEach((r) => {
@@ -589,11 +651,11 @@ export default function KPIInsight({ domains = [] }) {
     });
 
     return { cols, periods, cell };
-  }, [rows, selected]);
+  }, [qualityRows, selected]);
 
   const entriesOf = useCallback(
-    (p) => rows.filter((r) => r.year === p.year && r.month === p.month).sort(byDomainScope),
-    [rows]
+    (p) => qualityRows.filter((r) => r.year === p.year && r.month === p.month).sort(byDomainScope),
+    [qualityRows]
   );
 
   // If the row being edited disappears (e.g. data reloaded), leave edit mode
@@ -647,6 +709,7 @@ export default function KPIInsight({ domains = [] }) {
       } else if (raw !== "") {
         jobs.push(
           axios.post(`${API_BASE_URL}/api/kpi-insight`, {
+            kpi: "Quality Rating",
             year: period.year,
             month: period.month,
             domain: c.domain,
