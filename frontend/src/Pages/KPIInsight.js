@@ -1,5 +1,6 @@
 import { API_BASE_URL } from "../config";
 import React, { useState, useEffect, useMemo, useCallback, useRef, useLayoutEffect } from "react";
+import { createPortal } from "react-dom";
 import axios from "axios";
 import { FaPlus, FaTimes, FaInfoCircle, FaEdit, FaTrashAlt, FaFileExcel, FaChevronDown, FaCheck } from "react-icons/fa";
 import "../style/KPIInsight.css";
@@ -73,32 +74,61 @@ const lastSixMonths = (year, month) => {
 };
 const sameSet = (a, b) => a.size === b.size && [...a].every((k) => b.has(k));
 
-// Current date that refreshes itself at 12:00 AM (e.g. 31 Dec -> 1 Jan 2027),
-// so month / year update automatically even if the page stays open.
+// Current date. Din badalte hi (12:00 AM) month / year apne aap update ho jate hain.
+// Har minute + tab wapas aane par check karta hai, aur state sirf tab badalta hai jab
+// date sach me badli ho (pehle har visibilitychange par unnecessary re-render hota tha).
 function useToday() {
   const [today, setToday] = useState(() => new Date());
   useEffect(() => {
-    const refresh = () => setToday(new Date());
-    const nextMidnight = new Date(today.getFullYear(), today.getMonth(), today.getDate() + 1).getTime();
-    const timer = setTimeout(refresh, Math.max(nextMidnight - Date.now(), 0) + 500);
+    const refresh = () => {
+      const now = new Date();
+      setToday((prev) => (prev.toDateString() === now.toDateString() ? prev : now));
+    };
+    const timer = setInterval(refresh, 60 * 1000);
     document.addEventListener("visibilitychange", refresh); // laptop sleep / tab in background
     return () => {
-      clearTimeout(timer);
+      clearInterval(timer);
       document.removeEventListener("visibilitychange", refresh);
     };
-  }, [today]);
+  }, []);
   return today;
 }
 
 /* ======================================
-   OVERLAY (closes only if mousedown AND click both happen on the backdrop,
-   so selecting text inside an input and releasing outside doesn't close it)
+   OVERLAY
+   - document.body me portal se render hota hai (parent ke overflow / transform /
+     z-index se popup kabhi clip ya hide nahi hoga)
+   - positioning inline hai, CSS file par depend nahi
+   - mousedown AND click dono backdrop par ho tabhi band hota hai
+   - popup khula ho to peeche ka page scroll nahi hota
 ====================================== */
+const OVERLAY_POSITION = {
+  position: "fixed",
+  top: 0,
+  left: 0,
+  right: 0,
+  bottom: 0,
+  zIndex: 2147483000,
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center"
+};
+
 function Overlay({ className = "kpiq-overlay", disabled, onClose, children }) {
   const downOnBackdrop = useRef(false);
-  return (
+
+  useEffect(() => {
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = prev;
+    };
+  }, []);
+
+  return createPortal(
     <div
       className={className}
+      style={OVERLAY_POSITION}
       onMouseDown={(e) => {
         downOnBackdrop.current = e.target === e.currentTarget;
       }}
@@ -108,7 +138,8 @@ function Overlay({ className = "kpiq-overlay", disabled, onClose, children }) {
       }}
     >
       {children}
-    </div>
+    </div>,
+    document.body
   );
 }
 
@@ -558,6 +589,15 @@ function ConfirmDelete({ period, kpi, count, busy, onCancel, onConfirm }) {
 /* ======================================
    MAIN PAGE
 ====================================== */
+const BLANK_STYLE = {
+  display: "inline-block",
+  color: "#94a3b8",
+  fontWeight: 700,
+  fontSize: 14,
+  lineHeight: 1,
+  userSelect: "none"
+};
+
 export default function KPIInsight({ domains = [] }) {
   // Always taken from the system date, so it rolls over to 2027 automatically.
   const today = useToday();
@@ -588,9 +628,9 @@ export default function KPIInsight({ domains = [] }) {
   }, [currentYear, currentMonth]);
 
   const [modal, setModal] = useState(null); // null | { type: "create" }
-  const [editing, setEditing] = useState(null); // { k, period, drafts, saving, error }
+  const [editing, setEditing] = useState(null); // { kpi, k, period, drafts, saving, error }
   const [exporting, setExporting] = useState(false);
-  const [deleteTarget, setDeleteTarget] = useState(null); // period
+  const [deleteTarget, setDeleteTarget] = useState(null); // period + kpi
   const [deleting, setDeleting] = useState(false);
   const [toast, setToast] = useState(null);
 
@@ -803,10 +843,16 @@ export default function KPIInsight({ domains = [] }) {
       try {
         const mod = await import("exceljs/dist/exceljs.min.js");
         ExcelJS = mod.default || mod;
-      } catch (importErr) {
-        console.error(importErr);
-        setToast({ type: "error", text: "Excel library missing. Run: npm install exceljs" });
-        return;
+      } catch (minErr) {
+        // Kuch bundlers me min build resolve nahi hota, to normal package try karo
+        try {
+          const mod = await import("exceljs");
+          ExcelJS = mod.default || mod;
+        } catch (importErr) {
+          console.error(importErr);
+          setToast({ type: "error", text: "Excel library missing. Run: npm install exceljs" });
+          return;
+        }
       }
 
       const wb = new ExcelJS.Workbook();
@@ -860,6 +906,10 @@ export default function KPIInsight({ domains = [] }) {
             const cell = ws.getCell(rowNo, ci + 2);
             const r = v.cell[`${p.k}|${c.key}`];
             if (!r) {
+              // Blank cell: screen ki tarah "_" dikhao
+              cell.value = "_";
+              cell.font = { bold: true, color: { argb: "FF94A3B8" } };
+              cell.alignment = center;
               cell.border = box("#CBD5E1");
               return;
             }
@@ -970,98 +1020,98 @@ export default function KPIInsight({ domains = [] }) {
           </div>
         ) : (
           visibleKpis.map((kpi, idx) => {
-          const view = views[kpi];
-          return (
-          <div className="kpiq-scroll" key={kpi} style={idx > 0 ? { marginTop: 22 } : undefined}>
-            <table className="kpiq-table">
-              <thead>
-                <tr className="first">
-                  <th className="stickyCol">{kpi}</th>
-                  <th colSpan={view.cols.length}>Domain</th>
-                  <th className="stickyRight" rowSpan={2}>Action</th>
-                </tr>
-                <tr className="second">
-                  <th className="stickyCol">JOB Completed Month</th>
-                  {view.cols.map((c) => (
-                    <th key={c.key}>
-                      {c.domain}
-                      {c.scope && <span className="kpiq-colScope">{c.scope}</span>}
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {view.periods.map((p) => {
-                  const isEdit = !!editing && editing.kpi === kpi && editing.k === p.k;
-                  return (
-                    <tr key={p.k} className={isEdit ? "editing" : ""}>
-                      <td className="stickyCol">{MONTH_NAMES[p.month - 1]} {p.year}</td>
-                      {view.cols.map((c) => {
-                        if (isEdit) {
-                          const raw = editing.drafts[c.key] ?? "";
-                          const b = getBand(raw === "" || raw === "." ? null : Number(raw));
-                          return (
-                            <td key={c.key}>
-                              <div className="kpiq-cell-edit">
-                                <input
-                                  className="kpiq-cell-input"
-                                  type="text"
-                                  inputMode="decimal"
-                                  autoComplete="off"
-                                  placeholder="_"
-                                  aria-label={`${c.domain} ${c.scope}`.trim()}
-                                  value={raw}
-                                  disabled={editing.saving}
-                                  onChange={(e) => changeDraft(c.key, e.target.value)}
-                                  onBlur={() => blurDraft(c.key)}
-                                  onKeyDown={(e) => {
-                                    if (e.key === "Enter") saveEdit();
-                                    if (e.key === "Escape") cancelEdit();
-                                  }}
-                                  style={b.key === "none" ? undefined : { color: b.color, background: b.bg, borderColor: b.border }}
-                                />
-                                <span className="kpiq-cell-pct">%</span>
-                              </div>
-                            </td>
-                          );
-                        }
-                        const r = view.cell[`${p.k}|${c.key}`];
-                        return (
-                          <td key={c.key}>
-                            {r ? pill(r.quality) : <span className="kpiq-blank" title="No data">_</span>}
-                          </td>
-                        );
-                      })}
-                      <td className="stickyRight">
-                        <div className="kpiq-act-wrap">
-                          {isEdit ? (
-                            <>
-                              <button type="button" className="kpiq-act save" onClick={saveEdit} disabled={editing.saving} title="Save">
-                                <FaCheck /> <span className="kpiq-act-txt">{editing.saving ? "Saving..." : "Save"}</span>
-                              </button>
-                              <button type="button" className="kpiq-act cancel" onClick={cancelEdit} disabled={editing.saving} title="Cancel">
-                                <FaTimes /> <span className="kpiq-act-txt">Cancel</span>
-                              </button>
-                            </>
-                          ) : (
-                            <>
-                              <button type="button" className="kpiq-act edit" onClick={() => startEdit(kpi, p)} disabled={!!editing} title="Edit" aria-label="Edit row">
-                                <FaEdit />
-                              </button>
-                              <button type="button" className="kpiq-act del" onClick={() => setDeleteTarget({ ...p, kpi })} disabled={!!editing} title="Delete" aria-label="Delete row">
-                                <FaTrashAlt />
-                              </button>
-                            </>
-                          )}
-                        </div>
-                      </td>
+            const view = views[kpi];
+            return (
+              <div className="kpiq-scroll" key={kpi} style={idx > 0 ? { marginTop: 22 } : undefined}>
+                <table className="kpiq-table">
+                  <thead>
+                    <tr className="first">
+                      <th className="stickyCol">{kpi}</th>
+                      <th colSpan={view.cols.length}>Domain</th>
+                      <th className="stickyRight" rowSpan={2}>Action</th>
                     </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-          );
+                    <tr className="second">
+                      <th className="stickyCol">JOB Completed Month</th>
+                      {view.cols.map((c) => (
+                        <th key={c.key}>
+                          {c.domain}
+                          {c.scope && <span className="kpiq-colScope">{c.scope}</span>}
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {view.periods.map((p) => {
+                      const isEdit = !!editing && editing.kpi === kpi && editing.k === p.k;
+                      return (
+                        <tr key={p.k} className={isEdit ? "editing" : ""}>
+                          <td className="stickyCol">{MONTH_NAMES[p.month - 1]} {p.year}</td>
+                          {view.cols.map((c) => {
+                            if (isEdit) {
+                              const raw = editing.drafts[c.key] ?? "";
+                              const b = getBand(raw === "" || raw === "." ? null : Number(raw));
+                              return (
+                                <td key={c.key}>
+                                  <div className="kpiq-cell-edit">
+                                    <input
+                                      className="kpiq-cell-input"
+                                      type="text"
+                                      inputMode="decimal"
+                                      autoComplete="off"
+                                      placeholder="_"
+                                      aria-label={`${c.domain} ${c.scope}`.trim()}
+                                      value={raw}
+                                      disabled={editing.saving}
+                                      onChange={(e) => changeDraft(c.key, e.target.value)}
+                                      onBlur={() => blurDraft(c.key)}
+                                      onKeyDown={(e) => {
+                                        if (e.key === "Enter") saveEdit();
+                                        if (e.key === "Escape") cancelEdit();
+                                      }}
+                                      style={b.key === "none" ? undefined : { color: b.color, background: b.bg, borderColor: b.border }}
+                                    />
+                                    <span className="kpiq-cell-pct">%</span>
+                                  </div>
+                                </td>
+                              );
+                            }
+                            const r = view.cell[`${p.k}|${c.key}`];
+                            return (
+                              <td key={c.key}>
+                                {r ? pill(r.quality) : <span className="kpiq-blank" style={BLANK_STYLE} title="No data">_</span>}
+                              </td>
+                            );
+                          })}
+                          <td className="stickyRight">
+                            <div className="kpiq-act-wrap">
+                              {isEdit ? (
+                                <>
+                                  <button type="button" className="kpiq-act save" onClick={saveEdit} disabled={editing.saving} title="Save">
+                                    <FaCheck /> <span className="kpiq-act-txt">{editing.saving ? "Saving..." : "Save"}</span>
+                                  </button>
+                                  <button type="button" className="kpiq-act cancel" onClick={cancelEdit} disabled={editing.saving} title="Cancel">
+                                    <FaTimes /> <span className="kpiq-act-txt">Cancel</span>
+                                  </button>
+                                </>
+                              ) : (
+                                <>
+                                  <button type="button" className="kpiq-act edit" onClick={() => startEdit(kpi, p)} disabled={!!editing} title="Edit" aria-label="Edit row">
+                                    <FaEdit />
+                                  </button>
+                                  <button type="button" className="kpiq-act del" onClick={() => setDeleteTarget({ ...p, kpi })} disabled={!!editing} title="Delete" aria-label="Delete row">
+                                    <FaTrashAlt />
+                                  </button>
+                                </>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            );
           })
         )}
       </div>
@@ -1094,14 +1144,26 @@ export default function KPIInsight({ domains = [] }) {
         />
       )}
 
-      {toast && (
-        <div className="kpiq-toast" style={{ background: toast.type === "error" ? "#dc2626" : "#16a34a" }}>
-          <span>{toast.text}</span>
-          <button type="button" className="kpiq-x" aria-label="Close" onClick={() => setToast(null)}>
-            <FaTimes />
-          </button>
-        </div>
-      )}
+      {toast &&
+        createPortal(
+          <div
+            className="kpiq-toast"
+            role="status"
+            style={{
+              position: "fixed",
+              top: 20,
+              right: 20,
+              zIndex: 2147483600,
+              background: toast.type === "error" ? "#dc2626" : "#16a34a"
+            }}
+          >
+            <span>{toast.text}</span>
+            <button type="button" className="kpiq-x" aria-label="Close" onClick={() => setToast(null)}>
+              <FaTimes />
+            </button>
+          </div>,
+          document.body
+        )}
     </div>
   );
 }
