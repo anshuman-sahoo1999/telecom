@@ -233,44 +233,7 @@ const cleanMonthArray = (arr) => {
   return arr.map(m => formatMonth(m)).filter(Boolean);
 };
 
-/* ======================================
-   UOM HELPERS
-   Jin domains me kuch UOM (jaise Poles) hota hi nahi, unhe yahan list karo.
-   Aage koi aur domain/UOM chhupana ho to sirf is map me add karna.
-====================================== */
-const UOM_HIDDEN_BY_DOMAIN = {
-  F2: ["poles", "pages", "page"],
-  PERMIT: ["poles"],
-};
-
-// "No.of poles" / "No of poles" / "noof poles" / "Number of poles" / "poles" -> "poles"
-const uomLabelKey = (key) => {
-  const raw = String(key || "")
-    .trim()
-    .toLowerCase()
-    .replace(/\./g, " ")
-    .replace(/\s+/g, " ")
-    .trim();
-  const m = raw.match(/^(no\s*of|noof|number\s*of)\s*(.*)$/);
-  return m && m[2].trim() ? m[2].trim() : raw;
-};
-
-const isUomKeyHidden = (domain, key) => {
-  const list = UOM_HIDDEN_BY_DOMAIN[normalize(domain)];
-  return !!list && list.includes(uomLabelKey(key));
-};
-
-// UOM object me se is domain ke hidden keys hata deta hai
-const stripHiddenUom = (obj, domain) => {
-  if (!obj || typeof obj !== "object" || Array.isArray(obj)) return obj;
-  const out = {};
-  Object.keys(obj).forEach((k) => {
-    if (!isUomKeyHidden(domain, k)) out[k] = obj[k];
-  });
-  return out;
-};
-
-const extractUOM = (row, domain = "") => {
+const extractUOM = (row) => {
   const uom = {};
 
   const systemColumns = [
@@ -296,12 +259,6 @@ const extractUOM = (row, domain = "") => {
 
     if (!isSystemCol) {
       let value = unwrapCell(row[key]);
-
-      // is domain me ye UOM hota hi nahi (jaise F2 / PERMIT me Poles) -> skip
-      if (isUomKeyHidden(domain, key)) return;
-      // 0 wali value ka matlab "data nahi" -> UOM me save nahi hogi
-      if (isZeroValue(value)) return;
-
       if (value !== "" && value !== null && value !== undefined && !(value instanceof Date) && typeof value !== "object") {
         const cleanKeyName = key
           .toString()
@@ -571,8 +528,7 @@ const importExcel = async (req, res) => {
             }
 
             const month = formatMonth(getMonthValue(row));
-            // FIX: domain pass kiya — F2 / PERMIT me Poles UOM nahi banega
-            const uom = extractUOM(row, domain);
+            const uom = extractUOM(row);
 
             const insertNewRow = () => {
               const insertSql = `
@@ -658,8 +614,7 @@ const importExcel = async (req, res) => {
                     existingMonths.push(newMonth);
                   }
 
-                  // FIX: purani Poles key bhi hat jayegi (F2 / PERMIT ke liye)
-                  const mergedUOM = stripHiddenUom({ ...existingUOM, ...uom }, domain);
+                  const mergedUOM = { ...existingUOM, ...uom };
                   const newJobsDelivered = (Number(existing.jobs_delivered) || 0) + 1;
 
                   const updateSql = `
@@ -787,9 +742,7 @@ const createWork = async (req, res) => {
   const parsedMonths = parseMonthsInput(months);
   const firstMonth = parsedMonths.length > 0 ? parsedMonths[0] : null;
 
-  // FIX: F2 / PERMIT ke liye hidden UOM (Poles) hata do
-  const uomObjRaw = uom && typeof uom === "object" ? uom : safeParseJson(uom, null);
-  const uomObj = stripHiddenUom(uomObjRaw, fixedDomain);
+  const uomObj = uom && typeof uom === "object" ? uom : safeParseJson(uom, null);
   const hasUom = uomObj && typeof uomObj === "object" && Object.keys(uomObj).length > 0;
 
   try {
@@ -949,7 +902,7 @@ const updateWork = async (req, res) => {
   if (has(region)) setCol("region", region);
   if (has(state)) setCol("state", state);
   if (has(county)) setCol("county", county);
-  // NOTE: uom yahan nahi set hota — neeche try block me domain pata karke set hota hai
+  if (has(uom)) setCol("uom", JSON.stringify(uom || {}));
   if (has(jobs_delivered)) setCol("jobs_delivered", Number(jobs_delivered || 0));
   if (has(current_status)) setCol("current_status", clean(current_status));
   if (has(production_engineers)) setCol("production_engineers", clean(production_engineers));
@@ -990,13 +943,6 @@ const updateWork = async (req, res) => {
     if (!oldRows || oldRows.length === 0) {
       return res.status(404).json({ message: "Record not found", error: "No work row with this id" });
     }
-
-    // FIX: UOM set karte waqt domain ke hisaab se hidden UOM (Poles) hata do
-    if (has(uom)) {
-      const effDomain = has(domain) ? domain : oldRows[0].domain;
-      setCol("uom", JSON.stringify(stripHiddenUom(uom || {}, effDomain)));
-    }
-
     const oldJobId = clean(oldRows[0].job_id);
     const newJobId = has(job_id) ? clean(job_id) : oldJobId;
     if (has(job_id)) setCol("job_id", newJobId);
@@ -1105,8 +1051,7 @@ const mapWorkRow = (row) => {
     ...work,
     month: displayMonth,
     months: monthsArr,
-    // FIX: purane DB rows me bhi F2 / PERMIT ka Poles API se bahar nahi jayega
-    uom: stripHiddenUom(safeParseJson(work.uom, {}), work.domain),
+    uom: safeParseJson(work.uom, {}),
     otp: displayOtp(work.otp),
     amdocs_qc: blankIfZero(work.amdocs_qc),
     internal_qc: blankIfZero(work.internal_qc),
@@ -1163,8 +1108,6 @@ const getFileData = (req, res) => {
       const { created_at, updated_at, file_name, id, ...rest } = row;
       return {
         ...rest,
-        // FIX: F2 / PERMIT ka Poles file data se bhi hata do
-        uom: stripHiddenUom(safeParseJson(rest.uom, {}), rest.domain),
         otp: displayOtp(rest.otp),
         amdocs_qc: blankIfZero(rest.amdocs_qc),
         internal_qc: blankIfZero(rest.internal_qc),
@@ -1203,8 +1146,6 @@ const getMonthWiseReport = (req, res) => {
     if (err) return res.status(500).json([]);
     const formatted = rows.map(r => ({
       ...r,
-      // FIX: F2 / PERMIT ka Poles report se bhi hata do
-      uom: stripHiddenUom(safeParseJson(r.uom, {}), r.domain),
       otp: displayOtp(r.otp),
       amdocs_qc: blankIfZero(r.amdocs_qc),
       internal_qc: blankIfZero(r.internal_qc),
