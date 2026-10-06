@@ -3,6 +3,30 @@ const bcrypt = require("bcryptjs");
 
 const SALT_ROUNDS = 10;
 
+// Frontend "TeamLead" / "TeamMember" bhejta hai. Purani spelling
+// ("Team Lead" / "Team Member") bhi support rahegi, taaki kuch na tute.
+const TEAM_ROLES = ["TeamLead", "TeamMember", "Team Lead", "Team Member"];
+const isTeamRole = (role) => TEAM_ROLES.includes(String(role || "").trim());
+
+// Khaali value ko NULL banao, baaki trim karke rakho
+const clean = (v) => {
+  if (v === undefined || v === null) return null;
+  const s = String(v).trim();
+  return s === "" ? null : s;
+};
+
+// Team Lead / Team Member ke 5 extra fields. Baaki roles ke liye NULL.
+const teamFields = (role, body) => {
+  if (!isTeamRole(role)) return [null, null, null, null, null];
+  return [
+    clean(body.totalExperience),
+    clean(body.telecomExperience),
+    clean(body.skillSets),
+    clean(body.region),
+    clean(body.mobileNo)
+  ];
+};
+
 const shouldIncreaseYear = (lastUpdated) => {
   if (!lastUpdated) return false;
 
@@ -108,7 +132,7 @@ exports.login = async (req, res) => {
 // =======================================
 exports.createUser = async (req, res) => {
   try {
-    let { name, emp_id, email, password, role, domain, memberType, totalExperience, telecomExperience, skillSets, region, mobileNo } = req.body;
+    let { name, emp_id, email, password, role, domain, memberType } = req.body;
 
     email = (email || "").trim().toLowerCase().replace(/\s/g, "");
 
@@ -123,7 +147,7 @@ exports.createUser = async (req, res) => {
     let rawMemberType = Array.isArray(memberType)
       ? memberType.join(",")
       : memberType || null;
-      
+
     const finalMemberType = rawMemberType ? rawMemberType.slice(0, 10) : null;
 
     const sql = `
@@ -140,11 +164,7 @@ exports.createUser = async (req, res) => {
       role,
       finalDomain,
       finalMemberType,
-      ["Team Lead", "Team Member"].includes(role) ? totalExperience : null,
-      ["Team Lead", "Team Member"].includes(role) ? telecomExperience : null,
-      ["Team Lead", "Team Member"].includes(role) ? skillSets : null,
-      ["Team Lead", "Team Member"].includes(role) ? region : null,
-      ["Team Lead", "Team Member"].includes(role) ? mobileNo : null
+      ...teamFields(role, req.body)
     ];
 
     db.query(sql, values, (err) => {
@@ -209,11 +229,11 @@ exports.getAllUserDetails = (req, res) => {
       role: item.role,
       domain: item.domain,
       memberType: item.memberType,
-      totalExperience: item.totalExperience,
-      telecomExperience: item.telecomExperience,
-      skillSets: item.skillSets,
-      region: item.region,
-      mobileNo: item.mobileNo
+      totalExperience: item.totalExperience ?? "",
+      telecomExperience: item.telecomExperience ?? "",
+      skillSets: item.skillSets ?? "",
+      region: item.region ?? "",
+      mobileNo: item.mobileNo ?? ""
     }));
 
     res.json({
@@ -227,7 +247,7 @@ exports.getAllUserDetails = (req, res) => {
 // UPDATE USER
 // =======================================
 exports.updateUser = (req, res) => {
-  let { name, emp_id, email, role, domain, memberType, totalExperience, telecomExperience, skillSets, region, mobileNo } = req.body;
+  let { name, emp_id, email, role, domain, memberType } = req.body;
 
   email = (email || "").trim().toLowerCase();
 
@@ -238,7 +258,7 @@ exports.updateUser = (req, res) => {
   let rawMemberType = Array.isArray(memberType)
     ? memberType.join(",")
     : memberType || null;
-    
+
   const finalMemberType = rawMemberType ? rawMemberType.slice(0, 10) : null;
 
   const sql = `
@@ -257,11 +277,7 @@ exports.updateUser = (req, res) => {
       role,
       finalDomain,
       finalMemberType,
-      ["Team Lead", "Team Member"].includes(role) ? totalExperience : null,
-      ["Team Lead", "Team Member"].includes(role) ? telecomExperience : null,
-      ["Team Lead", "Team Member"].includes(role) ? skillSets : null,
-      ["Team Lead", "Team Member"].includes(role) ? region : null,
-      ["Team Lead", "Team Member"].includes(role) ? mobileNo : null,
+      ...teamFields(role, req.body),
       req.params.id
     ],
     (err) => {
@@ -346,7 +362,7 @@ exports.updateUserPosition = (req, res) => {
   let rawMemberType = Array.isArray(memberType)
     ? memberType.join(",")
     : memberType || null;
-    
+
   const finalMemberType = rawMemberType ? rawMemberType.slice(0, 10) : null;
 
   const sql = `
