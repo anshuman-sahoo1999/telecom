@@ -600,6 +600,22 @@
 .prod-color { background: linear-gradient(135deg, #14ceb8, #109186); }
 .all-color { background: #000000; }
 
+/* Sirf Overall tab ka legend (ALL, Admin, MIS, Domain, Team Lead, QA, QC, Production) thoda bada */
+.org-tree:not(.project-tree) .org-legend {
+  gap: 36px;
+}
+
+.org-tree:not(.project-tree) .org-legend .legend-item {
+  font-size: 22px;
+  gap: 12px;
+}
+
+.org-tree:not(.project-tree) .org-legend .legend-color {
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+}
+
 .mis-wrapper {
   position: absolute;
   left: 320px;
