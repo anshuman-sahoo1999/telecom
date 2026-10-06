@@ -3,19 +3,15 @@ const bcrypt = require("bcryptjs");
 
 const SALT_ROUNDS = 10;
 
-// Frontend "TeamLead" / "TeamMember" bhejta hai. Purani spelling
-// ("Team Lead" / "Team Member") bhi support rahegi, taaki kuch na tute.
 const TEAM_ROLES = ["TeamLead", "TeamMember", "Team Lead", "Team Member"];
 const isTeamRole = (role) => TEAM_ROLES.includes(String(role || "").trim());
 
-// Khaali value ko NULL banao, baaki trim karke rakho
 const clean = (v) => {
   if (v === undefined || v === null) return null;
   const s = String(v).trim();
   return s === "" ? null : s;
 };
 
-// Team Lead / Team Member ke 5 extra fields. Baaki roles ke liye NULL.
 const teamFields = (role, body) => {
   if (!isTeamRole(role)) return [null, null, null, null, null];
   return [
