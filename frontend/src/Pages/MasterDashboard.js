@@ -13,18 +13,8 @@ import UpdatePasswordModal from "../components/UpdatePasswordModal";
 
 const memberTypeOptions = ["QA", "QC", "Production"];
 
-const formatDomain = (d) => {
-    const clean = (d ?? "").toString().trim();
-    if (!clean) return "";
-    return clean
-        .split(" ")
-        .map((word) =>
-            word.length > 0
-                ? word.charAt(0).toUpperCase() + word.slice(1).toLowerCase()
-                : word
-        )
-        .join(" ");
-};
+// Domain hamesha CAPITAL me dikhega (jpa / Jpa / JPA -> JPA)
+const formatDomain = (d) => (d ?? "").toString().trim().toUpperCase();
 
 // String ya array, dono ko clean array mein badalta hai
 const toArray = (data) => {
