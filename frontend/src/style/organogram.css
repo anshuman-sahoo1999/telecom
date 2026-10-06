@@ -73,8 +73,6 @@
   justify-content: center;
   flex-wrap: wrap;
   gap: 20px;
-  margin-bottom: 25px;
-  margin-top: 3%;
 }
 
 .org-tab-card {
@@ -194,7 +192,7 @@
   line-height: 1;
 }
 
-/* 1. Main Dashboard Tree */
+/* 1. Main Dashboard Tree (Overall) */
 .org-tree {
   display: flex;
   flex-direction: column;
@@ -203,6 +201,11 @@
   zoom: 0.34; 
   transform-origin: top center;
   min-width: max-content;
+}
+
+/* Project tab ka tree: Overall se thoda bada */
+.org-tree.project-tree {
+  zoom: 0.5;
 }
 
 .org-node {
@@ -555,6 +558,11 @@
   padding-bottom: 120px;
 }
 
+/* Popup me Project tab ka tree thoda bada */
+.org-popup-content .org-tree.project-tree {
+  zoom: 0.6;
+}
+
 .org-body-box::-webkit-scrollbar {
   display: none;
 }
@@ -730,7 +738,15 @@
     zoom: 0.28; 
   }
 
+  .org-tree.project-tree {
+    zoom: 0.4;
+  }
+
   .org-popup-content .org-tree {
     zoom: 0.35;
+  }
+
+  .org-popup-content .org-tree.project-tree {
+    zoom: 0.48;
   }
 }
