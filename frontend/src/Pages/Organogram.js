@@ -77,12 +77,36 @@ const hasDomain = (userDomain, domainName) => {
     return toList(userDomain).some((d) => d.toLowerCase() === target);
 };
 
-const getMemberType = (u) => {
-    const mt = Array.isArray(u?.memberType) ? u.memberType[0] : u?.memberType;
-    return (mt || "").toString().trim();
+// Member type ka naam sahi karta hai: qa -> QA, qc -> QC, prod / product / production -> Production
+// ("QC,Product" jaisa purana kata hua data bhi sahi se pehchana jayega)
+const normalizeType = (t) => {
+    const s = String(t || "").trim().toLowerCase();
+    if (!s) return "";
+    if (s === "qa") return "QA";
+    if (s === "qc") return "QC";
+    if (s.length >= 4 && "production".startsWith(s)) return "Production";
+    return String(t).trim();
+};
+
+// Ek user ke saare member types (QA, QC, Production mein se ek ya zyada)
+// Pehle sirf pehla type liya jata tha, isliye "QA,QC" wala user kisi box mein nahi aata tha
+const getMemberTypes = (u) => {
+    const seen = new Set();
+    const out = [];
+    toList(u?.memberType).forEach((t) => {
+        const n = normalizeType(t);
+        const key = n.toLowerCase();
+        if (n && !seen.has(key)) {
+            seen.add(key);
+            out.push(n);
+        }
+    });
+    return out;
 };
 
 const sameType = (a, b) => (a || "").toString().toLowerCase() === (b || "").toString().toLowerCase();
+
+const hasMemberType = (u, type) => getMemberTypes(u).some((t) => sameType(t, type));
 
 const sameId = (a, b) => String(a) === String(b);
 
@@ -421,18 +445,23 @@ const Organogram = () => {
     const misAdminIndex = admins.length > 1 ? 1 : 0;
 
     // Ek domain ke TL / QA / QC / Production members
+    // Agar ek user ke 2-3 types hain (jaise QA + QC), to wo har matching box mein dikhega
     const getDomainGroups = (domainName) => ({
         tls: teamLeads.filter((tl) => hasDomain(tl.domain, domainName)),
         qaMembers: teamMembers.filter(
-            (m) => sameType(getMemberType(m), "QA") && hasDomain(m.domain, domainName)
+            (m) => hasMemberType(m, "QA") && hasDomain(m.domain, domainName)
         ),
         qcMembers: teamMembers.filter(
-            (m) => sameType(getMemberType(m), "QC") && hasDomain(m.domain, domainName)
+            (m) => hasMemberType(m, "QC") && hasDomain(m.domain, domainName)
         ),
         productionMembers: teamMembers.filter(
-            (m) => sameType(getMemberType(m), "Production") && hasDomain(m.domain, domainName)
+            (m) => hasMemberType(m, "Production") && hasDomain(m.domain, domainName)
         ),
     });
+
+    // Ek se zyada type wale user ko drag nahi kar sakte (pata nahi kis box se hatana hai).
+    // Unka type badalna ho to User Management se edit karo.
+    const isDragLocked = (u) => getMemberTypes(u).length > 1;
 
     /* ---------------- Delete (✕ cross se) ---------------- */
 
@@ -609,7 +638,7 @@ const Organogram = () => {
                         Role: u.role || "",
                         // Array ho ya string, dono sahi dikhe
                         Domain: toList(u.domain).join(", "),
-                        MemberType: toList(u.memberType).join(", "),
+                        MemberType: getMemberTypes(u).join(", "),
                         Mobile: u.mobileNo || "",
                         Email: u.email || "",
                         TotalExp: u.totalExperience || "",
@@ -744,8 +773,17 @@ const Organogram = () => {
 
         if (!["QA", "QC", "Production"].includes(targetType)) return;
 
+        // Multi-type user (jaise QA + QC) ko drag nahi kar sakte
+        if (isDragLocked(draggedUser)) {
+            showToast(
+                "warning",
+                "Is user ke ek se zyada type hain, position User Management se badlo!"
+            );
+            return;
+        }
+
         const alreadyThere =
-            sameType(getMemberType(draggedUser), targetType) &&
+            hasMemberType(draggedUser, targetType) &&
             hasDomain(draggedUser.domain, targetDomain);
         if (alreadyThere) return;
 
@@ -854,6 +892,7 @@ const Organogram = () => {
                                                                         user={qa}
                                                                         onDelete={handleDelete}
                                                                         onHover={handleHoverUser}
+                                                                        disableDrag={isDragLocked(qa)}
                                                                     />
                                                                 ))
                                                             ) : (
@@ -872,6 +911,7 @@ const Organogram = () => {
                                                                         user={qc}
                                                                         onDelete={handleDelete}
                                                                         onHover={handleHoverUser}
+                                                                        disableDrag={isDragLocked(qc)}
                                                                     />
                                                                 ))
                                                             ) : (
@@ -890,6 +930,7 @@ const Organogram = () => {
                                                                         user={p}
                                                                         onDelete={handleDelete}
                                                                         onHover={handleHoverUser}
+                                                                        disableDrag={isDragLocked(p)}
                                                                     />
                                                                 ))
                                                             ) : (
