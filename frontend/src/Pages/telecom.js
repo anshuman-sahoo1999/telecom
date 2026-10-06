@@ -49,6 +49,31 @@ const parseMonthEntry = (m, fallbackYear) => {
   return { idx, year };
 };
 
+// FIX: ek month entry (p = { idx, year }) selected Month / From-To date filter me aati hai ya nahi.
+// Filter aur Month-wise chart dono isi ko use karte hain, taaki chart me sirf selected month hi dikhe.
+const monthInFilter = (p, selectedMonth, fromDate, toDate) => {
+  if (!p) return false;
+
+  if (selectedMonth?.month) {
+    const wantIdx = MONTH_KEYS.indexOf(selectedMonth.month.slice(0, 3).toLowerCase());
+    if (p.idx !== wantIdx || p.year !== selectedMonth.year) return false;
+  }
+
+  if (fromDate || toDate) {
+    let rangeStart = fromDate ? new Date(`${fromDate}T00:00:00`) : null;
+    let rangeEnd = toDate ? new Date(`${toDate}T23:59:59`) : null;
+    if (rangeStart && rangeEnd && rangeStart > rangeEnd) {
+      [rangeStart, rangeEnd] = [rangeEnd, rangeStart];
+    }
+    const monthStart = new Date(p.year, p.idx, 1);
+    const monthEnd = new Date(p.year, p.idx + 1, 0, 23, 59, 59);
+    if (rangeStart && monthEnd < rangeStart) return false;
+    if (rangeEnd && monthStart > rangeEnd) return false;
+  }
+
+  return true;
+};
+
 const getJobs = (item) => Number(firstFilled(item?.jobsDelivered, item?.jobs_delivered)) || 0;
 
 // "95%", "95", 0.95, 1 => 0-100 number. 1 (ya 0-1 ke beech) => percentage (1 = 100%)
@@ -518,32 +543,12 @@ export default function TelecomMap() {
       filtered = filtered.filter((item) => item.state && wanted.includes(lc(item.state)));
     }
 
-    if (selectedMonth?.month) {
-      const wantIdx = MONTH_KEYS.indexOf(selectedMonth.month.slice(0, 3).toLowerCase());
+    // Selected Month / From-To date: row tabhi aayegi jab uska koi ek month filter me aata ho
+    if (selectedMonth?.month || fromDate || toDate) {
       filtered = filtered.filter((item) =>
-        (Array.isArray(item?.months) ? item.months : []).some((m) => {
-          const p = parseMonthEntry(m, currentYear);
-          return p && p.idx === wantIdx && p.year === selectedMonth.year;
-        })
-      );
-    }
-
-    if (fromDate || toDate) {
-      let rangeStart = fromDate ? new Date(`${fromDate}T00:00:00`) : null;
-      let rangeEnd = toDate ? new Date(`${toDate}T23:59:59`) : null;
-      if (rangeStart && rangeEnd && rangeStart > rangeEnd) {
-        [rangeStart, rangeEnd] = [rangeEnd, rangeStart];
-      }
-      filtered = filtered.filter((item) =>
-        (Array.isArray(item?.months) ? item.months : []).some((m) => {
-          const p = parseMonthEntry(m, currentYear);
-          if (!p) return false;
-          const monthStart = new Date(p.year, p.idx, 1);
-          const monthEnd = new Date(p.year, p.idx + 1, 0, 23, 59, 59);
-          if (rangeStart && monthEnd < rangeStart) return false;
-          if (rangeEnd && monthStart > rangeEnd) return false;
-          return true;
-        })
+        (Array.isArray(item?.months) ? item.months : []).some((m) =>
+          monthInFilter(parseMonthEntry(m, currentYear), selectedMonth, fromDate, toDate)
+        )
       );
     }
     return filtered;
@@ -714,6 +719,11 @@ export default function TelecomMap() {
       (Array.isArray(item.months) ? item.months : []).forEach((m) => {
         const p = parseMonthEntry(m, currentYear);
         if (!p) return;
+
+        // FIX: ek row me kai months ho sakte hain (Aug, Sep, Oct). Agar Month / From-To date select hai
+        // to sirf wahi month chart me count hoga — baaki months ke bars nahi banenge.
+        if (!monthInFilter(p, selectedMonth, fromDate, toDate)) return;
+
         const key = `${p.idx}-${p.year}`;
         if (seen.has(key)) return;
         seen.add(key);
@@ -746,7 +756,7 @@ export default function TelecomMap() {
       return row;
     });
     return { monthlyJobsSorted: rows, allYears: years };
-  }, [currentFilterData, currentYear]);
+  }, [currentFilterData, currentYear, selectedMonth, fromDate, toDate]);
 
   // ---- Pie chart data ----
   // pieAll: sab domains (stable order + stable colour), legend me hidden bhi dikhenge (dim), dobara click se wapas aa sakte hain
