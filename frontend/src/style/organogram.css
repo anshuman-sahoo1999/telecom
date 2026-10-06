@@ -606,31 +606,14 @@
 }
 
 .org-tree:not(.project-tree) .org-legend .legend-item {
-  font-size: 25px;
-  font-weight: 800;
-  gap: 13px;
+  font-size: 22px;
+  gap: 12px;
 }
 
 .org-tree:not(.project-tree) .org-legend .legend-color {
-  width: 34px;
-  height: 34px;
+  width: 30px;
+  height: 30px;
   border-radius: 8px;
-}
-
-/* Project tab ka legend bhi thoda bada */
-.org-tree.project-tree .org-legend {
-  gap: 30px;
-}
-
-.org-tree.project-tree .org-legend .legend-item {
-  font-size: 20px;
-  gap: 11px;
-}
-
-.org-tree.project-tree .org-legend .legend-color {
-  width: 27px;
-  height: 27px;
-  border-radius: 7px;
 }
 
 .mis-wrapper {
