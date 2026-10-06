@@ -12,6 +12,23 @@ const clean = (v) => {
   return s === "" ? null : s;
 };
 
+const formatDomain = (domain) => {
+  const list = Array.isArray(domain)
+    ? domain
+    : String(domain || "").split(",");
+  const seen = new Set();
+  const out = [];
+  list.forEach((d) => {
+    const v = String(d || "").trim().toUpperCase();
+    if (v && !seen.has(v)) {
+      seen.add(v);
+      out.push(v);
+    }
+  });
+  return out.length ? out.join(",") : null;
+};
+
+// Team Lead / Team Member ke 5 extra fields. Baaki roles ke liye NULL.
 const teamFields = (role, body) => {
   if (!isTeamRole(role)) return [null, null, null, null, null];
   return [
@@ -135,9 +152,7 @@ exports.createUser = async (req, res) => {
     const finalPassword = password && password.trim() !== "" ? password : "123456";
     const hashedPassword = await bcrypt.hash(finalPassword, SALT_ROUNDS);
 
-    const finalDomain = Array.isArray(domain)
-      ? domain.join(",")
-      : domain || null;
+    const finalDomain = formatDomain(domain);
 
     // memberType ki length limit varchar(10) ko dhyan me rakhte hue slice kar diya hai
     let rawMemberType = Array.isArray(memberType)
@@ -223,7 +238,7 @@ exports.getAllUserDetails = (req, res) => {
       emp_id: item.emp_id,
       email: item.email,
       role: item.role,
-      domain: item.domain,
+      domain: item.domain ? formatDomain(item.domain) : item.domain,
       memberType: item.memberType,
       totalExperience: item.totalExperience ?? "",
       telecomExperience: item.telecomExperience ?? "",
@@ -247,9 +262,7 @@ exports.updateUser = (req, res) => {
 
   email = (email || "").trim().toLowerCase();
 
-  const finalDomain = Array.isArray(domain)
-    ? domain.join(",")
-    : domain || null;
+  const finalDomain = formatDomain(domain);
 
   let rawMemberType = Array.isArray(memberType)
     ? memberType.join(",")
@@ -367,7 +380,7 @@ exports.updateUserPosition = (req, res) => {
     WHERE id = ?
   `;
 
-  db.query(sql, [domain, finalMemberType, id], (err) => {
+  db.query(sql, [formatDomain(domain), finalMemberType, id], (err) => {
     if (err) {
       console.error("UpdateUserPosition Error:", err);
       return res.status(500).json({ success: false, message: err.sqlMessage || err });
