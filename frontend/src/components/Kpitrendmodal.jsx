@@ -24,17 +24,18 @@ const parsePercent = (val) => {
   if (val === null || val === undefined || val === "") return null;
   const num = parseFloat(val.toString().replace("%", "").trim());
   if (isNaN(num)) return null;
-  const pct = num > 0 && num <= 1 ? num * 100 : num; 
-  return Math.min(100, Math.max(0, Math.round(pct))); 
+  const pct = num > 0 && num <= 1 ? num * 100 : num;
+  return Math.min(100, Math.max(0, Math.round(pct)));
 };
 
-const isOtpMet = (val) => {
-  if (val === null || val === undefined || val === "") return false;
+// OTP: blank = no data (skip), yes/no = 100/0, number/percent = value
+const parseOtp = (val) => {
+  if (val === null || val === undefined) return null;
   const str = val.toString().trim().toLowerCase();
-  if (["yes", "y", "met", "true", "ok", "pass", "passed"].includes(str)) return true;
-  if (["no", "n", "not met", "false", "fail", "failed", "0"].includes(str)) return false;
-  const num = parseFloat(str.replace("%", ""));
-  return !isNaN(num) && num > 0;
+  if (str === "" || ["-", "na", "n/a", "null", "undefined"].includes(str)) return null;
+  if (["yes", "y", "met", "true", "ok", "pass", "passed"].includes(str)) return 100;
+  if (["no", "n", "not met", "false", "fail", "failed"].includes(str)) return 0;
+  return parsePercent(str);
 };
 
 const parseMonthYear = (m, fallbackYear) => {
@@ -134,9 +135,9 @@ export default function KpiTrendModal({ data = [], domains = [], onClose }) {
       if (!item) return;
       if (selectedDomain !== "ALL" && normalize(item.domain) !== wanted) return;
 
-      const qcVal = parsePercent(firstFilled(item.amdocsQc, item.amdocs_qc)); 
-      const otpMet = isOtpMet(item.otp);
-      const seen = new Set(); 
+      const qcVal = parsePercent(firstFilled(item.amdocsQc, item.amdocs_qc));
+      const otpVal = parseOtp(item.otp);
+      const seen = new Set();
 
       (Array.isArray(item.months) ? item.months : []).forEach((m) => {
         if (!m) return;
@@ -146,13 +147,15 @@ export default function KpiTrendModal({ data = [], domains = [], onClose }) {
         if (seen.has(monthIdx)) return;
         seen.add(monthIdx);
 
-        if (!bucket[monthIdx]) bucket[monthIdx] = { qcSum: 0, qcCount: 0, otpMet: 0, total: 0 };
+        if (!bucket[monthIdx]) bucket[monthIdx] = { qcSum: 0, qcCount: 0, otpSum: 0, otpCount: 0 };
         if (qcVal !== null) {
           bucket[monthIdx].qcSum += qcVal;
           bucket[monthIdx].qcCount += 1;
         }
-        bucket[monthIdx].total += 1;
-        if (otpMet) bucket[monthIdx].otpMet += 1;
+        if (otpVal !== null) {
+          bucket[monthIdx].otpSum += otpVal;
+          bucket[monthIdx].otpCount += 1;
+        }
       });
     });
 
@@ -161,8 +164,8 @@ export default function KpiTrendModal({ data = [], domains = [], onClose }) {
       if (!b) return { label: month, QC: null, OTP: null };
       return {
         label: month,
-        QC: b.qcCount > 0 ? Math.round(b.qcSum / b.qcCount) : 0,
-        OTP: b.total > 0 ? Math.round((b.otpMet / b.total) * 100) : 0,
+        QC: b.qcCount > 0 ? Math.round(b.qcSum / b.qcCount) : null,
+        OTP: b.otpCount > 0 ? Math.round(b.otpSum / b.otpCount) : null,
       };
     });
   }, [data, selectedDomain, activeYear, currentYear]);
@@ -181,7 +184,7 @@ export default function KpiTrendModal({ data = [], domains = [], onClose }) {
     if (!chartRef.current || exporting) return;
     setExporting(true);
     try {
-      await new Promise((res) => setTimeout(res, 150)); 
+      await new Promise((res) => setTimeout(res, 150));
       const canvas = await html2canvas(chartRef.current, {
         scale: 2,
         useCORS: true,
@@ -194,7 +197,7 @@ export default function KpiTrendModal({ data = [], domains = [], onClose }) {
       const link = document.createElement("a");
       link.href = canvas.toDataURL(mime, 0.95);
       link.download = `KPI Trend ${safeTitle} ${activeYear} ${getFileNameDateTime()}.${type}`;
-      document.body.appendChild(link); 
+      document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
     } catch (err) {
@@ -321,7 +324,7 @@ export default function KpiTrendModal({ data = [], domains = [], onClose }) {
               )}
             </div>
           </div>
-          
+
           <div className="ktmLegend">
             {SERIES.map((s) => (
               <span key={s.key} className="ktmLegendItem">
