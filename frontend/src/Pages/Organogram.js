@@ -440,6 +440,7 @@ const Organogram = () => {
     const teamLeads = users.filter((u) => u.role === "TeamLead");
     const teamMembers = users.filter((u) => u.role === "TeamMember");
 
+    // Capacity Number = Team Lead + Team Member (TL ke naam bhi count hote hain)
     const totalEmployeesCount = teamLeads.length + teamMembers.length;
 
     const misAdminIndex = admins.length > 1 ? 1 : 0;
@@ -992,7 +993,8 @@ const Organogram = () => {
             <div className="org-body-box-inner">
                 <div ref={refToUse} className="export-area">
                     {isExporting && <ExportHeader />}
-                    <div className="org-tree">
+                    {/* project-tree class: Project tab ka tree thoda bada dikhane ke liye */}
+                    <div className="org-tree project-tree">
                         <div className="domain-wrapp">
                             {domains.map((d) => {
                                 const domainName = d.domain;
