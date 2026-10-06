@@ -616,7 +616,7 @@ const importExcel = async (req, res) => {
 
                   const mergedUOM = { ...existingUOM, ...uom };
 
-                  // CHANGED: pehle yahan +1 hota tha (2, 3...). Ab ek row = hamesha 1 job delivered.
+                  // Ek row = hamesha 1 job delivered
                   const newJobsDelivered = 1;
 
                   const updateSql = `
@@ -724,7 +724,6 @@ const createWork = async (req, res) => {
   const qc_engineers = pick(b, "qc_engineers");
   const internal_qc = pick(b, "internal_qc", "internalQc");
   const amdocs_qc = pick(b, "amdocs_qc", "amdocsQc");
-  const jobs_delivered = pick(b, "jobs_delivered");
   const job_id = pick(b, "job_id", "jobId");
   const receive_date = pick(b, "receive_date", "receiveDate", "receivedDate");
   const ecd_date = pick(b, "ecd_date", "ecdDate");
@@ -776,7 +775,7 @@ const createWork = async (req, res) => {
              qc_engineers = COALESCE(NULLIF(?, ''), qc_engineers),
              internal_qc = COALESCE(NULLIF(?, ''), internal_qc),
              amdocs_qc = COALESCE(NULLIF(?, ''), amdocs_qc),
-             jobs_delivered = COALESCE(?, jobs_delivered),
+             jobs_delivered = 1,
              receive_date = COALESCE(?, receive_date),
              ecd_date = COALESCE(?, ecd_date),
              submission_date = COALESCE(?, submission_date),
@@ -797,7 +796,6 @@ const createWork = async (req, res) => {
           clean(flatText(qc_engineers)),
           formattedInternalQc,
           formattedAmdocsQc,
-          1, // CHANGED: ek row = hamesha 1 job delivered
           formattedReceiveDate,
           formattedEcdDate,
           formattedSubmissionDate,
@@ -808,7 +806,7 @@ const createWork = async (req, res) => {
       const result = await query(
         `INSERT INTO work_updates
          (months, domain, sow, job_type, region, state, county, uom, otp, current_status, production_engineers, qc_engineers, internal_qc, amdocs_qc, jobs_delivered, job_id, receive_date, ecd_date, submission_date)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?)`,
         [
           JSON.stringify(parsedMonths),
           fixedDomain,
@@ -824,7 +822,6 @@ const createWork = async (req, res) => {
           clean(flatText(qc_engineers)),
           formattedInternalQc,
           formattedAmdocsQc,
-          1, // CHANGED: ek row = hamesha 1 job delivered
           cleanJobId,
           formattedReceiveDate,
           formattedEcdDate,
@@ -868,7 +865,6 @@ const updateWork = async (req, res) => {
   const state = pick(b, "state", "market");
   const county = pick(b, "county");
   const uom = pick(b, "uom");
-  const jobs_delivered = pick(b, "jobs_delivered");
   const job_id = pick(b, "job_id", "jobId");
   const current_status = pick(b, "current_status", "currentStatus");
   const production_engineers = pick(b, "production_engineers");
@@ -903,7 +899,8 @@ const updateWork = async (req, res) => {
   if (has(state)) setCol("state", state);
   if (has(county)) setCol("county", county);
   if (has(uom)) setCol("uom", JSON.stringify(uom || {}));
-  if (has(jobs_delivered)) setCol("jobs_delivered", 1); // CHANGED: ek row = hamesha 1 job delivered
+  // Ek row = hamesha 1 job delivered (frontend jo bhi bheje, hamesha 1 save hoga)
+  setCol("jobs_delivered", 1);
   if (has(current_status)) setCol("current_status", clean(current_status));
   if (has(production_engineers)) setCol("production_engineers", clean(production_engineers));
   if (has(qc_engineers)) setCol("qc_engineers", clean(qc_engineers));
@@ -1052,6 +1049,7 @@ const mapWorkRow = (row) => {
     month: displayMonth,
     months: monthsArr,
     uom: safeParseJson(work.uom, {}),
+    jobs_delivered: 1, // FIX: ek row = hamesha 1 job delivered
     otp: displayOtp(work.otp),
     amdocs_qc: blankIfZero(work.amdocs_qc),
     internal_qc: blankIfZero(work.internal_qc),
@@ -1108,6 +1106,7 @@ const getFileData = (req, res) => {
       const { created_at, updated_at, file_name, id, ...rest } = row;
       return {
         ...rest,
+        jobs_delivered: 1, // FIX: ek row = hamesha 1 job delivered
         otp: displayOtp(rest.otp),
         amdocs_qc: blankIfZero(rest.amdocs_qc),
         internal_qc: blankIfZero(rest.internal_qc),
@@ -1121,9 +1120,10 @@ const getFileData = (req, res) => {
   });
 };
 
+// FIX: SUM(jobs_delivered) ki jagah COUNT(*) -> har row = 1 job
 const getDomainStats = (req, res) => {
   db.query(
-    `SELECT domain, SUM(jobs_delivered) AS jobs_delivered FROM work_updates GROUP BY domain`,
+    `SELECT domain, COUNT(*) AS jobs_delivered FROM work_updates GROUP BY domain`,
     (err, rows) => {
       if (err) return res.status(500).json(err);
       res.json(rows);
@@ -1133,7 +1133,7 @@ const getDomainStats = (req, res) => {
 
 const getJobTypeStats = (req, res) => {
   db.query(
-    `SELECT job_type AS job_type, SUM(jobs_delivered) AS jobs_delivered FROM work_updates GROUP BY job_type ORDER BY jobs_delivered DESC`,
+    `SELECT job_type AS job_type, COUNT(*) AS jobs_delivered FROM work_updates GROUP BY job_type ORDER BY jobs_delivered DESC`,
     (err, rows) => {
       if (err) return res.status(500).json(err);
       res.json(rows);
@@ -1146,6 +1146,7 @@ const getMonthWiseReport = (req, res) => {
     if (err) return res.status(500).json([]);
     const formatted = rows.map(r => ({
       ...r,
+      jobs_delivered: 1, // FIX: ek row = hamesha 1 job delivered
       otp: displayOtp(r.otp),
       amdocs_qc: blankIfZero(r.amdocs_qc),
       internal_qc: blankIfZero(r.internal_qc),
@@ -1159,7 +1160,7 @@ const getMonthWiseReport = (req, res) => {
 
 const getStateWiseJobs = (req, res) => {
   db.query(
-    `SELECT state, domain, SUM(jobs_delivered) AS jobs_delivered FROM work_updates GROUP BY state, domain`,
+    `SELECT state, domain, COUNT(*) AS jobs_delivered FROM work_updates GROUP BY state, domain`,
     (err, rows) => {
       if (err) return res.status(500).json(err);
 
@@ -1234,6 +1235,24 @@ const clearWork = async (req, res) => {
     return res.status(500).json({ message: "Clear failed", error: err.message });
   }
 };
+
+/* ======================================
+   AUTO FIX: purani rows ko 1 karo (server start par apne aap chalega)
+   Manual SQL ki zaroorat nahi.
+====================================== */
+const fixOldJobsDelivered = async () => {
+  try {
+    const result = await query(
+      "UPDATE work_updates SET jobs_delivered = 1 WHERE jobs_delivered IS NULL OR jobs_delivered <> 1"
+    );
+    console.log(
+      `jobs_delivered auto-fix done. Rows fixed: ${result && result.affectedRows !== undefined ? result.affectedRows : 0}`
+    );
+  } catch (err) {
+    console.error("jobs_delivered auto-fix failed:", err.message);
+  }
+};
+fixOldJobsDelivered();
 
 /* ======================================
    MODULE EXPORTS
