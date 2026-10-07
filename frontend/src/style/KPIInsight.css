@@ -1,5 +1,12 @@
 .kpiq-page {
   --kpiq-head-h: 40px;
+  --kpiq-cell-text: #ffffff;
+  --kpiq-green: #16a34a;
+  --kpiq-green-border: #15803d;
+  --kpiq-orange: #d97706;
+  --kpiq-orange-border: #b45309;
+  --kpiq-red: #dc2626;
+  --kpiq-red-border: #b91c1c;
   width: 100%;
   box-sizing: border-box;
 }
@@ -115,7 +122,6 @@
 
 /* 2 header rows: [Quality Rating | Domain] / [JOB Completed Month | domain names] */
 .kpiq-table thead tr.first th { height: var(--kpiq-head-h); }
-/* -1px removes the thin gap that can appear between the two sticky header rows */
 .kpiq-table thead tr.second th { top: calc(var(--kpiq-head-h) - 1px); border-top: 1px solid rgba(255,255,255,0.18); }
 .kpiq-table tbody tr:last-child td { border-bottom: none; }
 
@@ -126,11 +132,38 @@
 .kpiq-table thead .stickyRight { background: #0f4a63; color: #fff; z-index: 3; min-width: 150px; }
 .kpiq-table th:not(.stickyCol):not(.stickyRight) { min-width: 96px; }
 
-/* Hover only on devices that really hover (avoids "stuck" hover on touch) */
+/* ======================================
+   VALUE CELLS: poora table box color (Excel jaisa)
+   Text sab band me same (--kpiq-cell-text)
+====================================== */
+.kpiq-table td.kpiq-cell {
+  color: var(--kpiq-cell-text);
+  font-weight: 700;
+  font-size: 13px;
+  letter-spacing: 0.1px;
+}
+.kpiq-table td.kpiq-cell.green {
+  background: var(--kpiq-green);
+  border-bottom-color: var(--kpiq-green-border);
+  border-right-color: var(--kpiq-green-border);
+}
+.kpiq-table td.kpiq-cell.orange {
+  background: var(--kpiq-orange);
+  border-bottom-color: var(--kpiq-orange-border);
+  border-right-color: var(--kpiq-orange-border);
+}
+.kpiq-table td.kpiq-cell.red {
+  background: var(--kpiq-red);
+  border-bottom-color: var(--kpiq-red-border);
+  border-right-color: var(--kpiq-red-border);
+}
+
+/* Hover only on devices that really hover. Value cells ka color hover pe nahi badlega */
 @media (hover: hover) {
-  .kpiq-table tbody tr:hover td { background: #f8fafc; }
+  .kpiq-table tbody tr:hover td:not(.kpiq-cell) { background: #f8fafc; }
   .kpiq-table tbody tr:hover td.stickyCol,
   .kpiq-table tbody tr:hover td.stickyRight { background: #f1f5f9; }
+  .kpiq-table tbody tr:hover td.kpiq-cell { filter: brightness(1.06); }
 }
 .kpiq-colScope { display: block; font-size: 11px; font-weight: 600; opacity: 0.85; }
 
@@ -149,7 +182,7 @@
 .kpiq-act:disabled { opacity: 0.5; cursor: not-allowed; }
 
 /* Pill + Legend */
-.kpiq-pill { display: inline-block; min-width: 58px; padding: 3px 9px; border-radius: 6px; font-weight: 700; font-size: 12.5px; border: 1px solid transparent; white-space: nowrap; }
+.kpiq-pill { display: inline-block; min-width: 58px; padding: 3px 9px; border-radius: 6px; font-weight: 700; font-size: 12.5px; border: 1px solid transparent; white-space: nowrap; text-align: center; }
 .kpiq-legend { display: flex; flex-wrap: wrap; gap: 14px; align-items: center; margin-top: 10px; font-size: 12px; color: #475569; font-weight: 600; }
 .kpiq-legend span.dot { display: inline-block; width: 11px; height: 11px; border-radius: 3px; margin-right: 6px; vertical-align: -1px; }
 
@@ -172,13 +205,11 @@
 /* Info popup */
 .kpiq-info-wrap { position: relative; display: inline-flex; align-items: center; }
 .kpiq-info-btn { background: transparent; border: none; padding: 0 0 0 8px; cursor: pointer; color: #0f4a63; font-size: 17px; display: inline-flex; align-items: center; }
-/* Inside the dark table header the icon must be white, otherwise it is invisible */
 .kpiq-table thead .kpiq-info-btn { color: #fff; }
 .kpiq-info-pop {
   position: absolute; top: 24px; left: -8px; z-index: 10; width: 250px; max-width: calc(100vw - 48px);
   background: #fff; border: 1px solid #e2e8f0; border-radius: 10px; box-shadow: 0 10px 28px rgba(0,0,0,0.22);
   padding: 10px 12px; display: flex; flex-direction: column; gap: 8px;
-  /* Reset values inherited from the table header (white text, nowrap, centered) */
   color: #0f172a; text-align: left; white-space: normal; font-weight: 600; line-height: 1.35; cursor: default;
 }
 .kpiq-info-row { display: flex; align-items: center; gap: 8px; font-size: 12.5px; font-weight: 700; color: #0f172a; }
@@ -210,6 +241,7 @@
   border-radius: 6px; border: 1px solid #cbd5e1; background: #fff; color: #0f172a; outline: none;
   -moz-appearance: textfield; appearance: textfield;
 }
+.kpiq-cell-input::placeholder { color: #94a3b8; }
 .kpiq-cell-input::-webkit-outer-spin-button,
 .kpiq-cell-input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
 .kpiq-cell-input:focus { border-color: #0f4a63; box-shadow: 0 0 0 3px rgba(15,74,99,0.15); }
@@ -247,6 +279,7 @@
 
   .kpiq-table { min-width: 0; }
   .kpiq-table th, .kpiq-table td { padding: 7px; font-size: 12px; }
+  .kpiq-table td.kpiq-cell { font-size: 12px; }
   .kpiq-table thead .stickyCol { min-width: 84px; }
   .kpiq-table .stickyCol { max-width: 92px; white-space: normal; line-height: 1.25; }
   .kpiq-table thead .stickyRight { min-width: 74px; }
@@ -275,7 +308,6 @@
   .kpiq-page { padding: 8px; }
   .kpiq-btn { padding: 10px 12px; font-size: 13.5px; }
   .kpiq-card-head { padding: 10px 12px; font-size: 14px; }
-  /* Swipe hint stays visible on phones, just smaller (table scrolls sideways here too) */
   .kpiq-card-head::after { font-size: 10.5px; }
 
   /* Bottom-sheet style modal */
