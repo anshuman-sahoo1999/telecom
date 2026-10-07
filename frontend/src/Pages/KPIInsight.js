@@ -11,11 +11,13 @@ import "../style/KPIInsight.css";
 const MONTH_NAMES = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
 const BANDS = {
-  green: { key: "green", label: "Green", color: "#166534", bg: "#dcfce7", border: "#86efac", dot: "#16a34a" },
-  orange: { key: "orange", label: "Orange", color: "#9a3412", bg: "#ffedd5", border: "#fdba74", dot: "#d97706" },
-  red: { key: "red", label: "Red", color: "#991b1b", bg: "#fee2e2", border: "#fca5a5", dot: "#dc2626" },
-  none: { key: "none", label: "", color: "#64748b", bg: "#f1f5f9", border: "#e2e8f0", dot: "#94a3b8" },
+  green: { key: "green", label: "Green", color: "#166534", bg: "#dcfce7", border: "#86efac", dot: "#16a34a", cellBg: "#16a34a", cellBorder: "#15803d" },
+  orange: { key: "orange", label: "Orange", color: "#9a3412", bg: "#ffedd5", border: "#fdba74", dot: "#d97706", cellBg: "#d97706", cellBorder: "#b45309" },
+  red: { key: "red", label: "Red", color: "#991b1b", bg: "#fee2e2", border: "#fca5a5", dot: "#dc2626", cellBg: "#dc2626", cellBorder: "#b91c1c" },
+  none: { key: "none", label: "", color: "#64748b", bg: "#f1f5f9", border: "#e2e8f0", dot: "#94a3b8", cellBg: "#ffffff", cellBorder: "#cbd5e1" },
 };
+
+const CELL_TEXT = "#ffffff";
 
 const getBand = (val) => {
   if (val === null || val === undefined || val === "" || Number.isNaN(Number(val))) return BANDS.none;
@@ -75,8 +77,6 @@ const lastSixMonths = (year, month) => {
 const sameSet = (a, b) => a.size === b.size && [...a].every((k) => b.has(k));
 
 // Current date. Din badalte hi (12:00 AM) month / year apne aap update ho jate hain.
-// Har minute + tab wapas aane par check karta hai, aur state sirf tab badalta hai jab
-// date sach me badli ho (pehle har visibilitychange par unnecessary re-render hota tha).
 function useToday() {
   const [today, setToday] = useState(() => new Date());
   useEffect(() => {
@@ -85,7 +85,7 @@ function useToday() {
       setToday((prev) => (prev.toDateString() === now.toDateString() ? prev : now));
     };
     const timer = setInterval(refresh, 60 * 1000);
-    document.addEventListener("visibilitychange", refresh); // laptop sleep / tab in background
+    document.addEventListener("visibilitychange", refresh);
     return () => {
       clearInterval(timer);
       document.removeEventListener("visibilitychange", refresh);
@@ -96,11 +96,6 @@ function useToday() {
 
 /* ======================================
    OVERLAY
-   - document.body me portal se render hota hai (parent ke overflow / transform /
-     z-index se popup kabhi clip ya hide nahi hoga)
-   - positioning inline hai, CSS file par depend nahi
-   - mousedown AND click dono backdrop par ho tabhi band hota hai
-   - popup khula ho to peeche ka page scroll nahi hota
 ====================================== */
 const OVERLAY_POSITION = {
   position: "fixed",
@@ -273,13 +268,10 @@ function MonthPicker({ years, selected, onChange, disabled }) {
 
 /* ======================================
    CREATE POPUP
-   "Choose Month, Year" me sirf CURRENT YEAR ke 12 months aate hain.
-   Default = current month + current year.
 ====================================== */
 function CreateModal({ currentYear, defaultMonth, domainList, rows, onClose, onSaved }) {
-  // Single "Choose Month, Year" value, e.g. "2026-3". Default = current month + current year.
   const [ym, setYm] = useState(mk(currentYear, defaultMonth));
-  const [kpi, setKpi] = useState(KPI_OPTIONS[0]); // Quality Rating / On Time Delivery / Repeat
+  const [kpi, setKpi] = useState(KPI_OPTIONS[0]);
   const [domain, setDomain] = useState("");
   const [scope, setScope] = useState("");
   const [qRaw, setQRaw] = useState("");
@@ -296,7 +288,6 @@ function CreateModal({ currentYear, defaultMonth, domainList, rows, onClose, onS
   const isQuality = kpi === "Quality Rating";
   const valueLabel = isQuality ? "Quality %" : `${kpi} %`;
 
-  // If the year changes at midnight while this popup is open, move to the new year (same month)
   useEffect(() => {
     setYm((prev) => mk(currentYear, Number(prev.split("-")[1])));
   }, [currentYear]);
@@ -357,7 +348,6 @@ function CreateModal({ currentYear, defaultMonth, domainList, rows, onClose, onS
     const input = e.target.value;
     let next;
 
-    // User pressed Backspace while caret was after the "%": delete the last digit instead
     const deletedPercent =
       qRaw !== "" &&
       e.nativeEvent?.inputType === "deleteContentBackward" &&
@@ -410,6 +400,8 @@ function CreateModal({ currentYear, defaultMonth, domainList, rows, onClose, onS
     }
   };
 
+  const hasBand = band.key !== "none";
+
   return (
     <Overlay disabled={saving} onClose={onClose}>
       <div className="kpiq-modal" onClick={(e) => e.stopPropagation()}>
@@ -423,7 +415,6 @@ function CreateModal({ currentYear, defaultMonth, domainList, rows, onClose, onS
         <div className="kpiq-modal-body">
           <div className="kpiq-field">
             <label className="kpiq-label">Choose Month, Year</label>
-            {/* Sirf current year ke months (Jan - Dec). Default = current month */}
             <select
               className="kpiq-select"
               value={ym}
@@ -493,8 +484,8 @@ function CreateModal({ currentYear, defaultMonth, domainList, rows, onClose, onS
                 {showInfo && (
                   <div className="kpiq-info-pop">
                     {["green", "orange", "red"].map((k) => (
-                      <div key={k} className="kpiq-info-row" style={{ color: BANDS[k].color }}>
-                        <span style={{ width: 12, height: 12, borderRadius: 3, background: BANDS[k].dot, display: "inline-block" }} />
+                      <div key={k} className="kpiq-info-row">
+                        <span style={{ width: 12, height: 12, borderRadius: 3, background: BANDS[k].cellBg, display: "inline-block" }} />
                         {k === "green" ? "90% - 100% = Green" : k === "orange" ? "80% - 90% = Orange" : "Below 80% = Red"}
                       </div>
                     ))}
@@ -503,6 +494,7 @@ function CreateModal({ currentYear, defaultMonth, domainList, rows, onClose, onS
               </span>
             </div>
             <div className="kpiq-quality-row">
+              {/* Input ka text color fixed (band ke hisab se nahi badlega), sirf box ka color badlega */}
               <input
                 ref={qRef}
                 className="kpiq-input"
@@ -518,13 +510,16 @@ function CreateModal({ currentYear, defaultMonth, domainList, rows, onClose, onS
                 onKeyDown={(e) => { if (e.key === "Enter") handleSubmit(); }}
                 style={{
                   fontWeight: 700,
-                  color: band.key === "none" ? "#0f172a" : band.color,
-                  borderColor: band.key === "none" ? undefined : band.dot,
-                  background: band.key === "none" ? "#fff" : band.bg,
+                  color: hasBand ? CELL_TEXT : "#0f172a",
+                  borderColor: hasBand ? band.cellBorder : undefined,
+                  background: hasBand ? band.cellBg : "#fff",
                 }}
               />
-              {band.key !== "none" && (
-                <span className="kpiq-pill" style={{ color: band.color, background: band.bg, borderColor: band.border }}>
+              {hasBand && (
+                <span
+                  className="kpiq-pill"
+                  style={{ color: CELL_TEXT, background: band.cellBg, borderColor: band.cellBorder }}
+                >
                   {band.label}
                 </span>
               )}
@@ -599,7 +594,6 @@ const BLANK_STYLE = {
 };
 
 export default function KPIInsight({ domains = [] }) {
-  // Always taken from the system date, so it rolls over to 2027 automatically.
   const today = useToday();
   const currentYear = today.getFullYear();
   const currentMonth = today.getMonth() + 1;
@@ -608,10 +602,7 @@ export default function KPIInsight({ domains = [] }) {
   const [options, setOptions] = useState([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState("");
-  // Default = last 6 months including the current month
   const [selected, setSelected] = useState(() => lastSixMonths(currentYear, currentMonth));
-  // When the month/year changes at midnight (e.g. Oct -> Nov, Dec -> Jan):
-  // if the selection was the default last-6-months (or the full previous year), move it forward automatically.
   const prevDateRef = useRef({ y: currentYear, m: currentMonth });
   useEffect(() => {
     const prev = prevDateRef.current;
@@ -627,10 +618,10 @@ export default function KPIInsight({ domains = [] }) {
     });
   }, [currentYear, currentMonth]);
 
-  const [modal, setModal] = useState(null); // null | { type: "create" }
-  const [editing, setEditing] = useState(null); // { kpi, k, period, drafts, saving, error }
+  const [modal, setModal] = useState(null);
+  const [editing, setEditing] = useState(null);
   const [exporting, setExporting] = useState(false);
-  const [deleteTarget, setDeleteTarget] = useState(null); // period + kpi
+  const [deleteTarget, setDeleteTarget] = useState(null);
   const [deleting, setDeleting] = useState(false);
   const [toast, setToast] = useState(null);
 
@@ -642,7 +633,6 @@ export default function KPIInsight({ domains = [] }) {
     };
   }, []);
 
-  // Only the latest request is allowed to update state (avoids out-of-order responses)
   const loadSeq = useRef(0);
   const loadAll = useCallback(async () => {
     const seq = ++loadSeq.current;
@@ -683,7 +673,6 @@ export default function KPIInsight({ domains = [] }) {
     return [...map.values()].sort((a, b) => a.domain.localeCompare(b.domain));
   }, [options, domains]);
 
-  // Top filter (MonthPicker) me purane saalon ka data dekhne ke liye saare available years rahenge
   const yearList = useMemo(() => {
     const set = new Set([currentYear]);
     lastSixMonths(currentYear, currentMonth).forEach((k) => set.add(Number(k.split("-")[0])));
@@ -691,7 +680,6 @@ export default function KPIInsight({ domains = [] }) {
     return [...set].sort((a, b) => b - a);
   }, [rows, currentYear, currentMonth]);
 
-  // Har KPI ka apna table: rows = Month + Year, columns = domain + scope
   const views = useMemo(() => {
     const out = {};
     KPI_OPTIONS.forEach((kpi) => {
@@ -723,7 +711,6 @@ export default function KPIInsight({ domains = [] }) {
     return out;
   }, [rows, selected]);
 
-  // Sirf wahi KPI tables dikhenge jinka data hai (Quality Rating, On Time Delivery, Repeat - isi order me)
   const visibleKpis = KPI_OPTIONS.filter((k) => views[k].cols.length > 0);
 
   const entriesOf = useCallback(
@@ -734,7 +721,6 @@ export default function KPIInsight({ domains = [] }) {
     [rows]
   );
 
-  // If the row being edited disappears (e.g. data reloaded), leave edit mode
   useEffect(() => {
     if (editing && !editing.saving && !views[editing.kpi].periods.some((p) => p.k === editing.k)) setEditing(null);
   }, [views, editing]);
@@ -834,7 +820,7 @@ export default function KPIInsight({ domains = [] }) {
     }
   };
 
-  /* ---------- Generate Excel (.xlsx, same as table, colour by %, no Action column) ---------- */
+  /* ---------- Generate Excel (.xlsx) ---------- */
   const generateExcel = async () => {
     if (!visibleKpis.length || exporting) return;
     let ExcelJS;
@@ -844,7 +830,6 @@ export default function KPIInsight({ domains = [] }) {
         const mod = await import("exceljs/dist/exceljs.min.js");
         ExcelJS = mod.default || mod;
       } catch (minErr) {
-        // Kuch bundlers me min build resolve nahi hota, to normal package try karo
         try {
           const mod = await import("exceljs");
           ExcelJS = mod.default || mod;
@@ -863,7 +848,6 @@ export default function KPIInsight({ domains = [] }) {
       const box = (hex) => ({ top: side(hex), left: side(hex), bottom: side(hex), right: side(hex) });
       const center = { horizontal: "center", vertical: "middle", wrapText: true };
 
-      // Teeno KPI tables ek ke niche ek (beech me 1 khali row), same look as screen
       let startRow = 1;
       let maxCols = 2;
       visibleKpis.forEach((kpi) => {
@@ -906,7 +890,6 @@ export default function KPIInsight({ domains = [] }) {
             const cell = ws.getCell(rowNo, ci + 2);
             const r = v.cell[`${p.k}|${c.key}`];
             if (!r) {
-              // Blank cell: screen ki tarah "_" dikhao
               cell.value = "_";
               cell.font = { bold: true, color: { argb: "FF94A3B8" } };
               cell.alignment = center;
@@ -918,14 +901,15 @@ export default function KPIInsight({ domains = [] }) {
             const decimals = (String(q).split(".")[1] || "").length;
             cell.value = Math.round(q * 100) / 10000;
             cell.numFmt = decimals === 0 ? "0%" : decimals === 1 ? "0.0%" : "0.00%";
-            cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: argb(b.bg) } };
-            cell.font = { bold: true, color: { argb: argb(b.color) } };
+            // Poora cell band ke color se bhara hua, text hamesha white
+            cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: argb(b.cellBg) } };
+            cell.font = { bold: true, color: { argb: argb(CELL_TEXT) } };
             cell.alignment = center;
-            cell.border = box(b.border);
+            cell.border = box(b.cellBorder);
           });
         });
 
-        startRow = r2 + v.periods.length + 2; // next table starts after 1 blank row
+        startRow = r2 + v.periods.length + 2;
       });
 
       ws.getColumn(1).width = 22;
@@ -958,15 +942,6 @@ export default function KPIInsight({ domains = [] }) {
     } finally {
       if (mountedRef.current) setExporting(false);
     }
-  };
-
-  const pill = (value) => {
-    const b = getBand(value);
-    return (
-      <span className="kpiq-pill" style={{ color: b.color, background: b.bg, borderColor: b.border }}>
-        {fmtPct(value)}
-      </span>
-    );
   };
 
   return (
@@ -1050,6 +1025,7 @@ export default function KPIInsight({ domains = [] }) {
                             if (isEdit) {
                               const raw = editing.drafts[c.key] ?? "";
                               const b = getBand(raw === "" || raw === "." ? null : Number(raw));
+                              const has = b.key !== "none";
                               return (
                                 <td key={c.key}>
                                   <div className="kpiq-cell-edit">
@@ -1068,17 +1044,35 @@ export default function KPIInsight({ domains = [] }) {
                                         if (e.key === "Enter") saveEdit();
                                         if (e.key === "Escape") cancelEdit();
                                       }}
-                                      style={b.key === "none" ? undefined : { color: b.color, background: b.bg, borderColor: b.border }}
+                                      style={
+                                        has
+                                          ? { color: CELL_TEXT, background: b.cellBg, borderColor: b.cellBorder }
+                                          : undefined
+                                      }
                                     />
-                                    <span className="kpiq-cell-pct">%</span>
+                                    <span
+                                      className="kpiq-cell-pct"
+                                      style={has ? { color: CELL_TEXT } : undefined}
+                                    >
+                                      %
+                                    </span>
                                   </div>
                                 </td>
                               );
                             }
                             const r = view.cell[`${p.k}|${c.key}`];
+                            if (!r) {
+                              return (
+                                <td key={c.key}>
+                                  <span className="kpiq-blank" style={BLANK_STYLE} title="No data">_</span>
+                                </td>
+                              );
+                            }
+                            const b = getBand(r.quality);
+                            // Poora td box band ke color se bharta hai (Excel jaisa)
                             return (
-                              <td key={c.key}>
-                                {r ? pill(r.quality) : <span className="kpiq-blank" style={BLANK_STYLE} title="No data">_</span>}
+                              <td key={c.key} className={`kpiq-cell ${b.key}`}>
+                                {fmtPct(r.quality)}
                               </td>
                             );
                           })}
@@ -1117,9 +1111,9 @@ export default function KPIInsight({ domains = [] }) {
       </div>
 
       <div className="kpiq-legend">
-        <span><span className="dot" style={{ background: BANDS.green.dot }} />90% - 100% Green</span>
-        <span><span className="dot" style={{ background: BANDS.orange.dot }} />80% - 90% Orange</span>
-        <span><span className="dot" style={{ background: BANDS.red.dot }} />Below 80% Red</span>
+        <span><span className="dot" style={{ background: BANDS.green.cellBg }} />90% - 100% Green</span>
+        <span><span className="dot" style={{ background: BANDS.orange.cellBg }} />80% - 90% Orange</span>
+        <span><span className="dot" style={{ background: BANDS.red.cellBg }} />Below 80% Red</span>
       </div>
 
       {modal?.type === "create" && (
