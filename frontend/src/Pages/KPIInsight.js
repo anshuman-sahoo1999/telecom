@@ -10,13 +10,16 @@ import "../style/KPIInsight.css";
 ====================================== */
 const MONTH_NAMES = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
+// cellBg / cellBorder = poore table box ka color (screen, legend, popup aur Excel sab yahin se lete hain).
+// Color badalna ho to SIRF yahin badlo.
 const BANDS = {
-  green: { key: "green", label: "Green", color: "#166534", bg: "#dcfce7", border: "#86efac", dot: "#16a34a", cellBg: "#16a34a", cellBorder: "#15803d" },
-  orange: { key: "orange", label: "Orange", color: "#9a3412", bg: "#ffedd5", border: "#fdba74", dot: "#d97706", cellBg: "#d97706", cellBorder: "#b45309" },
-  red: { key: "red", label: "Red", color: "#991b1b", bg: "#fee2e2", border: "#fca5a5", dot: "#dc2626", cellBg: "#dc2626", cellBorder: "#b91c1c" },
-  none: { key: "none", label: "", color: "#64748b", bg: "#f1f5f9", border: "#e2e8f0", dot: "#94a3b8", cellBg: "#ffffff", cellBorder: "#cbd5e1" },
+  green: { key: "green", label: "Green", cellBg: "#4ade80", cellBorder: "#22c55e" },
+  orange: { key: "orange", label: "Orange", cellBg: "#fbbf24", cellBorder: "#f59e0b" },
+  red: { key: "red", label: "Red", cellBg: "#ef4444", cellBorder: "#dc2626" },
+  none: { key: "none", label: "", cellBg: "#ffffff", cellBorder: "#cbd5e1" },
 };
 
+// Value ka text color hamesha yahi rahega (band ke hisab se change nahi hoga)
 const CELL_TEXT = "#ffffff";
 
 const getBand = (val) => {
@@ -299,6 +302,7 @@ function CreateModal({ currentYear, defaultMonth, domainList, rows, onClose, onS
 
   const qualityNumber = qRaw === "" || qRaw === "." ? null : Number(qRaw);
   const band = getBand(qualityNumber);
+  const hasBand = band.key !== "none";
 
   const existing = useMemo(() => {
     if (!domain) return null;
@@ -348,6 +352,7 @@ function CreateModal({ currentYear, defaultMonth, domainList, rows, onClose, onS
     const input = e.target.value;
     let next;
 
+    // Backspace "%" ke baad caret par dabaya to last digit delete karo
     const deletedPercent =
       qRaw !== "" &&
       e.nativeEvent?.inputType === "deleteContentBackward" &&
@@ -399,8 +404,6 @@ function CreateModal({ currentYear, defaultMonth, domainList, rows, onClose, onS
       setSaving(false);
     }
   };
-
-  const hasBand = band.key !== "none";
 
   return (
     <Overlay disabled={saving} onClose={onClose}>
@@ -494,7 +497,7 @@ function CreateModal({ currentYear, defaultMonth, domainList, rows, onClose, onS
               </span>
             </div>
             <div className="kpiq-quality-row">
-              {/* Input ka text color fixed (band ke hisab se nahi badlega), sirf box ka color badlega */}
+              {/* Text color fixed; sirf box ka color band ke hisab se badalta hai */}
               <input
                 ref={qRef}
                 className="kpiq-input"
@@ -680,6 +683,7 @@ export default function KPIInsight({ domains = [] }) {
     return [...set].sort((a, b) => b - a);
   }, [rows, currentYear, currentMonth]);
 
+  // Har KPI ka apna table: rows = Month + Year, columns = domain + scope
   const views = useMemo(() => {
     const out = {};
     KPI_OPTIONS.forEach((kpi) => {
@@ -901,7 +905,7 @@ export default function KPIInsight({ domains = [] }) {
             const decimals = (String(q).split(".")[1] || "").length;
             cell.value = Math.round(q * 100) / 10000;
             cell.numFmt = decimals === 0 ? "0%" : decimals === 1 ? "0.0%" : "0.00%";
-            // Poora cell band ke color se bhara hua, text hamesha white
+            // Poora cell band ke color se bhara hua, text hamesha same
             cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: argb(b.cellBg) } };
             cell.font = { bold: true, color: { argb: argb(CELL_TEXT) } };
             cell.alignment = center;
@@ -1050,12 +1054,7 @@ export default function KPIInsight({ domains = [] }) {
                                           : undefined
                                       }
                                     />
-                                    <span
-                                      className="kpiq-cell-pct"
-                                      style={has ? { color: CELL_TEXT } : undefined}
-                                    >
-                                      %
-                                    </span>
+                                    <span className="kpiq-cell-pct" style={has ? { color: CELL_TEXT } : undefined}>%</span>
                                   </div>
                                 </td>
                               );
@@ -1069,9 +1068,18 @@ export default function KPIInsight({ domains = [] }) {
                               );
                             }
                             const b = getBand(r.quality);
-                            // Poora td box band ke color se bharta hai (Excel jaisa)
+                            // Poora td box band ke color se bharta hai. Color inline hai, to CSS se kabhi override nahi hoga.
                             return (
-                              <td key={c.key} className={`kpiq-cell ${b.key}`}>
+                              <td
+                                key={c.key}
+                                className="kpiq-cell"
+                                style={{
+                                  background: b.cellBg,
+                                  color: CELL_TEXT,
+                                  borderBottomColor: b.cellBorder,
+                                  borderRightColor: b.cellBorder,
+                                }}
+                              >
                                 {fmtPct(r.quality)}
                               </td>
                             );
