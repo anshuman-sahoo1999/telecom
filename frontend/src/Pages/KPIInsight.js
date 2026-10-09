@@ -5,15 +5,21 @@ import axios from "axios";
 import { FaPlus, FaTimes, FaInfoCircle, FaEdit, FaTrashAlt, FaFileExcel, FaChevronDown, FaCheck } from "react-icons/fa";
 import "../style/KPIInsight.css";
 
+/* ======================================
+   CONSTANTS + HELPERS
+====================================== */
 const MONTH_NAMES = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
+// cellBg / cellBorder = poore table box ka color (screen, legend, popup aur Excel sab yahin se lete hain).
+// Color badalna ho to SIRF yahin badlo.
 const BANDS = {
-  green: { key: "green", label: "Green", cellBg: "#4ca710", cellBorder: "#3d8a0c" },
+  green: { key: "green", label: "Green", cellBg: "#4ca710", cellBorder: "#4ca710" },
   orange: { key: "orange", label: "Orange", cellBg: "#fbbf24", cellBorder: "#f59e0b" },
   red: { key: "red", label: "Red", cellBg: "#ef4444", cellBorder: "#dc2626" },
   none: { key: "none", label: "", cellBg: "#ffffff", cellBorder: "#cbd5e1" },
 };
 
+// Value ka text color hamesha yahi rahega (band ke hisab se change nahi hoga)
 const CELL_TEXT = "#ffffff";
 
 const getBand = (val) => {
@@ -1150,7 +1156,7 @@ export default function KPIInsight({ domains = [] }) {
               top: 20,
               right: 20,
               zIndex: 2147483600,
-              background: toast.type === "error" ? "#dc2626" : "#16a34a"
+              background: toast.type === "error" ? "#dc2626" : "#4ca710"
             }}
           >
             <span>{toast.text}</span>
