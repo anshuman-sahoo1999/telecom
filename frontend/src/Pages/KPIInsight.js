@@ -6,11 +6,10 @@ import { FaPlus, FaTimes, FaInfoCircle, FaEdit, FaTrashAlt, FaFileExcel, FaChevr
 import "../style/KPIInsight.css";
 
 const MONTH_NAMES = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-
 const BANDS = {
   green: { key: "green", label: "Green", cellBg: "#4ca710", cellBorder: "#3a8a0a" },
   orange: { key: "orange", label: "Orange", cellBg: "#fbbf24", cellBorder: "#f59e0b" },
-  red: { key: "red", label: "Red", cellBg: "#ef4444", cellBorder: "#dc2626" },
+  red: { key: "red", label: "Red", cellBg: "#FF0B0B", cellBorder: "#C80808" },
   none: { key: "none", label: "", cellBg: "#ffffff", cellBorder: "#cbd5e1" },
 };
 
@@ -55,6 +54,7 @@ const normalizeQuality = (raw) => {
 };
 
 const KPI_OPTIONS = ["Quality Rating", "On Time Delivery", "Repeat"];
+
 const lastSixMonths = (year, month) => {
   const out = new Set();
   for (let i = 0; i < 6; i++) {
