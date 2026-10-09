@@ -5,15 +5,21 @@ import axios from "axios";
 import { FaPlus, FaTimes, FaInfoCircle, FaEdit, FaTrashAlt, FaFileExcel, FaChevronDown, FaCheck } from "react-icons/fa";
 import "../style/KPIInsight.css";
 
+/* ======================================
+   CONSTANTS + HELPERS
+====================================== */
 const MONTH_NAMES = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
+// cellBg / cellBorder = poore table box ka color (screen, legend, popup aur Excel sab yahin se lete hain).
+// Color badalna ho to SIRF yahin badlo.
 const BANDS = {
-  green: { key: "green", label: "Green", cellBg: "#4ade80", cellBorder: "#22c55e" },
+  green: { key: "green", label: "Green", cellBg: "#4ca710", cellBorder: "#3d8a0c" },
   orange: { key: "orange", label: "Orange", cellBg: "#fbbf24", cellBorder: "#f59e0b" },
   red: { key: "red", label: "Red", cellBg: "#ef4444", cellBorder: "#dc2626" },
   none: { key: "none", label: "", cellBg: "#ffffff", cellBorder: "#cbd5e1" },
 };
 
+// Value ka text color hamesha yahi rahega (band ke hisab se change nahi hoga)
 const CELL_TEXT = "#ffffff";
 
 const getBand = (val) => {
