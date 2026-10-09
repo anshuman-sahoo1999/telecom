@@ -5,21 +5,15 @@ import axios from "axios";
 import { FaPlus, FaTimes, FaInfoCircle, FaEdit, FaTrashAlt, FaFileExcel, FaChevronDown, FaCheck } from "react-icons/fa";
 import "../style/KPIInsight.css";
 
-/* ======================================
-   CONSTANTS + HELPERS
-====================================== */
 const MONTH_NAMES = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
-// cellBg / cellBorder = poore table box ka color (screen, legend, popup aur Excel sab yahin se lete hain).
-// Color badalna ho to SIRF yahin badlo.
 const BANDS = {
-  green: { key: "green", label: "Green", cellBg: "#4ca710", cellBorder: "#4ca710" },
+  green: { key: "green", label: "Green", cellBg: "#4ca710", cellBorder: "#3a8a0a" },
   orange: { key: "orange", label: "Orange", cellBg: "#fbbf24", cellBorder: "#f59e0b" },
   red: { key: "red", label: "Red", cellBg: "#ef4444", cellBorder: "#dc2626" },
   none: { key: "none", label: "", cellBg: "#ffffff", cellBorder: "#cbd5e1" },
 };
 
-// Value ka text color hamesha yahi rahega (band ke hisab se change nahi hoga)
 const CELL_TEXT = "#ffffff";
 
 const getBand = (val) => {
@@ -40,7 +34,6 @@ const colKeyOf = (r) => `${String(r.domain || "").trim().toUpperCase()}||${Strin
 const byDomainScope = (a, b) =>
   String(a.domain || "").localeCompare(String(b.domain || "")) || String(a.scope || "").localeCompare(String(b.scope || ""));
 
-// Cleans quality input. Returns null if invalid (change is ignored).
 const sanitizeQuality = (value) => {
   let raw = String(value).replace(/%/g, "").replace(/[^0-9.]/g, "");
   const firstDot = raw.indexOf(".");
@@ -62,8 +55,6 @@ const normalizeQuality = (raw) => {
 };
 
 const KPI_OPTIONS = ["Quality Rating", "On Time Delivery", "Repeat"];
-
-// Current month + previous 5 months, e.g. Oct 2026 -> May..Oct 2026, Feb 2027 -> Sep 2026..Feb 2027
 const lastSixMonths = (year, month) => {
   const out = new Set();
   for (let i = 0; i < 6; i++) {
@@ -79,7 +70,6 @@ const lastSixMonths = (year, month) => {
 };
 const sameSet = (a, b) => a.size === b.size && [...a].every((k) => b.has(k));
 
-// Current date. Din badalte hi (12:00 AM) month / year apne aap update ho jate hain.
 function useToday() {
   const [today, setToday] = useState(() => new Date());
   useEffect(() => {
