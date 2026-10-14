@@ -18,6 +18,16 @@ const query = (sql, params = []) =>
     db.query(sql, params, (err, result) => (err ? reject(err) : resolve(result)));
   });
 
+// CHANGE: browser/proxy ko cache karne se rokta hai, taaki refresh ke bina hamesha naya data mile
+const noCache = (res) => {
+  res.set({
+    "Cache-Control": "no-store, no-cache, must-revalidate, proxy-revalidate",
+    Pragma: "no-cache",
+    Expires: "0",
+    "Surrogate-Control": "no-store"
+  });
+};
+
 const isRealJobId = (v) => {
   const s = clean(v);
   return s !== "" && s !== "-";
@@ -413,7 +423,7 @@ const helperSyncToJobCreation = (data) => {
       internalQc: blankIfZero(data.internalQc)
     };
 
-    // FIX: job_creation me bhi (jobId + domain) se match hoga, sirf jobId se nahi
+    // job_creation me bhi (jobId + domain) se match hoga, sirf jobId se nahi
     let checkSql;
     let checkParams;
     if (jcDomain) {
@@ -494,6 +504,105 @@ const helperSyncToJobCreation = (data) => {
       }
     });
   });
+};
+
+/* ======================================
+   READ HELPERS (shared)
+   CHANGE: getAllWork ka logic yahan nikala gaya hai taaki
+   import / create / update / delete ke response me bhi
+   latest data wapas bheja ja sake (frontend ko refresh nahi karna padega)
+====================================== */
+const retrieveRegionIfBlank = (state) => {
+  const raw = clean(state).toUpperCase();
+  if (!raw) return "";
+  for (const name of Object.keys(stateData)) {
+    const info = stateData[name] || {};
+    if (name.toUpperCase() === raw || clean(info.code).toUpperCase() === raw) {
+      return info.region || "";
+    }
+  }
+  return "";
+};
+const regionForState = retrieveRegionIfBlank;
+
+const isBlank = (v) =>
+  v === null || v === undefined || (typeof v === "string" && v.trim() === "");
+
+const displayOtp = (v) => cleanOtp(v);
+
+const mapWorkRow = (row) => {
+  const { jc_month, jc_receive, jc_ecd, jc_submission, ...work } = row;
+  if (isBlank(work.region)) {
+    const derived = regionForState(work.state);
+    if (derived) work.region = derived;
+  }
+
+  let monthsArr = safeParseJson(work.months, []);
+  if (!Array.isArray(monthsArr)) monthsArr = monthsArr ? [monthsArr] : [];
+  monthsArr = cleanMonthArray(monthsArr);
+  if (monthsArr.length === 0 && !isBlank(jc_month)) {
+    monthsArr = cleanMonthArray([jc_month]);
+  }
+
+  const displayMonth = monthsArr.length > 0 ? monthsArr[monthsArr.length - 1] : "";
+  const dateOf = (own, fallback) => (isBlank(own) ? fallback : own);
+
+  return {
+    ...work,
+    month: displayMonth,
+    months: monthsArr,
+    uom: safeParseJson(work.uom, {}),
+    jobs_delivered: 1, // ek row = hamesha 1 job delivered
+    otp: displayOtp(work.otp),
+    amdocs_qc: blankIfZero(work.amdocs_qc),
+    internal_qc: blankIfZero(work.internal_qc),
+    receive_date: formatDateToMMDDYYYY(dateOf(work.receive_date, jc_receive)),
+    ecd_date: formatDateToMMDDYYYY(dateOf(work.ecd_date, jc_ecd)),
+    submission_date: formatDateToMMDDYYYY(dateOf(work.submission_date, jc_submission)),
+    lastUpdate: work.updated_at ? work.updated_at : work.created_at
+  };
+};
+
+const buildAllWork = async () => {
+  const workRows = await query("SELECT *, updated_at FROM work_updates ORDER BY id ASC");
+  const jcMap = new Map();
+  try {
+    const jcRows = await query(
+      "SELECT jobId, domain, month, receiveDate, ecdDate, submissionDate FROM job_creation"
+    );
+    (jcRows || []).forEach((r) => {
+      if (!isRealJobId(r.jobId)) return;
+      // fallback bhi (domain + jobId) se, taaki dusre domain ki date/month na aaye
+      const k = jobKey(r.domain, r.jobId);
+      const prev = jcMap.get(k) || {};
+      jcMap.set(k, {
+        jc_month: !isBlank(prev.jc_month) ? prev.jc_month : r.month,
+        jc_receive: !isBlank(prev.jc_receive) ? prev.jc_receive : r.receiveDate,
+        jc_ecd: !isBlank(prev.jc_ecd) ? prev.jc_ecd : r.ecdDate,
+        jc_submission: !isBlank(prev.jc_submission) ? prev.jc_submission : r.submissionDate
+      });
+    });
+  } catch (jcErr) {
+    console.error("buildAllWork: job_creation fallback load failed:", jcErr.message);
+  }
+
+  return (workRows || []).map((row) => {
+    const fb =
+      jcMap.get(jobKey(row.domain, row.job_id)) ||
+      jcMap.get(jobKey("", row.job_id)) || // purani blank-domain rows
+      {};
+    return mapWorkRow({ ...row, ...fb });
+  });
+};
+
+// Mutation ke baad latest data laane ki koshish; fail ho to null (main response na toote)
+const tryBuildAllWork = async () => {
+  try {
+    return await buildAllWork();
+  } catch (e) {
+    console.error("tryBuildAllWork failed:", e.message);
+    return null;
+  }
 };
 
 const importExcel = async (req, res) => {
@@ -665,6 +774,7 @@ const importExcel = async (req, res) => {
                 ],
                 (err3) => {
                   if (err3) {
+                    console.error("Import insert failed:", err3.message);
                     failed++;
                     return resolve();
                   }
@@ -694,11 +804,12 @@ const importExcel = async (req, res) => {
             };
 
             if (jobIdVal && jobIdVal !== "-") {
-              // FIX: same Job ID dusre domain me ho to wo alag row hai -> domain bhi match karo
+              // same Job ID dusre domain me ho to wo alag row hai -> domain bhi match karo
               const checkSql = `SELECT id, months, uom, jobs_delivered FROM work_updates WHERE TRIM(job_id) = TRIM(?) AND UPPER(TRIM(domain)) = ? LIMIT 1`;
               
               db.query(checkSql, [jobIdVal, domain], (err, results) => {
                 if (err) {
+                  console.error("Import check failed:", err.message);
                   failed++;
                   return resolve();
                 }
@@ -723,15 +834,18 @@ const importExcel = async (req, res) => {
                   // Ek row = hamesha 1 job delivered
                   const newJobsDelivered = 1;
 
+                  // CHANGE: file_name bhi naye upload wali file ka set hota hai,
+                  // taaki naya upload file list me turant dikhe (pehle purani file ka naam hi rehta tha)
                   const updateSql = `
                     UPDATE work_updates
-                    SET months = ?, uom = ?, otp = COALESCE(NULLIF(?, ''), otp), current_status = COALESCE(NULLIF(?, ''), current_status), production_engineers = COALESCE(NULLIF(?, ''), production_engineers), qc_engineers = COALESCE(NULLIF(?, ''), qc_engineers), amdocs_qc = COALESCE(NULLIF(?, ''), amdocs_qc), internal_qc = COALESCE(NULLIF(?, ''), internal_qc), jobs_delivered = ?, receive_date = COALESCE(?, receive_date), ecd_date = COALESCE(?, ecd_date), submission_date = COALESCE(?, submission_date), updated_at = CURRENT_TIMESTAMP
+                    SET file_name = ?, months = ?, uom = ?, otp = COALESCE(NULLIF(?, ''), otp), current_status = COALESCE(NULLIF(?, ''), current_status), production_engineers = COALESCE(NULLIF(?, ''), production_engineers), qc_engineers = COALESCE(NULLIF(?, ''), qc_engineers), amdocs_qc = COALESCE(NULLIF(?, ''), amdocs_qc), internal_qc = COALESCE(NULLIF(?, ''), internal_qc), jobs_delivered = ?, receive_date = COALESCE(?, receive_date), ecd_date = COALESCE(?, ecd_date), submission_date = COALESCE(?, submission_date), updated_at = CURRENT_TIMESTAMP
                     WHERE id = ?
                   `;
 
                   db.query(
                     updateSql,
                     [
+                      req.file.originalname,
                       JSON.stringify(existingMonths),
                       JSON.stringify(mergedUOM),
                       otpVal,
@@ -748,6 +862,7 @@ const importExcel = async (req, res) => {
                     ],
                     (err2) => {
                       if (err2) {
+                        console.error("Import update failed:", err2.message);
                         failed++;
                         return resolve();
                       }
@@ -778,6 +893,7 @@ const importExcel = async (req, res) => {
             }
 
           } catch (e) {
+            console.error("Import row error:", e.message);
             failed++;
             resolve();
           }
@@ -785,11 +901,16 @@ const importExcel = async (req, res) => {
       }
     }
 
+    // CHANGE: latest data bhi response me bhejo + no-cache
+    const data = await tryBuildAllWork();
+    noCache(res);
     return res.json({
       message: "Excel imported successfully in proper order",
       totalRows,
       insertedOrUpdated: success,
-      failed
+      failed,
+      fileName: req.file.originalname,
+      data
     });
 
   } catch (err) {
@@ -806,9 +927,6 @@ const pick = (obj, ...keys) => {
   }
   return undefined;
 };
-
-const isBlank = (v) =>
-  v === null || v === undefined || (typeof v === "string" && v.trim() === "");
 
 const flatText = (v) => (Array.isArray(v) ? v.join(", ") : v);
 
@@ -853,7 +971,7 @@ const createWork = async (req, res) => {
   try {
     let existingId = null;
     if (isRealJobId(cleanJobId)) {
-      // FIX: same Job ID alag domain me ho to alag row; sirf same domain me hi merge hoga
+      // same Job ID alag domain me ho to alag row; sirf same domain me hi merge hoga
       const rows = fixedDomain
         ? await query(
             "SELECT id FROM work_updates WHERE TRIM(job_id) = TRIM(?) AND UPPER(TRIM(domain)) = ? LIMIT 1",
@@ -954,9 +1072,12 @@ const createWork = async (req, res) => {
       internalQc: formattedInternalQc
     });
 
+    const data = await tryBuildAllWork();
+    noCache(res);
     return res.json({
       message: "Work added and synced successfully",
-      id: workId
+      id: workId,
+      data
     });
   } catch (err) {
     console.error("createWork error:", err.message);
@@ -1053,7 +1174,7 @@ const updateWork = async (req, res) => {
     const oldJobId = clean(oldRows[0].job_id);
     const oldDomain = domainKey(oldRows[0].domain);
     const newJobId = has(job_id) ? clean(job_id) : oldJobId;
-    // FIX: domain body me na aaye to purani row ka domain use hoga (job_creation sahi domain me sync ho)
+    // domain body me na aaye to purani row ka domain use hoga (job_creation sahi domain me sync ho)
     const jcDomain = has(domain) ? normalize(domain) : oldDomain;
     if (has(job_id)) setCol("job_id", newJobId);
 
@@ -1117,9 +1238,12 @@ const updateWork = async (req, res) => {
       });
     }
 
+    const data = await tryBuildAllWork();
+    noCache(res);
     return res.json({
       message: "Updated successfully and synced to Job Creation",
-      result
+      result,
+      data
     });
   } catch (err) {
     console.error("updateWork error:", err.message);
@@ -1130,85 +1254,10 @@ const updateWork = async (req, res) => {
   }
 };
 
-const regionForState = (state) => {
-  const raw = clean(state).toUpperCase();
-  if (!raw) return "";
-  for (const name of Object.keys(stateData)) {
-    const info = stateData[name] || {};
-    if (name.toUpperCase() === raw || clean(info.code).toUpperCase() === raw) {
-      return info.region || "";
-    }
-  }
-  return "";
-};
-
-const displayOtp = (v) => cleanOtp(v);
-
-const mapWorkRow = (row) => {
-  const { jc_month, jc_receive, jc_ecd, jc_submission, ...work } = row;
-  if (isBlank(work.region)) {
-    const derived = regionForState(work.state);
-    if (derived) work.region = derived;
-  }
-
-  let monthsArr = safeParseJson(work.months, []);
-  if (!Array.isArray(monthsArr)) monthsArr = monthsArr ? [monthsArr] : [];
-  monthsArr = cleanMonthArray(monthsArr);
-  if (monthsArr.length === 0 && !isBlank(jc_month)) {
-    monthsArr = cleanMonthArray([jc_month]);
-  }
-
-  const displayMonth = monthsArr.length > 0 ? monthsArr[monthsArr.length - 1] : "";
-  const dateOf = (own, fallback) => (isBlank(own) ? fallback : own);
-
-  return {
-    ...work,
-    month: displayMonth,
-    months: monthsArr,
-    uom: safeParseJson(work.uom, {}),
-    jobs_delivered: 1, // FIX: ek row = hamesha 1 job delivered
-    otp: displayOtp(work.otp),
-    amdocs_qc: blankIfZero(work.amdocs_qc),
-    internal_qc: blankIfZero(work.internal_qc),
-    receive_date: formatDateToMMDDYYYY(dateOf(work.receive_date, jc_receive)),
-    ecd_date: formatDateToMMDDYYYY(dateOf(work.ecd_date, jc_ecd)),
-    submission_date: formatDateToMMDDYYYY(dateOf(work.submission_date, jc_submission)),
-    lastUpdate: work.updated_at ? work.updated_at : work.created_at
-  };
-};
-
 const getAllWork = async (req, res) => {
   try {
-    const workRows = await query("SELECT *, updated_at FROM work_updates ORDER BY id ASC");
-    const jcMap = new Map();
-    try {
-      const jcRows = await query(
-        "SELECT jobId, domain, month, receiveDate, ecdDate, submissionDate FROM job_creation"
-      );
-      (jcRows || []).forEach((r) => {
-        if (!isRealJobId(r.jobId)) return;
-        // FIX: fallback bhi (domain + jobId) se, taaki dusre domain ki date/month na aaye
-        const k = jobKey(r.domain, r.jobId);
-        const prev = jcMap.get(k) || {};
-        jcMap.set(k, {
-          jc_month: !isBlank(prev.jc_month) ? prev.jc_month : r.month,
-          jc_receive: !isBlank(prev.jc_receive) ? prev.jc_receive : r.receiveDate,
-          jc_ecd: !isBlank(prev.jc_ecd) ? prev.jc_ecd : r.ecdDate,
-          jc_submission: !isBlank(prev.jc_submission) ? prev.jc_submission : r.submissionDate
-        });
-      });
-    } catch (jcErr) {
-      console.error("getAllWork: job_creation fallback load failed:", jcErr.message);
-    }
-
-    const data = (workRows || []).map((row) => {
-      const fb =
-        jcMap.get(jobKey(row.domain, row.job_id)) ||
-        jcMap.get(jobKey("", row.job_id)) || // purani blank-domain rows
-        {};
-      return mapWorkRow({ ...row, ...fb });
-    });
-
+    const data = await buildAllWork();
+    noCache(res); // CHANGE
     return res.json(data);
   } catch (err) {
     return res.status(500).json(err);
@@ -1218,6 +1267,7 @@ const getAllWork = async (req, res) => {
 const getFileData = (req, res) => {
   const fileName = req.params.fileName;
   const sql = `SELECT * FROM work_updates WHERE file_name = ? ORDER BY id ASC`;
+  noCache(res); // CHANGE
 
   db.query(sql, [fileName], (err, rows) => {
     if (err) return res.status(500).json(err);
@@ -1227,7 +1277,7 @@ const getFileData = (req, res) => {
       const { created_at, updated_at, file_name, id, ...rest } = row;
       return {
         ...rest,
-        jobs_delivered: 1, // FIX: ek row = hamesha 1 job delivered
+        jobs_delivered: 1, // ek row = hamesha 1 job delivered
         otp: displayOtp(rest.otp),
         amdocs_qc: blankIfZero(rest.amdocs_qc),
         internal_qc: blankIfZero(rest.internal_qc),
@@ -1241,8 +1291,9 @@ const getFileData = (req, res) => {
   });
 };
 
-// FIX: SUM(jobs_delivered) ki jagah COUNT(*) -> har row = 1 job
+// SUM(jobs_delivered) ki jagah COUNT(*) -> har row = 1 job
 const getDomainStats = (req, res) => {
+  noCache(res); // CHANGE
   db.query(
     `SELECT domain, COUNT(*) AS jobs_delivered FROM work_updates GROUP BY domain`,
     (err, rows) => {
@@ -1253,6 +1304,7 @@ const getDomainStats = (req, res) => {
 };
 
 const getJobTypeStats = (req, res) => {
+  noCache(res); // CHANGE
   db.query(
     `SELECT job_type AS job_type, COUNT(*) AS jobs_delivered FROM work_updates GROUP BY job_type ORDER BY jobs_delivered DESC`,
     (err, rows) => {
@@ -1263,11 +1315,12 @@ const getJobTypeStats = (req, res) => {
 };
 
 const getMonthWiseReport = (req, res) => {
+  noCache(res); // CHANGE
   db.query("SELECT * FROM work_updates ORDER BY id ASC", (err, rows) => {
     if (err) return res.status(500).json([]);
     const formatted = rows.map(r => ({
       ...r,
-      jobs_delivered: 1, // FIX: ek row = hamesha 1 job delivered
+      jobs_delivered: 1, // ek row = hamesha 1 job delivered
       otp: displayOtp(r.otp),
       amdocs_qc: blankIfZero(r.amdocs_qc),
       internal_qc: blankIfZero(r.internal_qc),
@@ -1280,6 +1333,7 @@ const getMonthWiseReport = (req, res) => {
 };
 
 const getStateWiseJobs = (req, res) => {
+  noCache(res); // CHANGE
   db.query(
     `SELECT state, domain, COUNT(*) AS jobs_delivered FROM work_updates GROUP BY state, domain`,
     (err, rows) => {
@@ -1297,6 +1351,7 @@ const getStateWiseJobs = (req, res) => {
 };
 
 const getDomainLastUpdate = (req, res) => {
+  noCache(res); // CHANGE
   const sql = `SELECT domain, MAX(updated_at) AS lastUpdate FROM work_updates GROUP BY domain`;
 
   db.query(sql, (err, rows) => {
@@ -1307,6 +1362,7 @@ const getDomainLastUpdate = (req, res) => {
 
 /* ======================================
    DELETE FUNCTIONS
+   CHANGE: delete ke baad latest data response me aata hai
 ====================================== */
 const deleteWork = async (req, res) => {
   const workId = req.params.id;
@@ -1319,7 +1375,13 @@ const deleteWork = async (req, res) => {
     await query("DELETE FROM work_updates WHERE id = ?", [workId]);
     await removeOrphanJobCreation([{ jobId, domain }]);
 
-    return res.json({ message: "Deleted from both Work Controller and Job Creation successfully" });
+    const data = await tryBuildAllWork();
+    noCache(res);
+    return res.json({
+      message: "Deleted from both Work Controller and Job Creation successfully",
+      id: workId,
+      data
+    });
   } catch (err) {
     console.error("deleteWork error:", err.message);
     return res.status(500).json({ message: "Delete failed", error: err.message });
@@ -1339,7 +1401,13 @@ const deleteFile = async (req, res) => {
 
     await removeOrphanJobCreation(items);
 
-    return res.json({ message: "File and related jobs deleted successfully from both places" });
+    const data = await tryBuildAllWork();
+    noCache(res);
+    return res.json({
+      message: "File and related jobs deleted successfully from both places",
+      fileName,
+      data
+    });
   } catch (err) {
     console.error("deleteFile error:", err.message);
     return res.status(500).json({ message: "Delete failed", error: err.message });
@@ -1351,7 +1419,8 @@ const clearWork = async (req, res) => {
     await query("DELETE FROM work_updates");
     await query("DELETE FROM job_creation");
 
-    return res.json({ message: "All data cleared from both places" });
+    noCache(res);
+    return res.json({ message: "All data cleared from both places", data: [] });
   } catch (err) {
     console.error("clearWork error:", err.message);
     return res.status(500).json({ message: "Clear failed", error: err.message });
