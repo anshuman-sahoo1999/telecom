@@ -1748,63 +1748,87 @@ const deleteWork = async (req, res) => {
   }
 };
 
+/* ======================================
+   DELETE FILE (batch + time budget)
+   Vercel/serverless me function ka time-limit hota hai, aur bada ek DELETE beech me kat jaye
+   to DB me lock/rollback atak jata hai. Isliye:
+     - delete chhote batch (2000 rows) me hota hai, har batch apne aap commit hota hai
+     - ek call me ~4.5 second se zyada nahi lagta
+     - kaam bacha ho to response me done:false aata hai, frontend dobara call karta hai
+====================================== */
+const DELETE_BATCH_SIZE = 2000;
+const DELETE_TIME_BUDGET_MS = 4500;
+
 const deleteFile = async (req, res) => {
   const fileName = req.params.fileName;
-  // ?lite=1 -> poora data wapas nahi banta/bheja jata, aur job_creation cleanup background me chalta hai
+  // ?lite=1 -> poora data wapas nahi banta/bheja jata
   const lite = req.query && (req.query.lite === "1" || req.query.lite === "true");
   const t0 = Date.now();
 
   try {
-    // CHANGE (speed): id bhi laate hain, taaki delete primary key (id) se ho -> index ho ya na ho, fast
-    const rows = await query("SELECT id, job_id, domain FROM work_updates WHERE file_name = ?", [fileName]);
-    const items = (rows || [])
-      .map((r) => ({ jobId: clean(r.job_id), domain: domainKey(r.domain) }))
-      .filter((r) => isRealJobId(r.jobId));
-    const ids = (rows || []).map((r) => r.id);
+    let deletedCount = 0;
+    let done = false;
+    const items = [];
+
+    while (true) {
+      const batch = await query(
+        "SELECT id, job_id, domain FROM work_updates WHERE file_name = ? ORDER BY id ASC LIMIT ?",
+        [fileName, DELETE_BATCH_SIZE]
+      );
+      if (!batch || batch.length === 0) {
+        done = true;
+        break;
+      }
+
+      const ids = batch.map((r) => r.id);
+      const delResult = await query("DELETE FROM work_updates WHERE id IN (?)", [ids]);
+      deletedCount +=
+        delResult && delResult.affectedRows !== undefined ? delResult.affectedRows : ids.length;
+
+      batch.forEach((r) => {
+        const jobId = clean(r.job_id);
+        if (isRealJobId(jobId)) items.push({ jobId, domain: domainKey(r.domain) });
+      });
+
+      if (batch.length < DELETE_BATCH_SIZE) {
+        done = true; // last batch tha
+        break;
+      }
+      if (Date.now() - t0 > DELETE_TIME_BUDGET_MS) break; // time khatam, baaki agli call me
+    }
     const t1 = Date.now();
 
-    let deletedCount = 0;
-    for (const chunk of chunkArray(ids, 20000)) {
-      const delResult = await query("DELETE FROM work_updates WHERE id IN (?)", [chunk]);
-      deletedCount +=
-        delResult && delResult.affectedRows !== undefined ? delResult.affectedRows : chunk.length;
-    }
+    // jo rows is call me delete hui, unki orphan job_creation rows saaf karo
+    // (Vercel me response ke baad kaam nahi chalta, isliye yahin await hota hai)
+    const cleanupOk = items.length > 0 ? await safeRemoveOrphanJobCreation(items) : true;
     const t2 = Date.now();
 
-    let cleanupOk = null;
-    if (lite) {
-      // user ko turant response; orphan job_creation rows peeche se saaf hoti hain
-      safeRemoveOrphanJobCreation(items)
-        .then((ok) => console.log(`deleteFile background cleanup done (ok=${ok}) in ${Date.now() - t2}ms`))
-        .catch((e) => console.error("deleteFile background cleanup error:", e.message));
-    } else {
-      cleanupOk = await safeRemoveOrphanJobCreation(items);
-    }
+    const data = lite || !done ? undefined : await tryBuildAllWork();
     const t3 = Date.now();
 
-    const data = lite ? undefined : await tryBuildAllWork();
-    const t4 = Date.now();
-
     console.log(
-      `deleteFile timing(ms): select=${t1 - t0} delete=${t2 - t1} cleanup=${t3 - t2} rebuild=${t4 - t3} total=${t4 - t0} rows=${deletedCount}`
+      `deleteFile timing(ms): delete=${t1 - t0} cleanup=${t2 - t1} rebuild=${t3 - t2} total=${t3 - t0} rows=${deletedCount} done=${done}`
     );
 
     noCache(res);
     return res.json({
       success: true,
-      message: `File "${fileName}" deleted successfully (${deletedCount} record${deletedCount === 1 ? "" : "s"} removed).`,
+      done,
+      message: done
+        ? `File "${fileName}" deleted successfully (${deletedCount} record${deletedCount === 1 ? "" : "s"} removed).`
+        : `Deleting "${fileName}"... ${deletedCount} records removed so far.`,
       fileName,
       deletedCount,
       jobCreationCleaned: cleanupOk,
-      cleanupInBackground: !!lite,
-      ...(lite ? {} : { data })
+      ...(lite || !done ? {} : { data })
     });
   } catch (err) {
     console.error("deleteFile error:", err.message);
     return res.status(500).json({
       success: false,
       message: "Could not delete the file. Please try again.",
-      error: err.message
+      error: err.message,
+      code: err.code
     });
   }
 };
@@ -1838,7 +1862,7 @@ const fixOldJobsDelivered = async () => {
     console.error("jobs_delivered auto-fix failed:", err.message);
   }
 };
-fixOldJobsDelivered();
+if (!process.env.VERCEL) fixOldJobsDelivered(); // serverless (Vercel) par har cold start me DB ko na chhede
 
 /* ======================================
    AUTO INDEX (speed): file_name par index, taaki file delete / file data fast ho.
@@ -1882,7 +1906,7 @@ const ensureIndexes = async () => {
     console.log("Index step failed:", err.message);
   }
 };
-ensureIndexes();
+if (!process.env.VERCEL) ensureIndexes(); // Vercel par index ek baar manually banao
 
 /* ======================================
    MODULE EXPORTS
