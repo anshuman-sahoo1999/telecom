@@ -141,7 +141,7 @@ const removeOrphanJobCreation = async (items) => {
     const jobIds = Array.from(idMap.values());
 
     const usedRows = await query(
-      "SELECT job_id, domain FROM work_updates WHERE TRIM(job_id) IN (?)",
+      "SELECT job_id, domain FROM work_updates WHERE job_id IN (?)",
       [jobIds]
     );
     const usedPair = new Set();
@@ -152,7 +152,7 @@ const removeOrphanJobCreation = async (items) => {
     });
 
     const jcRows = await query(
-      "SELECT id, jobId, domain FROM job_creation WHERE TRIM(jobId) IN (?)",
+      "SELECT id, jobId, domain FROM job_creation WHERE jobId IN (?)",
       [jobIds]
     );
     const jcByJob = new Map();
@@ -762,7 +762,7 @@ const bulkSyncJobCreation = async (list) => {
   const jcByJob = new Map();
   for (const part of chunkArray(jobIds, 500)) {
     const found = await query(
-      "SELECT id, jobId, domain FROM job_creation WHERE TRIM(jobId) IN (?) ORDER BY id ASC",
+      "SELECT id, jobId, domain FROM job_creation WHERE jobId IN (?) ORDER BY id ASC",
       [part]
     );
     (found || []).forEach((r) => {
@@ -958,7 +958,7 @@ const importExcel = async (req, res) => {
 
     for (const part of chunkArray(Array.from(realIdMap.values()), 500)) {
       const found = await query(
-        "SELECT id, job_id, domain, months, uom FROM work_updates WHERE TRIM(job_id) IN (?) ORDER BY id ASC",
+        "SELECT id, job_id, domain, months, uom FROM work_updates WHERE job_id IN (?) ORDER BY id ASC",
         [part]
       );
       (found || []).forEach((r) => {
@@ -1477,6 +1477,51 @@ const mapWorkRow = (row) => {
 
 const getAllWork = async (req, res) => {
   try {
+    // LITE MODE (?files=1): upload page ko sirf file ke naam chahiye, poora data nahi.
+    // Isse import ke baad aur page khulte hi bahut tez list aati hai.
+    // File wali rows me sirf file_name aata hai; bina file wali (manual) rows poori aati hain.
+    if (req.query && (req.query.files === "1" || req.query.files === "true")) {
+      const fileRows = await query(
+        "SELECT file_name, MIN(id) AS first_id FROM work_updates WHERE file_name IS NOT NULL AND TRIM(file_name) <> '' GROUP BY file_name ORDER BY first_id ASC"
+      );
+      const manualRows = await query(
+        "SELECT *, updated_at FROM work_updates WHERE file_name IS NULL OR TRIM(file_name) = '' ORDER BY id ASC"
+      );
+
+      const liteJcMap = new Map();
+      if (manualRows && manualRows.length > 0) {
+        try {
+          const jcRowsLite = await query(
+            "SELECT jobId, domain, month, receiveDate, ecdDate, submissionDate FROM job_creation"
+          );
+          (jcRowsLite || []).forEach((r) => {
+            if (!isRealJobId(r.jobId)) return;
+            const k = jobKey(r.domain, r.jobId);
+            const prev = liteJcMap.get(k) || {};
+            liteJcMap.set(k, {
+              jc_month: !isBlank(prev.jc_month) ? prev.jc_month : r.month,
+              jc_receive: !isBlank(prev.jc_receive) ? prev.jc_receive : r.receiveDate,
+              jc_ecd: !isBlank(prev.jc_ecd) ? prev.jc_ecd : r.ecdDate,
+              jc_submission: !isBlank(prev.jc_submission) ? prev.jc_submission : r.submissionDate
+            });
+          });
+        } catch (e) {
+          console.error("getAllWork lite: job_creation fallback load failed:", e.message);
+        }
+      }
+
+      const manualMapped = (manualRows || []).map((row) => {
+        const fb =
+          liteJcMap.get(jobKey(row.domain, row.job_id)) ||
+          liteJcMap.get(jobKey("", row.job_id)) ||
+          {};
+        return mapWorkRow({ ...row, ...fb });
+      });
+
+      const fileList = (fileRows || []).map((r) => ({ file_name: r.file_name }));
+      return res.json([...fileList, ...manualMapped]);
+    }
+
     const workRows = await query("SELECT *, updated_at FROM work_updates ORDER BY id ASC");
     const jcMap = new Map();
     try {
@@ -1710,6 +1755,36 @@ const fixOldJobsDelivered = async () => {
   }
 };
 fixOldJobsDelivered();
+
+/* ======================================
+   AUTO INDEXES: import/delete tez karne ke liye (server start par apne aap)
+   Manual SQL ki zaroorat nahi. Index pehle se hai to kuchh nahi karta.
+   TEXT column ho to apne aap prefix length ke saath bana leta hai.
+====================================== */
+const ensureIndex = async (table, indexName, column) => {
+  try {
+    const found = await query(`SHOW INDEX FROM ${table} WHERE Key_name = ?`, [indexName]);
+    if (found && found.length > 0) return;
+
+    try {
+      await query(`CREATE INDEX ${indexName} ON ${table} (${column})`);
+    } catch (e) {
+      if (e && e.code === "ER_DUP_KEYNAME") return;
+      // TEXT/BLOB column: prefix length ke saath dobara try
+      await query(`CREATE INDEX ${indexName} ON ${table} (${column}(191))`);
+    }
+    console.log(`Index created: ${indexName} on ${table}(${column})`);
+  } catch (err) {
+    console.error(`Index ${indexName} skipped:`, err.message);
+  }
+};
+
+const ensureIndexes = async () => {
+  await ensureIndex("work_updates", "idx_work_file_name", "file_name");
+  await ensureIndex("work_updates", "idx_work_job_id", "job_id");
+  await ensureIndex("job_creation", "idx_jc_job_id", "jobId");
+};
+ensureIndexes();
 
 /* ======================================
    MODULE EXPORTS
