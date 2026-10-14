@@ -28,6 +28,65 @@ const formatDomain = (domain) => {
   return out.length ? out.join(",") : null;
 };
 
+// ---------------------------------------------------------------------
+// MEMBER TYPE (DB column varchar(10) hai, isliye chhote codes save karte hain)
+//   Production -> PR , QA -> QA , QC -> QC
+//   Max "PR,QA,QC" = 8 characters, 10 me fit.
+// Frontend ko hamesha poora naam (Production) wapas milta hai.
+// ---------------------------------------------------------------------
+const MT_TO_CODE = {
+  production: "PR",
+  product: "PR",
+  pr: "PR",
+  p: "PR",
+  qa: "QA",
+  qc: "QC"
+};
+
+const MT_FROM_CODE = {
+  PR: "Production",
+  QA: "QA",
+  QC: "QC"
+};
+
+const toMemberTypeList = (memberType) =>
+  (Array.isArray(memberType) ? memberType : String(memberType || "").split(","))
+    .map((m) => String(m || "").trim())
+    .filter(Boolean);
+
+// Save karne se pehle: poora naam -> chhota code
+const encodeMemberType = (memberType) => {
+  const seen = new Set();
+  const out = [];
+  toMemberTypeList(memberType).forEach((m) => {
+    const code = MT_TO_CODE[m.toLowerCase()] || m.toUpperCase().slice(0, 4);
+    if (!seen.has(code)) {
+      seen.add(code);
+      out.push(code);
+    }
+  });
+  const joined = out.join(",");
+  return joined ? joined.slice(0, 10) : null;
+};
+
+// DB se padhne ke baad: chhota code -> poora naam
+// (purana data jaise "Production" ya "QA,Product" bhi sahi chalega)
+const decodeMemberType = (stored) => {
+  if (!stored) return stored;
+  const seen = new Set();
+  const out = [];
+  toMemberTypeList(stored).forEach((m) => {
+    const key = m.toLowerCase();
+    const code = MT_TO_CODE[key];
+    const full = code ? MT_FROM_CODE[code] : m;
+    if (!seen.has(full)) {
+      seen.add(full);
+      out.push(full);
+    }
+  });
+  return out.join(",");
+};
+
 // Team Lead / Team Member ke 5 extra fields. Baaki roles ke liye NULL.
 const teamFields = (role, body) => {
   if (!isTeamRole(role)) return [null, null, null, null, null];
@@ -121,6 +180,7 @@ exports.login = async (req, res) => {
         }
 
         const { password: _, ...safeUser } = user;
+        safeUser.memberType = decodeMemberType(safeUser.memberType);
 
         res.json({
           success: true,
@@ -153,13 +213,7 @@ exports.createUser = async (req, res) => {
     const hashedPassword = await bcrypt.hash(finalPassword, SALT_ROUNDS);
 
     const finalDomain = formatDomain(domain);
-
-    // memberType ki length limit varchar(10) ko dhyan me rakhte hue slice kar diya hai
-    let rawMemberType = Array.isArray(memberType)
-      ? memberType.join(",")
-      : memberType || null;
-
-    const finalMemberType = rawMemberType ? rawMemberType.slice(0, 10) : null;
+    const finalMemberType = encodeMemberType(memberType);
 
     const sql = `
       INSERT INTO users 
@@ -210,7 +264,9 @@ exports.getUsers = (req, res) => {
       return res.status(500).json({ success: false, message: err.sqlMessage || err });
     }
 
-    res.json(result);
+    res.json(
+      result.map((u) => ({ ...u, memberType: decodeMemberType(u.memberType) }))
+    );
   });
 };
 
@@ -239,7 +295,7 @@ exports.getAllUserDetails = (req, res) => {
       email: item.email,
       role: item.role,
       domain: item.domain ? formatDomain(item.domain) : item.domain,
-      memberType: item.memberType,
+      memberType: decodeMemberType(item.memberType),
       totalExperience: item.totalExperience ?? "",
       telecomExperience: item.telecomExperience ?? "",
       skillSets: item.skillSets ?? "",
@@ -263,12 +319,7 @@ exports.updateUser = (req, res) => {
   email = (email || "").trim().toLowerCase();
 
   const finalDomain = formatDomain(domain);
-
-  let rawMemberType = Array.isArray(memberType)
-    ? memberType.join(",")
-    : memberType || null;
-
-  const finalMemberType = rawMemberType ? rawMemberType.slice(0, 10) : null;
+  const finalMemberType = encodeMemberType(memberType);
 
   const sql = `
     UPDATE users
@@ -368,11 +419,7 @@ exports.updateUserPosition = (req, res) => {
   const { id } = req.params;
   const { domain, memberType } = req.body;
 
-  let rawMemberType = Array.isArray(memberType)
-    ? memberType.join(",")
-    : memberType || null;
-
-  const finalMemberType = rawMemberType ? rawMemberType.slice(0, 10) : null;
+  const finalMemberType = encodeMemberType(memberType);
 
   const sql = `
     UPDATE users
