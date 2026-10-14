@@ -47,12 +47,33 @@ export default function WorkUpdate({ refreshDashboard }) {
 
   // DELETE SUCCESS TOAST
   const [deleteMsg, setDeleteMsg] = useState(false);
+  const [deleteText, setDeleteText] = useState("File Deleted Successfully");
+
+  // DELETE CONFIRM POPUP (browser confirm ki jagah)
+  const [deleteTarget, setDeleteTarget] = useState(null);
+  const [deleting, setDeleting] = useState(false);
+
+  // ERROR / INFO TOAST (browser alert ki jagah)
+  const [toast, setToast] = useState(null); // { text, type }
+  const toastTimer = useRef(null);
 
   // INLINE VIEW STATES
   const [viewWorkbook, setViewWorkbook] = useState({});
   const [viewSheetNames, setViewSheetNames] = useState([]);
   const [viewActiveSheet, setViewActiveSheet] = useState("");
   const fileInputRef = useRef(null);
+
+  const showToast = (text, type = "error") => {
+    setToast({ text, type });
+    if (toastTimer.current) clearTimeout(toastTimer.current);
+    toastTimer.current = setTimeout(() => setToast(null), 3000);
+  };
+
+  useEffect(() => {
+    return () => {
+      if (toastTimer.current) clearTimeout(toastTimer.current);
+    };
+  }, []);
 
   /* ================= FETCH FILE LIST ================= */
   const fetchData = async () => {
@@ -136,7 +157,7 @@ export default function WorkUpdate({ refreshDashboard }) {
         setExcelFile(file);
       } catch (err) {
         console.error("Error parsing Excel file:", err);
-        alert("Failed to parse Excel file. The file might be corrupted.");
+        showToast("Failed to read the Excel file. The file might be corrupted.");
         removeFile();
       }
     };
@@ -156,7 +177,7 @@ export default function WorkUpdate({ refreshDashboard }) {
   };
 
   const handleImport = async () => {
-    if (!excelFile) return alert("Select file");
+    if (!excelFile) return showToast("Please select a file first.", "info");
 
     try {
       setLoading(true);
@@ -164,7 +185,7 @@ export default function WorkUpdate({ refreshDashboard }) {
       const formData = new FormData();
       formData.append("file", excelFile);
 
-      await axios.post(
+      const res = await axios.post(
         `${API_BASE_URL}/api/work/import-excel`,
         formData,
         { headers: { "Content-Type": "multipart/form-data" } }
@@ -175,38 +196,79 @@ export default function WorkUpdate({ refreshDashboard }) {
 
       removeFile();
       setShowPopup(false);
-      fetchData();
+
+      // server ne latest data bhej diya ho to wahi use karo (extra request nahi)
+      if (res && res.data && Array.isArray(res.data.data)) {
+        setImports(res.data.data);
+      } else {
+        fetchData();
+      }
 
       if (refreshDashboard) {
         refreshDashboard();
       }
     } catch (err) {
       console.log(err);
-      alert("Import Failed");
+      setShowPopup(false);
+      showToast(
+        (err.response && err.response.data && err.response.data.message) ||
+          "Import failed. Please try again."
+      );
     } finally {
       setLoading(false);
     }
   };
 
   /* ================= DELETE FILE ================= */
-  const handleDelete = async (item) => {
+  // Step 1: Delete button dabane par apna popup khulta hai (browser confirm nahi)
+  const handleDelete = (item) => {
+    const fileName = item && item.file_name;
+    if (!fileName) return showToast("File name is missing.", "info");
+    setDeleteTarget(item);
+  };
+
+  // Step 2: popup me "Yes, Delete" dabane par asli delete
+  const confirmDelete = async () => {
+    if (!deleteTarget) return;
+    const fileName = deleteTarget.file_name;
+
     try {
-      const fileName = item.file_name;
-      if (!fileName) return alert("File missing");
+      setDeleting(true);
 
-      if (!window.confirm(`Delete file "${fileName}"?`)) return;
-
-      await axios.delete(
-        `${API_BASE_URL}/api/work/delete-file/${fileName}`
+      // CHANGE: file name me space, #, %, + jaise characters ho to bhi delete chale
+      const res = await axios.delete(
+        `${API_BASE_URL}/api/work/delete-file/${encodeURIComponent(fileName)}`
       );
 
-      fetchData();
+      if (selectedFile === fileName) setSelectedFile(null);
 
+      // server ne latest data bhej diya ho to wahi use karo, warna dobara fetch
+      if (res && res.data && Array.isArray(res.data.data)) {
+        setImports(res.data.data);
+      } else {
+        fetchData();
+      }
+
+      setDeleteTarget(null);
+
+      setDeleteText(
+        (res && res.data && res.data.message) || "File Deleted Successfully"
+      );
       setDeleteMsg(true);
-      setTimeout(() => setDeleteMsg(false), 2000);
+      setTimeout(() => setDeleteMsg(false), 2500);
+
+      if (refreshDashboard) {
+        refreshDashboard();
+      }
     } catch (err) {
       console.log(err);
-      alert("Delete failed");
+      setDeleteTarget(null);
+      showToast(
+        (err.response && err.response.data && err.response.data.message) ||
+          "Could not delete the file. Please try again."
+      );
+    } finally {
+      setDeleting(false);
     }
   };
 
@@ -223,7 +285,7 @@ export default function WorkUpdate({ refreshDashboard }) {
       let data = [];
       try {
         const res = await axios.get(
-          `${API_BASE_URL}/api/work/file/${fileName}`
+          `${API_BASE_URL}/api/work/file/${encodeURIComponent(fileName)}`
         );
         data = res.data || [];
       } catch (err) {
@@ -324,7 +386,7 @@ export default function WorkUpdate({ refreshDashboard }) {
       setSelectedFile(fileName);
     } catch (err) {
       console.log(err);
-      alert("View failed");
+      showToast("Could not open the file preview. Please try again.");
     }
   };
 
@@ -346,7 +408,18 @@ export default function WorkUpdate({ refreshDashboard }) {
 
       {deleteMsg && (
         <div className="success-toast" style={{ background: "#ff4d4f" }}>
-          🗑️ File Deleted Successfully
+          🗑️ {deleteText}
+        </div>
+      )}
+
+      {toast && (
+        <div
+          className="success-toast"
+          style={{
+            background: toast.type === "info" ? "#faad14" : "#ff4d4f",
+          }}
+        >
+          {toast.type === "info" ? "ℹ️" : "⚠️"} {toast.text}
         </div>
       )}
 
@@ -497,8 +570,36 @@ export default function WorkUpdate({ refreshDashboard }) {
               <h3>Do you want to save this Excel?</h3>
 
               <div className="popup-actions">
-                <button onClick={() => setShowPopup(false)}>Cancel</button>
-                <button onClick={handleImport}>Yes Save</button>
+                <button disabled={loading} onClick={() => setShowPopup(false)}>
+                  Cancel
+                </button>
+                <button disabled={loading} onClick={handleImport}>
+                  {loading ? "Saving..." : "Yes Save"}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* DELETE CONFIRM POPUP - browser confirm ki jagah */}
+        {deleteTarget && (
+          <div className="popup">
+            <div className="popup-box">
+              <h3>Delete this file?</h3>
+              <p style={{ margin: "8px 0 16px", wordBreak: "break-all" }}>
+                {deleteTarget.file_name}
+              </p>
+
+              <div className="popup-actions">
+                <button
+                  disabled={deleting}
+                  onClick={() => setDeleteTarget(null)}
+                >
+                  Cancel
+                </button>
+                <button disabled={deleting} onClick={confirmDelete}>
+                  {deleting ? "Deleting..." : "Yes, Delete"}
+                </button>
               </div>
             </div>
           </div>
