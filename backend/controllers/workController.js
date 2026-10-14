@@ -1906,7 +1906,7 @@ const ensureIndexes = async () => {
     console.log("Index step failed:", err.message);
   }
 };
-if (!process.env.VERCEL) ensureIndexes(); // Vercel par index ek baar manually banao
+if (!process.env.VERCEL || process.env.AUTO_INDEX === "1") ensureIndexes(); // optional: delete ke liye index ki zaroorat nahi (id se delete hota hai)
 
 /* ======================================
    MODULE EXPORTS
