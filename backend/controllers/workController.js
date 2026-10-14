@@ -22,6 +22,28 @@ const isRealJobId = (v) => {
   const s = clean(v);
   return s !== "" && s !== "-";
 };
+
+/* ======================================
+   DOMAIN-SCOPED HELPERS (NEW)
+   Same Job ID alag-alag domain (ASE / PERMIT / F2 / PLA ...) me ho sakta hai.
+   Isliye identity hamesha (domain + job id) se hogi, sirf job id se nahi.
+====================================== */
+const domainKey = (v) => clean(v).toUpperCase();
+const jobKey = (domain, jobId) => `${domainKey(domain)}|${clean(jobId).toLowerCase()}`;
+
+// job_creation me (jobId + domain) se row dhoondhne ke liye WHERE part
+const jcScope = (jobId, domain) => {
+  const d = domainKey(domain);
+  if (!d) {
+    return { where: "TRIM(jobId) = TRIM(?)", params: [jobId] };
+  }
+  return {
+    where:
+      "TRIM(jobId) = TRIM(?) AND (UPPER(TRIM(COALESCE(domain,''))) = ? OR TRIM(COALESCE(domain,'')) = '')",
+    params: [jobId, d]
+  };
+};
+
 const safeParseJson = (val, fallback) => {
   if (val === null || val === undefined) return fallback;
   if (typeof val === "object") return val;
@@ -45,20 +67,55 @@ const parseMonthsInput = (months) => {
   return cleanMonthArray(arr);
 };
 
-const removeOrphanJobCreation = async (jobIds) => {
-  const ids = [...new Set((jobIds || []).map(clean).filter(isRealJobId))];
-  if (ids.length === 0) return;
+// items: [{ jobId, domain }] (purana format: sirf jobId strings bhi chalega)
+const removeOrphanJobCreation = async (items) => {
+  const seen = new Set();
+  const pairs = [];
+  (items || []).forEach((it) => {
+    const isObj = it && typeof it === "object";
+    const jobId = clean(isObj ? it.jobId : it);
+    const domain = domainKey(isObj ? it.domain : "");
+    if (!isRealJobId(jobId)) return;
+    const k = jobKey(domain, jobId);
+    if (seen.has(k)) return;
+    seen.add(k);
+    pairs.push({ jobId, domain });
+  });
+  if (pairs.length === 0) return;
 
-  const stillUsed = await query(
-    "SELECT job_id FROM work_updates WHERE TRIM(job_id) IN (?)",
-    [ids]
-  );
-  const usedKeys = new Set((stillUsed || []).map((r) => clean(r.job_id).toLowerCase()));
+  for (const { jobId, domain } of pairs) {
+    if (domain) {
+      const stillUsed = await query(
+        "SELECT id FROM work_updates WHERE TRIM(job_id) = TRIM(?) AND UPPER(TRIM(domain)) = ? LIMIT 1",
+        [jobId, domain]
+      );
+      if (stillUsed && stillUsed.length > 0) continue;
 
-  const toRemove = ids.filter((id) => !usedKeys.has(id.toLowerCase()));
-  if (toRemove.length === 0) return;
+      await query(
+        "DELETE FROM job_creation WHERE TRIM(jobId) = TRIM(?) AND UPPER(TRIM(COALESCE(domain,''))) = ?",
+        [jobId, domain]
+      );
 
-  await query("DELETE FROM job_creation WHERE TRIM(jobId) IN (?)", [toRemove]);
+      // purani blank-domain row tabhi hatao jab is job id ko koi bhi domain use nahi kar raha
+      const anyUse = await query(
+        "SELECT id FROM work_updates WHERE TRIM(job_id) = TRIM(?) LIMIT 1",
+        [jobId]
+      );
+      if (!anyUse || anyUse.length === 0) {
+        await query(
+          "DELETE FROM job_creation WHERE TRIM(jobId) = TRIM(?) AND TRIM(COALESCE(domain,'')) = ''",
+          [jobId]
+        );
+      }
+    } else {
+      const stillUsed = await query(
+        "SELECT id FROM work_updates WHERE TRIM(job_id) = TRIM(?) LIMIT 1",
+        [jobId]
+      );
+      if (stillUsed && stillUsed.length > 0) continue;
+      await query("DELETE FROM job_creation WHERE TRIM(jobId) = TRIM(?)", [jobId]);
+    }
+  }
 };
 
 const unwrapCell = (val) => {
@@ -168,6 +225,7 @@ const monthNameToIndex = monthNames.reduce((acc, m, idx) => {
   acc[m.toLowerCase()] = idx;
   return acc;
 }, {});
+monthNameToIndex["sept"] = 8; // Excel me "Sept, 2026" likha hai
 const fullMonthNameToIndex = [
   "january", "february", "march", "april", "may", "june",
   "july", "august", "september", "october", "november", "december"
@@ -175,6 +233,10 @@ const fullMonthNameToIndex = [
   acc[m] = idx;
   return acc;
 }, {});
+
+// Jab month me sirf naam ho (jaise Lumen sheet: "Feb", "May") tab ye saal lagega.
+// Import ke time Excel ke Month column se apne aap set hota hai.
+let monthDefaultYear = new Date().getFullYear();
 
 const formatMonth = (value) => {
   if (!value) return null;
@@ -215,9 +277,19 @@ const formatMonth = (value) => {
   m = strVal.match(/^([A-Za-z]+)[\s\-/,]+(\d{4})$/);
   if (m) {
     const key = m[1].toLowerCase();
-    const monthIdx = key.length === 3 ? monthNameToIndex[key] : fullMonthNameToIndex[key];
+    const monthIdx = monthNameToIndex[key] !== undefined ? monthNameToIndex[key] : fullMonthNameToIndex[key];
     if (monthIdx !== undefined) {
       return `${monthNames[monthIdx]},${m[2]}`;
+    }
+  }
+
+  // sirf month ka naam (bina saal)
+  m = strVal.match(/^([A-Za-z]+)\.?$/);
+  if (m) {
+    const key = m[1].toLowerCase();
+    const monthIdx = monthNameToIndex[key] !== undefined ? monthNameToIndex[key] : fullMonthNameToIndex[key];
+    if (monthIdx !== undefined) {
+      return `${monthNames[monthIdx]},${monthDefaultYear}`;
     }
   }
 
@@ -339,6 +411,7 @@ const helperSyncToJobCreation = (data) => {
   return new Promise((resolve) => {
     const newJobId = clean(data.cleanJobId);
     if (!newJobId || newJobId === "-") return resolve();
+    const jcDomain = domainKey(data.domain);
     const cleanSingleM = formatMonth(data.month);
     data = {
       ...data,
@@ -347,13 +420,28 @@ const helperSyncToJobCreation = (data) => {
       internalQc: blankIfZero(data.internalQc)
     };
 
-    const checkSql = `
-      SELECT id, jobId FROM job_creation 
-      WHERE TRIM(jobId) = TRIM(?) 
-      LIMIT 1
-    `;
+    // FIX: job_creation me bhi (jobId + domain) se match hoga, sirf jobId se nahi
+    let checkSql;
+    let checkParams;
+    if (jcDomain) {
+      checkSql = `
+        SELECT id, jobId FROM job_creation 
+        WHERE TRIM(jobId) = TRIM(?)
+          AND (UPPER(TRIM(COALESCE(domain,''))) = ? OR TRIM(COALESCE(domain,'')) = '')
+        ORDER BY (UPPER(TRIM(COALESCE(domain,''))) = ?) DESC
+        LIMIT 1
+      `;
+      checkParams = [newJobId, jcDomain, jcDomain];
+    } else {
+      checkSql = `
+        SELECT id, jobId FROM job_creation 
+        WHERE TRIM(jobId) = TRIM(?) 
+        LIMIT 1
+      `;
+      checkParams = [newJobId];
+    }
 
-    db.query(checkSql, [newJobId], (err, rows) => {
+    db.query(checkSql, checkParams, (err, rows) => {
       if (err) {
         console.error("Error checking job_creation:", err.message);
         return resolve();
@@ -428,6 +516,9 @@ const importExcel = async (req, res) => {
     let failed = 0;
     let totalRows = 0;
 
+    // har import ki shuruaat me default saal reset
+    monthDefaultYear = new Date().getFullYear();
+
     for (const worksheet of workbook.worksheets) {
       const sheetName = worksheet.name;
       const rows = [];
@@ -463,6 +554,17 @@ const importExcel = async (req, res) => {
 
       totalRows += rows.length;
 
+      // Month column me saal mile to use default bana lo (sirf "Feb"/"May" wali rows ke liye)
+      const yearHit = rows
+        .map((r) => {
+          const v = getMonthValue(r);
+          if (v instanceof Date) return v.getUTCFullYear();
+          const mm = String(v === null || v === undefined ? "" : v).match(/(\d{4})/);
+          return mm ? Number(mm[1]) : null;
+        })
+        .find(Boolean);
+      if (yearHit) monthDefaultYear = yearHit;
+
       for (let i = 0; i < rows.length; i++) {
         const row = rows[i];
 
@@ -485,9 +587,11 @@ const importExcel = async (req, res) => {
             const ecdDateVal = parseExcelDate(findValueInRow(row, ["ECD Date", "ecd_date", "ecd-date", "ecddate", "ECD"]));
             const submissionDateVal = parseExcelDate(findValueInRow(row, ["Submission Date", "submission_date", "submission-date"]));
 
-            let rawLocation = clean(
-              findValueInRow(row, ["State", "Market", "Region"])
-            );
+            // State -> Market -> Region ke order me pehli non-empty value
+            let rawLocation =
+              clean(findValueInRow(row, ["State"])) ||
+              clean(findValueInRow(row, ["Market"])) ||
+              clean(findValueInRow(row, ["Region"]));
 
             let state = "";
             let county = "";
@@ -525,6 +629,12 @@ const importExcel = async (req, res) => {
                 state = countyResult.state;
                 region = getRegionFromState(state);
               }
+            }
+
+            // Agar state se region nahi mila to Excel ka Region column use karo
+            if (!region) {
+              const sheetRegion = clean(findValueInRow(row, ["Region"]));
+              if (sheetRegion) region = sheetRegion;
             }
 
             const month = formatMonth(getMonthValue(row));
@@ -591,9 +701,10 @@ const importExcel = async (req, res) => {
             };
 
             if (jobIdVal && jobIdVal !== "-") {
-              const checkSql = `SELECT id, months, uom, jobs_delivered FROM work_updates WHERE TRIM(job_id) = TRIM(?) LIMIT 1`;
+              // FIX: same Job ID dusre domain me ho to wo alag row hai -> domain bhi match karo
+              const checkSql = `SELECT id, months, uom, jobs_delivered FROM work_updates WHERE TRIM(job_id) = TRIM(?) AND UPPER(TRIM(domain)) = ? LIMIT 1`;
               
-              db.query(checkSql, [jobIdVal], (err, results) => {
+              db.query(checkSql, [jobIdVal, domain], (err, results) => {
                 if (err) {
                   failed++;
                   return resolve();
@@ -748,11 +859,17 @@ const createWork = async (req, res) => {
 
   try {
     let existingId = null;
-    if (cleanJobId) {
-      const rows = await query(
-        "SELECT id FROM work_updates WHERE TRIM(job_id) = TRIM(?) LIMIT 1",
-        [cleanJobId]
-      );
+    if (isRealJobId(cleanJobId)) {
+      // FIX: same Job ID alag domain me ho to alag row; sirf same domain me hi merge hoga
+      const rows = fixedDomain
+        ? await query(
+            "SELECT id FROM work_updates WHERE TRIM(job_id) = TRIM(?) AND UPPER(TRIM(domain)) = ? LIMIT 1",
+            [cleanJobId, fixedDomain]
+          )
+        : await query(
+            "SELECT id FROM work_updates WHERE TRIM(job_id) = TRIM(?) LIMIT 1",
+            [cleanJobId]
+          );
       if (rows && rows.length > 0) existingId = rows[0].id;
     }
 
@@ -941,7 +1058,10 @@ const updateWork = async (req, res) => {
       return res.status(404).json({ message: "Record not found", error: "No work row with this id" });
     }
     const oldJobId = clean(oldRows[0].job_id);
+    const oldDomain = domainKey(oldRows[0].domain);
     const newJobId = has(job_id) ? clean(job_id) : oldJobId;
+    // FIX: domain body me na aaye to purani row ka domain use hoga (job_creation sahi domain me sync ho)
+    const jcDomain = has(domain) ? normalize(domain) : oldDomain;
     if (has(job_id)) setCol("job_id", newJobId);
 
     sets.push("updated_at = CURRENT_TIMESTAMP");
@@ -953,41 +1073,45 @@ const updateWork = async (req, res) => {
       isRealJobId(oldJobId) && oldJobId.toLowerCase() !== newJobId.toLowerCase();
 
     if (jobIdChanged) {
+      const oldScope = jcScope(oldJobId, oldDomain);
       if (isRealJobId(newJobId)) {
+        const newScope = jcScope(newJobId, jcDomain);
         const newExists = await query(
-          "SELECT id FROM job_creation WHERE TRIM(jobId) = TRIM(?) LIMIT 1",
-          [newJobId]
+          `SELECT id FROM job_creation WHERE ${newScope.where} LIMIT 1`,
+          newScope.params
         );
         if (newExists && newExists.length > 0) {
-          await query("DELETE FROM job_creation WHERE TRIM(jobId) = TRIM(?)", [oldJobId]);
+          await query(`DELETE FROM job_creation WHERE ${oldScope.where}`, oldScope.params);
         } else {
           await query(
-            "UPDATE job_creation SET jobId = ?, updated_at = CURRENT_TIMESTAMP WHERE TRIM(jobId) = TRIM(?)",
-            [newJobId, oldJobId]
+            `UPDATE job_creation SET jobId = ?, updated_at = CURRENT_TIMESTAMP WHERE ${oldScope.where}`,
+            [newJobId, ...oldScope.params]
           );
         }
       } else {
-        await query("DELETE FROM job_creation WHERE TRIM(jobId) = TRIM(?)", [oldJobId]);
+        await query(`DELETE FROM job_creation WHERE ${oldScope.where}`, oldScope.params);
       }
     }
 
     if (isRealJobId(newJobId)) {
+      const curScope = jcScope(newJobId, jcDomain);
+
       for (const col of clearedDateCols) {
         await query(
-          `UPDATE job_creation SET ${col} = NULL WHERE TRIM(jobId) = TRIM(?)`,
-          [newJobId]
+          `UPDATE job_creation SET ${col} = NULL WHERE ${curScope.where}`,
+          curScope.params
         );
       }
 
       for (const col of clearedTextCols) {
         await query(
-          `UPDATE job_creation SET ${col} = '' WHERE TRIM(jobId) = TRIM(?)`,
-          [newJobId]
+          `UPDATE job_creation SET ${col} = '' WHERE ${curScope.where}`,
+          curScope.params
         );
       }
 
       await helperSyncToJobCreation({
-        domain: has(domain) ? normalize(domain) : "",
+        domain: jcDomain,
         market: clean(state) || clean(region),
         cleanJobId: newJobId,
         month: latestMonth,
@@ -1066,11 +1190,12 @@ const getAllWork = async (req, res) => {
     const jcMap = new Map();
     try {
       const jcRows = await query(
-        "SELECT jobId, month, receiveDate, ecdDate, submissionDate FROM job_creation"
+        "SELECT jobId, domain, month, receiveDate, ecdDate, submissionDate FROM job_creation"
       );
       (jcRows || []).forEach((r) => {
-        const k = clean(r.jobId).toLowerCase();
-        if (!isRealJobId(k)) return;
+        if (!isRealJobId(r.jobId)) return;
+        // FIX: fallback bhi (domain + jobId) se, taaki dusre domain ki date/month na aaye
+        const k = jobKey(r.domain, r.jobId);
         const prev = jcMap.get(k) || {};
         jcMap.set(k, {
           jc_month: !isBlank(prev.jc_month) ? prev.jc_month : r.month,
@@ -1084,7 +1209,10 @@ const getAllWork = async (req, res) => {
     }
 
     const data = (workRows || []).map((row) => {
-      const fb = jcMap.get(clean(row.job_id).toLowerCase()) || {};
+      const fb =
+        jcMap.get(jobKey(row.domain, row.job_id)) ||
+        jcMap.get(jobKey("", row.job_id)) || // purani blank-domain rows
+        {};
       return mapWorkRow({ ...row, ...fb });
     });
 
@@ -1191,11 +1319,12 @@ const deleteWork = async (req, res) => {
   const workId = req.params.id;
 
   try {
-    const rows = await query("SELECT job_id FROM work_updates WHERE id = ?", [workId]);
+    const rows = await query("SELECT job_id, domain FROM work_updates WHERE id = ?", [workId]);
     const jobId = rows && rows.length > 0 ? clean(rows[0].job_id) : "";
+    const domain = rows && rows.length > 0 ? domainKey(rows[0].domain) : "";
 
     await query("DELETE FROM work_updates WHERE id = ?", [workId]);
-    await removeOrphanJobCreation([jobId]);
+    await removeOrphanJobCreation([{ jobId, domain }]);
 
     return res.json({ message: "Deleted from both Work Controller and Job Creation successfully" });
   } catch (err) {
@@ -1208,14 +1337,14 @@ const deleteFile = async (req, res) => {
   const fileName = req.params.fileName;
 
   try {
-    const rows = await query("SELECT job_id FROM work_updates WHERE file_name = ?", [fileName]);
-    const jobIds = [
-      ...new Set((rows || []).map((r) => clean(r.job_id)).filter(isRealJobId))
-    ];
+    const rows = await query("SELECT job_id, domain FROM work_updates WHERE file_name = ?", [fileName]);
+    const items = (rows || [])
+      .map((r) => ({ jobId: clean(r.job_id), domain: domainKey(r.domain) }))
+      .filter((r) => isRealJobId(r.jobId));
 
     await query("DELETE FROM work_updates WHERE file_name = ?", [fileName]);
 
-    await removeOrphanJobCreation(jobIds);
+    await removeOrphanJobCreation(items);
 
     return res.json({ message: "File and related jobs deleted successfully from both places" });
   } catch (err) {
