@@ -503,27 +503,89 @@ const helperSyncToJobCreation = (data) => {
   });
 };
 
+/* ======================================
+   FAST IMPORT HELPERS (NEW)
+====================================== */
+
+// Excel row -> clean record (purana logic as-is, bas ek jagah)
+const buildRecord = (row, sheetName) => {
+  const domain = normalize(sheetName);
+  const rawLocation =
+    clean(findValueInRow(row, ["State"])) ||
+    clean(findValueInRow(row, ["Market"])) ||
+    clean(findValueInRow(row, ["Region"]));
+
+  let state = "", county = "", region = "";
+  const formattedLocation = rawLocation.toLowerCase().split(" ")
+    .map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join(" ");
+
+  const stateFromCode = getStateNameFromCode(formattedLocation);
+  if (stateFromCode) {
+    state = stateFromCode;
+    region = getRegionFromState(state);
+  } else {
+    const matchedState = Object.keys(stateData).find(
+      (s) => s.toLowerCase() === formattedLocation.toLowerCase()
+    );
+    if (matchedState) {
+      state = matchedState;
+      region = getRegionFromState(state);
+    }
+  }
+  if (!state) {
+    const c = getStateFromCounty(formattedLocation);
+    if (c.state) {
+      county = c.county;
+      state = c.state;
+      region = getRegionFromState(state);
+    }
+  }
+  if (!region) region = clean(findValueInRow(row, ["Region"]));
+
+  return {
+    domain,
+    sow: clean(findValueInRow(row, ["SOW"])),
+    jobType: normalize(findValueInRow(row, ["Job Type", "job_type", "job-type"])),
+    jobId: clean(findValueInRow(row, ["Job ID", "job_id", "jobId", "job-id"])),
+    otp: cleanOtp(findValueInRow(row, ["OTP"])),
+    status: clean(findValueInRow(row, ["Current Status", "current_status", "current-status"])),
+    prod: clean(findValueInRow(row, ["Production Engineers", "production_engineers"])),
+    qc: clean(findValueInRow(row, ["QC Engineers", "qc_engineers"])),
+    amdocs: formatPercentage(findValueInRow(row, ["Amdocs QC", "amdocs_qc"])),
+    internal: formatPercentage(findValueInRow(row, ["Internal QC", "internal_qc"])),
+    recv: parseExcelDate(findValueInRow(row, ["Receive Date", "receive_date", "receive-date", "received date", "received_date"])),
+    ecd: parseExcelDate(findValueInRow(row, ["ECD Date", "ecd_date", "ecd-date", "ecddate", "ECD"])),
+    sub: parseExcelDate(findValueInRow(row, ["Submission Date", "submission_date", "submission-date"])),
+    state, county, region,
+    month: formatMonth(getMonthValue(row)),
+    uom: extractUOM(row)
+  };
+};
+
+const chunk = (arr, n) => {
+  const out = [];
+  for (let i = 0; i < arr.length; i += n) out.push(arr.slice(i, i + n));
+  return out;
+};
+const keep = (oldV, newV) => (clean(newV) !== "" ? newV : oldV);   // COALESCE(NULLIF(new,''), old)
+const keepDate = (oldV, newV) => (newV ? newV : oldV);              // COALESCE(new, old)
+
 const importExcel = async (req, res) => {
   try {
-    if (!req.file) {
-      return res.status(400).json({ message: "Excel file required" });
-    }
+    if (!req.file) return res.status(400).json({ message: "Excel file required" });
 
     const workbook = new ExcelJS.Workbook();
     await workbook.xlsx.load(req.file.buffer);
 
-    let success = 0;
     let failed = 0;
     let totalRows = 0;
-
-    // har import ki shuruaat me default saal reset
     monthDefaultYear = new Date().getFullYear();
 
+    /* ---------- 1) Excel parse + record banao ---------- */
+    const records = [];
     for (const worksheet of workbook.worksheets) {
-      const sheetName = worksheet.name;
       const rows = [];
       const headers = [];
-
       const headerRow = worksheet.getRow(1);
       const totalColumns = headerRow.cellCount || worksheet.columnCount;
 
@@ -534,262 +596,216 @@ const importExcel = async (req, res) => {
 
       worksheet.eachRow((row, rowNumber) => {
         if (rowNumber === 1) return;
-
         const obj = {};
         for (let col = 1; col <= totalColumns; col++) {
-          const headerName = headers[col];
-          if (headerName) {
-            obj[headerName] = unwrapCell(row.getCell(col).value);
-          }
+          if (headers[col]) obj[headers[col]] = unwrapCell(row.getCell(col).value);
         }
-        const hasAnyValue = Object.values(obj).some((v) => {
-          if (v === null || v === undefined) return false;
-          return v.toString().trim() !== "";
-        });
-
-        if (hasAnyValue) {
-          rows.push(obj);
-        }
+        const hasAny = Object.values(obj).some(
+          (v) => v !== null && v !== undefined && v.toString().trim() !== ""
+        );
+        if (hasAny) rows.push(obj);
       });
 
       totalRows += rows.length;
 
-      // Month column me saal mile to use default bana lo (sirf "Feb"/"May" wali rows ke liye)
-      const yearHit = rows
-        .map((r) => {
-          const v = getMonthValue(r);
-          if (v instanceof Date) return v.getUTCFullYear();
-          const mm = String(v === null || v === undefined ? "" : v).match(/(\d{4})/);
-          return mm ? Number(mm[1]) : null;
-        })
-        .find(Boolean);
+      const yearHit = rows.map((r) => {
+        const v = getMonthValue(r);
+        if (v instanceof Date) return v.getUTCFullYear();
+        const mm = String(v === null || v === undefined ? "" : v).match(/(\d{4})/);
+        return mm ? Number(mm[1]) : null;
+      }).find(Boolean);
       if (yearHit) monthDefaultYear = yearHit;
 
-      for (let i = 0; i < rows.length; i++) {
-        const row = rows[i];
-
-        await new Promise((resolve) => {
-          try {
-            const domain = normalize(sheetName); 
-            const sow = clean(findValueInRow(row, ["SOW"]));
-            const jobType = normalize(findValueInRow(row, ["Job Type", "job_type", "job-type"]));
-            const jobIdVal = clean(findValueInRow(row, ["Job ID", "job_id", "jobId", "job-id"]));
-            
-            const otpVal = cleanOtp(findValueInRow(row, ["OTP"]));
-            const currentStatusVal = clean(findValueInRow(row, ["Current Status", "current_status", "current-status"]));
-            const productionEngineersVal = clean(findValueInRow(row, ["Production Engineers", "production_engineers"]));
-            const qcEngineersVal = clean(findValueInRow(row, ["QC Engineers", "qc_engineers"]));
-            
-            const amdocsQcVal = formatPercentage(findValueInRow(row, ["Amdocs QC", "amdocs_qc"]));
-            const internalQcVal = formatPercentage(findValueInRow(row, ["Internal QC", "internal_qc"]));
-            
-            const receiveDateVal = parseExcelDate(findValueInRow(row, ["Receive Date", "receive_date", "receive-date", "received date", "received_date"]));
-            const ecdDateVal = parseExcelDate(findValueInRow(row, ["ECD Date", "ecd_date", "ecd-date", "ecddate", "ECD"]));
-            const submissionDateVal = parseExcelDate(findValueInRow(row, ["Submission Date", "submission_date", "submission-date"]));
-
-            // State -> Market -> Region ke order me pehli non-empty value
-            let rawLocation =
-              clean(findValueInRow(row, ["State"])) ||
-              clean(findValueInRow(row, ["Market"])) ||
-              clean(findValueInRow(row, ["Region"]));
-
-            let state = "";
-            let county = "";
-            let region = "";
-
-            const formattedLocation = rawLocation
-              .toString()
-              .trim()
-              .toLowerCase()
-              .split(" ")
-              .map(w => w.charAt(0).toUpperCase() + w.slice(1))
-              .join(" ");
-
-            const stateFromCode = getStateNameFromCode(formattedLocation);
-
-            if (stateFromCode) {
-              state = stateFromCode;
-              region = getRegionFromState(state);
-            } else {
-              const matchedState = Object.keys(stateData).find(
-                s => s.toLowerCase() === formattedLocation.toLowerCase()
-              );
-
-              if (matchedState) {
-                state = matchedState;
-                region = getRegionFromState(state);
-              }
-            }
-
-            if (!state) {
-              const countyResult = getStateFromCounty(formattedLocation);
-
-              if (countyResult.state) {
-                county = countyResult.county;
-                state = countyResult.state;
-                region = getRegionFromState(state);
-              }
-            }
-
-            // Agar state se region nahi mila to Excel ka Region column use karo
-            if (!region) {
-              const sheetRegion = clean(findValueInRow(row, ["Region"]));
-              if (sheetRegion) region = sheetRegion;
-            }
-
-            const month = formatMonth(getMonthValue(row));
-            const uom = extractUOM(row);
-
-            const insertNewRow = () => {
-              const insertSql = `
-                INSERT INTO work_updates
-                (file_name, months, domain, sow, job_type, region, state, county, uom, otp, current_status, production_engineers, qc_engineers, amdocs_qc, internal_qc, jobs_delivered, job_id, receive_date, ecd_date, submission_date)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?)
-              `;
-
-              db.query(
-                insertSql,
-                [
-                  req.file.originalname,
-                  JSON.stringify(month ? [month] : []),
-                  domain,
-                  sow,
-                  jobType,
-                  region,
-                  state,
-                  county,
-                  JSON.stringify(uom),
-                  otpVal,
-                  currentStatusVal,
-                  productionEngineersVal,
-                  qcEngineersVal,
-                  amdocsQcVal,
-                  internalQcVal,
-                  jobIdVal || null,
-                  receiveDateVal,
-                  ecdDateVal,
-                  submissionDateVal
-                ],
-                (err3) => {
-                  if (err3) {
-                    failed++;
-                    return resolve();
-                  }
-
-                  if (jobIdVal && jobIdVal !== "-") {
-                    helperSyncToJobCreation({
-                      domain,
-                      market: state || region,
-                      cleanJobId: jobIdVal,
-                      month,
-                      otp: otpVal,
-                      amdocsQc: amdocsQcVal,
-                      internalQc: internalQcVal,
-                      receiveDate: receiveDateVal,
-                      ecdDate: ecdDateVal,
-                      submissionDate: submissionDateVal
-                    }).then(() => {
-                      success++;
-                      resolve();
-                    });
-                  } else {
-                    success++;
-                    resolve();
-                  }
-                }
-              );
-            };
-
-            if (jobIdVal && jobIdVal !== "-") {
-              // FIX: same Job ID dusre domain me ho to wo alag row hai -> domain bhi match karo
-              const checkSql = `SELECT id, months, uom, jobs_delivered FROM work_updates WHERE TRIM(job_id) = TRIM(?) AND UPPER(TRIM(domain)) = ? LIMIT 1`;
-              
-              db.query(checkSql, [jobIdVal, domain], (err, results) => {
-                if (err) {
-                  failed++;
-                  return resolve();
-                }
-
-                if (results.length > 0) {
-                  const existing = results[0];
-                  let existingMonths = [];
-                  let existingUOM = {};
-
-                  existingMonths = safeParseJson(existing.months, []);
-                  existingUOM = safeParseJson(existing.uom, {});
-                  if (!Array.isArray(existingMonths)) existingMonths = existingMonths ? [existingMonths] : [];
-                  if (!existingUOM || typeof existingUOM !== "object" || Array.isArray(existingUOM)) existingUOM = {};
-
-                  const newMonth = month ? String(month).trim() : null;
-                  if (newMonth && !existingMonths.includes(newMonth)) {
-                    existingMonths.push(newMonth);
-                  }
-
-                  const mergedUOM = { ...existingUOM, ...uom };
-
-                  // Ek row = hamesha 1 job delivered
-                  const newJobsDelivered = 1;
-
-                  const updateSql = `
-                    UPDATE work_updates
-                    SET months = ?, uom = ?, otp = COALESCE(NULLIF(?, ''), otp), current_status = COALESCE(NULLIF(?, ''), current_status), production_engineers = COALESCE(NULLIF(?, ''), production_engineers), qc_engineers = COALESCE(NULLIF(?, ''), qc_engineers), amdocs_qc = COALESCE(NULLIF(?, ''), amdocs_qc), internal_qc = COALESCE(NULLIF(?, ''), internal_qc), jobs_delivered = ?, receive_date = COALESCE(?, receive_date), ecd_date = COALESCE(?, ecd_date), submission_date = COALESCE(?, submission_date), updated_at = CURRENT_TIMESTAMP
-                    WHERE id = ?
-                  `;
-
-                  db.query(
-                    updateSql,
-                    [
-                      JSON.stringify(existingMonths),
-                      JSON.stringify(mergedUOM),
-                      otpVal,
-                      currentStatusVal,
-                      productionEngineersVal,
-                      qcEngineersVal,
-                      amdocsQcVal,
-                      internalQcVal,
-                      newJobsDelivered,
-                      receiveDateVal,
-                      ecdDateVal,
-                      submissionDateVal,
-                      existing.id
-                    ],
-                    (err2) => {
-                      if (err2) {
-                        failed++;
-                        return resolve();
-                      }
-
-                      helperSyncToJobCreation({
-                        domain,
-                        market: state || region,
-                        cleanJobId: jobIdVal,
-                        month,
-                        otp: otpVal,
-                        amdocsQc: amdocsQcVal,
-                        internalQc: internalQcVal,
-                        receiveDate: receiveDateVal,
-                        ecdDate: ecdDateVal,
-                        submissionDate: submissionDateVal
-                      }).then(() => {
-                        success++;
-                        resolve();
-                      });
-                    }
-                  );
-                } else {
-                  insertNewRow();
-                }
-              });
-            } else {
-              insertNewRow();
-            }
-
-          } catch (e) {
-            failed++;
-            resolve();
-          }
-        });
+      for (const r of rows) {
+        try { records.push(buildRecord(r, worksheet.name)); }
+        catch { failed++; }
       }
+    }
+
+    /* ---------- 2) DB ek baar load (2 queries total) ---------- */
+    const existingWork = await query(
+      "SELECT id, job_id, domain, months, uom FROM work_updates WHERE job_id IS NOT NULL AND TRIM(job_id) <> ''"
+    );
+    const workState = new Map(); // key -> state
+    existingWork.forEach((r) => {
+      workState.set(jobKey(r.domain, r.job_id), {
+        id: r.id,
+        months: (() => { const m = safeParseJson(r.months, []); return Array.isArray(m) ? m : (m ? [m] : []); })(),
+        uom: (() => { const u = safeParseJson(r.uom, {}); return u && typeof u === "object" && !Array.isArray(u) ? u : {}; })(),
+        patch: null
+      });
+    });
+
+    const existingJc = await query("SELECT id, jobId, domain FROM job_creation");
+    const jcExact = new Map();
+    const jcBlank = new Map();
+    existingJc.forEach((r) => {
+      if (!isRealJobId(r.jobId)) return;
+      if (domainKey(r.domain)) jcExact.set(jobKey(r.domain, r.jobId), r.id);
+      else jcBlank.set(clean(r.jobId).toLowerCase(), r.id);
+    });
+
+    /* ---------- 3) Memory me merge (same job+domain ki duplicate rows bhi merge) ---------- */
+    const newRows = [];            // bina job id wali rows -> seedhi insert
+    const pendingNew = new Map();  // key -> naya record (insert hone wala)
+    const jcState = new Map();     // key -> job_creation final state
+
+    for (const rec of records) {
+      const realId = isRealJobId(rec.jobId);
+
+      if (!realId) { newRows.push(rec); continue; }
+
+      const key = jobKey(rec.domain, rec.jobId);
+
+      // ---- work_updates ----
+      let st = workState.get(key);
+      if (st) {
+        if (rec.month && !st.months.includes(rec.month)) st.months.push(rec.month);
+        st.uom = { ...st.uom, ...rec.uom };
+        const p = st.patch || (st.patch = {});
+        p.otp = keep(p.otp, rec.otp);
+        p.status = keep(p.status, rec.status);
+        p.prod = keep(p.prod, rec.prod);
+        p.qc = keep(p.qc, rec.qc);
+        p.amdocs = keep(p.amdocs, rec.amdocs);
+        p.internal = keep(p.internal, rec.internal);
+        p.recv = keepDate(p.recv, rec.recv);
+        p.ecd = keepDate(p.ecd, rec.ecd);
+        p.sub = keepDate(p.sub, rec.sub);
+      } else {
+        const p = pendingNew.get(key);
+        if (p) {
+          if (rec.month && !p.months.includes(rec.month)) p.months.push(rec.month);
+          p.uom = { ...p.uom, ...rec.uom };
+          p.otp = keep(p.otp, rec.otp);
+          p.status = keep(p.status, rec.status);
+          p.prod = keep(p.prod, rec.prod);
+          p.qc = keep(p.qc, rec.qc);
+          p.amdocs = keep(p.amdocs, rec.amdocs);
+          p.internal = keep(p.internal, rec.internal);
+          p.recv = keepDate(p.recv, rec.recv);
+          p.ecd = keepDate(p.ecd, rec.ecd);
+          p.sub = keepDate(p.sub, rec.sub);
+        } else {
+          pendingNew.set(key, { ...rec, months: rec.month ? [rec.month] : [], uom: { ...rec.uom } });
+        }
+      }
+
+      // ---- job_creation ----
+      const market = rec.state || rec.region;
+      let j = jcState.get(key);
+      if (!j) {
+        const id = jcExact.get(key) || jcBlank.get(rec.jobId.toLowerCase()) || null;
+        j = { id, domain: rec.domain, jobId: rec.jobId, market: "", month: null,
+              recv: null, ecd: null, sub: null, otp: "", amdocs: "", internal: "" };
+        jcState.set(key, j);
+      }
+      j.market = keep(j.market, market);
+      j.month = rec.month || j.month;
+      j.recv = keepDate(j.recv, rec.recv);
+      j.ecd = keepDate(j.ecd, rec.ecd);
+      j.sub = keepDate(j.sub, rec.sub);
+      j.otp = keep(j.otp, rec.otp);
+      j.amdocs = keep(j.amdocs, blankIfZero(rec.amdocs));
+      j.internal = keep(j.internal, blankIfZero(rec.internal));
+    }
+
+    /* ---------- 4) Bulk write ---------- */
+    const fileName = req.file.originalname;
+    let success = 0;
+
+    // 4a) work_updates INSERT (500 rows ek query me)
+    const toInsert = [
+      ...newRows.map((r) => ({ ...r, months: r.month ? [r.month] : [] })),
+      ...pendingNew.values()
+    ];
+    for (const part of chunk(toInsert, 500)) {
+      const values = part.map((r) => [
+        fileName, JSON.stringify(r.months), r.domain, r.sow, r.jobType,
+        r.region, r.state, r.county, JSON.stringify(r.uom),
+        r.otp, r.status, r.prod, r.qc, r.amdocs, r.internal,
+        1, r.jobId || null, r.recv, r.ecd, r.sub
+      ]);
+      try {
+        await query(
+          `INSERT INTO work_updates
+           (file_name, months, domain, sow, job_type, region, state, county, uom, otp, current_status, production_engineers, qc_engineers, amdocs_qc, internal_qc, jobs_delivered, job_id, receive_date, ecd_date, submission_date)
+           VALUES ?`,
+          [values]
+        );
+        success += part.length;
+      } catch (e) {
+        console.error("bulk insert failed:", e.message);
+        failed += part.length;
+      }
+    }
+
+    // 4b) work_updates UPDATE (primary key se -> fast)
+    const updates = [...workState.values()].filter((s) => s.patch);
+    for (const part of chunk(updates, 20)) {
+      await Promise.all(part.map(async (s) => {
+        const p = s.patch;
+        try {
+          await query(
+            `UPDATE work_updates SET months = ?, uom = ?,
+               otp = COALESCE(NULLIF(?, ''), otp),
+               current_status = COALESCE(NULLIF(?, ''), current_status),
+               production_engineers = COALESCE(NULLIF(?, ''), production_engineers),
+               qc_engineers = COALESCE(NULLIF(?, ''), qc_engineers),
+               amdocs_qc = COALESCE(NULLIF(?, ''), amdocs_qc),
+               internal_qc = COALESCE(NULLIF(?, ''), internal_qc),
+               jobs_delivered = 1,
+               receive_date = COALESCE(?, receive_date),
+               ecd_date = COALESCE(?, ecd_date),
+               submission_date = COALESCE(?, submission_date),
+               updated_at = CURRENT_TIMESTAMP
+             WHERE id = ?`,
+            [JSON.stringify(s.months), JSON.stringify(s.uom),
+             p.otp || "", p.status || "", p.prod || "", p.qc || "",
+             p.amdocs || "", p.internal || "",
+             p.recv || null, p.ecd || null, p.sub || null, s.id]
+          );
+          success++;
+        } catch (e) { failed++; }
+      }));
+    }
+
+    // 4c) job_creation: naye rows bulk insert, purane id se update
+    const jcAll = [...jcState.values()];
+    const jcNew = jcAll.filter((j) => !j.id);
+    const jcOld = jcAll.filter((j) => j.id);
+
+    for (const part of chunk(jcNew, 500)) {
+      const values = part.map((j) => [
+        j.domain, j.market, j.jobId, j.month, j.recv, j.ecd, j.sub,
+        j.otp, j.amdocs, j.internal
+      ]);
+      try {
+        await query(
+          `INSERT INTO job_creation (domain, market, jobId, month, receiveDate, ecdDate, submissionDate, otp, amdocsQc, internalQc) VALUES ?`,
+          [values]
+        );
+      } catch (e) { console.error("jc bulk insert failed:", e.message); }
+    }
+
+    for (const part of chunk(jcOld, 20)) {
+      await Promise.all(part.map((j) =>
+        query(
+          `UPDATE job_creation
+           SET domain = COALESCE(NULLIF(?, ''), domain),
+               market = COALESCE(NULLIF(?, ''), market),
+               month = COALESCE(?, month),
+               receiveDate = COALESCE(?, receiveDate),
+               ecdDate = COALESCE(?, ecdDate),
+               submissionDate = COALESCE(?, submissionDate),
+               otp = COALESCE(NULLIF(?, ''), otp),
+               amdocsQc = COALESCE(NULLIF(?, ''), amdocsQc),
+               internalQc = COALESCE(NULLIF(?, ''), internalQc),
+               updated_at = CURRENT_TIMESTAMP
+           WHERE id = ?`,
+          [j.domain, j.market, j.month, j.recv, j.ecd, j.sub, j.otp, j.amdocs, j.internal, j.id]
+        ).catch((e) => console.error("jc update failed:", e.message))
+      ));
     }
 
     return res.json({
@@ -798,12 +814,8 @@ const importExcel = async (req, res) => {
       insertedOrUpdated: success,
       failed
     });
-
   } catch (err) {
-    return res.status(500).json({
-      message: "Import failed",
-      error: err.message
-    });
+    return res.status(500).json({ message: "Import failed", error: err.message });
   }
 };
 
