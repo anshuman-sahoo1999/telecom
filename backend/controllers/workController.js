@@ -112,7 +112,11 @@ const removeOrphanJobCreation = async (items) => {
   if (pairs.length === 0) return;
 
   // work_updates me abhi bhi kaun se job id / domain use ho rahe hain (ek hi query me)
-  const usedRows = await query("SELECT job_id, domain FROM work_updates WHERE job_id IS NOT NULL");
+  // CHANGE (speed): dono SELECT ek saath chalte hain
+  const [usedRows, jcRows] = await Promise.all([
+    query("SELECT job_id, domain FROM work_updates WHERE job_id IS NOT NULL"),
+    query("SELECT id, jobId, domain FROM job_creation")
+  ]);
   const usedExact = new Set();
   const usedAny = new Set();
   (usedRows || []).forEach((r) => {
@@ -122,8 +126,6 @@ const removeOrphanJobCreation = async (items) => {
     usedExact.add(jobKey(r.domain, jid));
   });
 
-  // job_creation ki saari rows ek baar me
-  const jcRows = await query("SELECT id, jobId, domain FROM job_creation");
   const jcByJob = new Map();
   (jcRows || []).forEach((r) => {
     const jid = clean(r.jobId);
@@ -555,16 +557,21 @@ const helperSyncToJobCreation = (data) => {
    import / create / update / delete ke response me bhi
    latest data wapas bheja ja sake (frontend ko refresh nahi karna padega)
 ====================================== */
+const regionCache = new Map(); // CHANGE (speed): same state ke liye baar-baar loop nahi
 const retrieveRegionIfBlank = (state) => {
   const raw = clean(state).toUpperCase();
   if (!raw) return "";
+  if (regionCache.has(raw)) return regionCache.get(raw);
+  let found = "";
   for (const name of Object.keys(stateData)) {
     const info = stateData[name] || {};
     if (name.toUpperCase() === raw || clean(info.code).toUpperCase() === raw) {
-      return info.region || "";
+      found = info.region || "";
+      break;
     }
   }
-  return "";
+  regionCache.set(raw, found);
+  return found;
 };
 const regionForState = retrieveRegionIfBlank;
 
@@ -1743,20 +1750,32 @@ const deleteWork = async (req, res) => {
 
 const deleteFile = async (req, res) => {
   const fileName = req.params.fileName;
+  // CHANGE (speed): ?lite=1 bhejne par poora data wapas nahi banta/bheja jata (bahut fast)
+  const lite = req.query && (req.query.lite === "1" || req.query.lite === "true");
+  const t0 = Date.now();
 
   try {
     const rows = await query("SELECT job_id, domain FROM work_updates WHERE file_name = ?", [fileName]);
     const items = (rows || [])
       .map((r) => ({ jobId: clean(r.job_id), domain: domainKey(r.domain) }))
       .filter((r) => isRealJobId(r.jobId));
+    const t1 = Date.now();
 
     const delResult = await query("DELETE FROM work_updates WHERE file_name = ?", [fileName]);
     const deletedCount =
       delResult && delResult.affectedRows !== undefined ? delResult.affectedRows : (rows || []).length;
+    const t2 = Date.now();
 
     const cleanupOk = await safeRemoveOrphanJobCreation(items);
+    const t3 = Date.now();
 
-    const data = await tryBuildAllWork();
+    const data = lite ? undefined : await tryBuildAllWork();
+    const t4 = Date.now();
+
+    console.log(
+      `deleteFile timing(ms): select=${t1 - t0} delete=${t2 - t1} cleanup=${t3 - t2} rebuild=${t4 - t3} total=${t4 - t0} rows=${deletedCount}`
+    );
+
     noCache(res);
     return res.json({
       success: true,
@@ -1764,7 +1783,7 @@ const deleteFile = async (req, res) => {
       fileName,
       deletedCount,
       jobCreationCleaned: cleanupOk,
-      data
+      ...(lite ? {} : { data })
     });
   } catch (err) {
     console.error("deleteFile error:", err.message);
