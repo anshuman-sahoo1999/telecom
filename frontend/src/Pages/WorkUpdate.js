@@ -229,6 +229,8 @@ export default function WorkUpdate({ refreshDashboard }) {
 
   // Step 2: popup me "Yes, Delete" dabane par asli delete
   // CHANGE: popup turant band hota hai aur us file ki row par "Deleting..." dikhta hai
+  // CHANGE: server badi file ko tukdon me delete karta hai (Vercel time-limit ki wajah se);
+  //         jab tak server done:true na bheje, ye dobara call karta rehta hai
   const confirmDelete = async () => {
     if (!deleteTarget) return;
     const fileName = deleteTarget.file_name;
@@ -237,11 +239,26 @@ export default function WorkUpdate({ refreshDashboard }) {
     setDeletingFiles((prev) => [...prev, fileName]);
 
     try {
-      // CHANGE: file name me space, #, %, + jaise characters ho to bhi delete chale
-      // ?lite=1 -> server poora data wapas nahi bhejta, delete bahut fast
-      const res = await axios.delete(
-        `${API_BASE_URL}/api/work/delete-file/${encodeURIComponent(fileName)}?lite=1`
-      );
+      // file name me space, #, %, + jaise characters ho to bhi delete chale
+      const url = `${API_BASE_URL}/api/work/delete-file/${encodeURIComponent(fileName)}?lite=1`;
+
+      let totalDeleted = 0;
+      let done = false;
+      let rounds = 0;
+
+      while (!done && rounds < 500) {
+        rounds += 1;
+        const res = await axios.delete(url);
+        const body = (res && res.data) || {};
+        const removed = Number(body.deletedCount) || 0;
+        totalDeleted += removed;
+        done = body.done !== false; // purana server done nahi bhejta -> done maano
+
+        // kuchh delete hi nahi hua aur done bhi nahi -> atke nahi, ruk jao
+        if (!done && removed === 0) {
+          throw new Error("Delete is not making progress");
+        }
+      }
 
       if (selectedFile === fileName) setSelectedFile(null);
 
@@ -249,7 +266,7 @@ export default function WorkUpdate({ refreshDashboard }) {
       setImports((prev) => prev.filter((r) => r.file_name !== fileName));
 
       setDeleteText(
-        (res && res.data && res.data.message) || "File Deleted Successfully"
+        `File "${fileName}" deleted successfully (${totalDeleted} record${totalDeleted === 1 ? "" : "s"} removed).`
       );
       setDeleteMsg(true);
       setTimeout(() => setDeleteMsg(false), 2500);
@@ -259,10 +276,14 @@ export default function WorkUpdate({ refreshDashboard }) {
       }
     } catch (err) {
       console.log(err);
+      const body = err.response && err.response.data;
+      const detail = body && (body.error || body.code);
       showToast(
-        (err.response && err.response.data && err.response.data.message) ||
-          "Could not delete the file. Please try again."
+        ((body && body.message) || "Could not delete the file. Please try again.") +
+          (detail ? ` (${detail})` : "")
       );
+      // adha delete hua ho to list sach dikhaye
+      fetchData();
     } finally {
       setDeletingFiles((prev) => prev.filter((n) => n !== fileName));
     }
