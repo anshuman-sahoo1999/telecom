@@ -278,9 +278,21 @@ const formatPercentage = (value) => {
 
 const cleanOtp = (v) => formatPercentage(v);
 const blankIfZero = (v) => (isZeroValue(v) ? "" : v);
+// SPEED: header ka "compressed" naam baar-baar regex se na banana pade, isliye yaad rakhte hain
+const compressCache = new Map();
+const compressKey = (s) => {
+  const str = String(s);
+  let v = compressCache.get(str);
+  if (v === undefined) {
+    v = str.toLowerCase().replace(/[^a-z0-9]/g, "");
+    compressCache.set(str, v);
+  }
+  return v;
+};
+
 const getMonthValue = (row) => {
   for (const key of Object.keys(row)) {
-    const k = key.toLowerCase().replace(/[^a-z0-9]/g, "");
+    const k = compressKey(key);
     if (k === "month" || k === "monthofservice" || k === "months") {
       return row[key];
     }
@@ -390,15 +402,17 @@ const extractUOM = (row) => {
     "file name", "file_name", "jobs delivered", "jobs_delivered", "domain", "status"
   ];
 
+  if (!extractUOM._sysSet) {
+    extractUOM._sysSet = new Set(systemColumns.map((sys) => compressKey(sys)));
+  }
+  const sysSet = extractUOM._sysSet;
+
   Object.keys(row).forEach((key) => {
     if (!key) return;
-    
-    const compressedKey = key.toString().toLowerCase().replace(/[^a-z0-9]/g, "");
-    
-    const isSystemCol = systemColumns.some(sys => {
-      const cleanSys = sys.toLowerCase().replace(/[^a-z0-9]/g, "");
-      return compressedKey === cleanSys;
-    });
+
+    const compressedKey = compressKey(key);
+
+    const isSystemCol = sysSet.has(compressedKey);
 
     if (!isSystemCol) {
       let value = unwrapCell(row[key]);
@@ -422,9 +436,9 @@ const extractUOM = (row) => {
 
 const findValueInRow = (row, possibleKeys) => {
   for (const key of Object.keys(row)) {
-    const compressedKey = key.toLowerCase().replace(/[^a-z0-9]/g, "");
+    const compressedKey = compressKey(key);
     for (const pk of possibleKeys) {
-      const compressedPk = pk.toLowerCase().replace(/[^a-z0-9]/g, "");
+      const compressedPk = compressKey(pk);
       if (compressedKey === compressedPk) {
         const val = unwrapCell(row[key]);
         if (val === null || val === undefined) return "";
@@ -435,17 +449,21 @@ const findValueInRow = (row, possibleKeys) => {
   return "";
 };
 
+// SPEED: state code -> state name ka map ek baar banta hai (pehli match jeetti hai, pehle jaisa)
+let stateCodeMap = null;
 const getStateNameFromCode = (code) => {
   if (!code) return "";
   const input = code.toString().trim().toUpperCase();
 
-  for (const stateName in stateData) {
-    if (stateData[stateName].code.toUpperCase() === input) {
-      return stateName;
+  if (!stateCodeMap) {
+    stateCodeMap = new Map();
+    for (const stateName in stateData) {
+      const c = clean(stateData[stateName] && stateData[stateName].code).toUpperCase();
+      if (c && !stateCodeMap.has(c)) stateCodeMap.set(c, stateName);
     }
   }
 
-  return "";
+  return stateCodeMap.get(input) || "";
 };
 
 const getRegionFromState = (state) => {
@@ -454,25 +472,35 @@ const getRegionFromState = (state) => {
   return found ? found.region : "";
 };
 
+let countyLookupMap = null;
 const getStateFromCounty = (countyName) => {
   if (!countyName) return { county: "", state: "" };
 
   const input = countyName.toString().toLowerCase().replace("county", "").trim();
 
-  for (const item of countyData) {
-    const geo = item.GeographicAreaName;
-    if (!geo) continue;
+  // SPEED: county list ka map ek baar banta hai (pehli match jeetti hai, pehle jaisa)
+  if (!countyLookupMap) {
+    countyLookupMap = new Map();
+    for (const item of countyData) {
+      const geo = item.GeographicAreaName;
+      if (!geo) continue;
 
-    const parts = geo.split(",");
-    const countyPart = parts[0]?.replace("County", "").trim().toLowerCase();
-    const statePart = parts[1]?.trim();
+      const parts = geo.split(",");
+      const countyPart = parts[0]?.replace("County", "").trim().toLowerCase();
+      const statePart = parts[1]?.trim();
 
-    if (countyPart === input) {
-      return {
-        county: parts[0]?.replace("County", "").trim(),
-        state: statePart
-      };
+      if (countyPart !== undefined && !countyLookupMap.has(countyPart)) {
+        countyLookupMap.set(countyPart, {
+          county: parts[0]?.replace("County", "").trim(),
+          state: statePart
+        });
+      }
     }
+  }
+
+  const hit = countyLookupMap.get(input);
+  if (hit) {
+    return { county: hit.county, state: hit.state };
   }
 
   return { county: countyName, state: "" };
@@ -861,12 +889,23 @@ const importExcel = async (req, res) => {
       return res.status(400).json({ message: "Excel file required" });
     }
 
+    const importStartedAt = Date.now();
     const workbook = new ExcelJS.Workbook();
     await workbook.xlsx.load(req.file.buffer);
 
     let success = 0;
     let failed = 0;
     let totalRows = 0;
+
+    // har step ka time (ms) naapte hain taaki pata chale der kahan lag rahi hai
+    const timings = {};
+    let lapStart = importStartedAt;
+    const lap = (name) => {
+      const now = Date.now();
+      timings[name] = now - lapStart;
+      lapStart = now;
+    };
+    lap("loadFile");
 
     // har import ki shuruaat me default saal reset
     monthDefaultYear = new Date().getFullYear();
@@ -929,6 +968,8 @@ const importExcel = async (req, res) => {
       }
     }
 
+    lap("readExcelRows");
+
     /* ---------- STEP 2: rows ko group karo (same domain + Job ID = ek job) ---------- */
     const order = []; // Excel ka order yahin bacha rehta hai
     const groups = new Map();
@@ -966,6 +1007,8 @@ const importExcel = async (req, res) => {
         if (!existingMap.has(k)) existingMap.set(k, r);
       });
     }
+
+    lap("loadExistingJobs");
 
     /* ---------- STEP 4: insert aur update ki list banao ---------- */
     const inserts = []; // { recs, merged }
@@ -1029,6 +1072,8 @@ const importExcel = async (req, res) => {
       });
     }
 
+    lap("bulkInsertWork");
+
     /* ---------- STEP 6: purani rows limited-parallel update ---------- */
     if (updates.length > 0) {
       const updateSql = `
@@ -1076,18 +1121,28 @@ const importExcel = async (req, res) => {
       });
     }
 
+    lap("updateOldWork");
+
     /* ---------- STEP 7: job_creation bulk sync ---------- */
     try {
       await bulkSyncJobCreation(syncList);
     } catch (e) {
       console.error("job_creation bulk sync failed:", e.message);
     }
+    lap("syncJobCreation");
+
+    timings.total = Date.now() - importStartedAt;
+    console.log(
+      `Import timings (ms) for "${req.file.originalname}": rows=${totalRows}, inserts=${inserts.length}, updates=${updates.length}`,
+      JSON.stringify(timings)
+    );
 
     return res.json({
       message: "Excel imported successfully in proper order",
       totalRows,
       insertedOrUpdated: success,
-      failed
+      failed,
+      timings
     });
 
   } catch (err) {
