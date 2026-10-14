@@ -713,30 +713,39 @@ const importExcel = async (req, res) => {
     /* ---------- 4) Bulk write ---------- */
     const fileName = req.file.originalname;
     let success = 0;
+    let firstError = "";
 
-    // 4a) work_updates INSERT (500 rows ek query me)
+    // 4a) work_updates INSERT (500 rows ek query me; chunk fail ho to row-by-row)
     const toInsert = [
       ...newRows.map((r) => ({ ...r, months: r.month ? [r.month] : [] })),
       ...pendingNew.values()
     ];
-    for (const part of chunk(toInsert, 500)) {
-      const values = part.map((r) => [
-        fileName, JSON.stringify(r.months), r.domain, r.sow, r.jobType,
-        r.region, r.state, r.county, JSON.stringify(r.uom),
-        r.otp, r.status, r.prod, r.qc, r.amdocs, r.internal,
-        1, r.jobId || null, r.recv, r.ecd, r.sub
-      ]);
-      try {
-        await query(
-          `INSERT INTO work_updates
+    const rowVals = (r) => [
+      fileName, JSON.stringify(r.months), r.domain, r.sow, r.jobType,
+      r.region, r.state, r.county, JSON.stringify(r.uom),
+      r.otp, r.status, r.prod, r.qc, r.amdocs, r.internal,
+      1, r.jobId || null, r.recv, r.ecd, r.sub
+    ];
+    const insertSql = `INSERT INTO work_updates
            (file_name, months, domain, sow, job_type, region, state, county, uom, otp, current_status, production_engineers, qc_engineers, amdocs_qc, internal_qc, jobs_delivered, job_id, receive_date, ecd_date, submission_date)
-           VALUES ?`,
-          [values]
-        );
+           VALUES ?`;
+
+    for (const part of chunk(toInsert, 500)) {
+      try {
+        await query(insertSql, [part.map(rowVals)]);
         success += part.length;
       } catch (e) {
-        console.error("bulk insert failed:", e.message);
-        failed += part.length;
+        console.error("bulk insert failed, row-by-row try:", e.message);
+        if (!firstError) firstError = e.message;
+        for (const r of part) {
+          try {
+            await query(insertSql, [[rowVals(r)]]);
+            success++;
+          } catch (e2) {
+            failed++;
+            if (!firstError) firstError = e2.message;
+          }
+        }
       }
     }
 
@@ -766,7 +775,10 @@ const importExcel = async (req, res) => {
              p.recv || null, p.ecd || null, p.sub || null, s.id]
           );
           success++;
-        } catch (e) { failed++; }
+        } catch (e) {
+          failed++;
+          if (!firstError) firstError = e.message;
+        }
       }));
     }
 
@@ -812,7 +824,8 @@ const importExcel = async (req, res) => {
       message: "Excel imported successfully in proper order",
       totalRows,
       insertedOrUpdated: success,
-      failed
+      failed,
+      firstError
     });
   } catch (err) {
     return res.status(500).json({ message: "Import failed", error: err.message });
