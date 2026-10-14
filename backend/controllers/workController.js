@@ -40,14 +40,7 @@ const runLimited = async (list, limit, worker) => {
   await Promise.all(runners);
 };
 
-// Bahut saari rows ek hi query me insert karta hai.
-// Agar kisi chunk me error aaye to us chunk ko row-by-row try karta hai,
-// taaki sirf kharab row fail ho, baaki sab save ho jaye.
-// Return: har row ke liye true/false (insert hua ya nahi)
-// IN (...) ke liye "?, ?, ?" banata hai (har database driver par chalta hai)
 const inClause = (arr) => arr.map(() => "?").join(", ");
-
-// Aakhri insert error yaad rakhte hain taaki import ke response me dikha sakein
 let lastBulkError = "";
 
 const bulkInsert = async (table, columns, rows, size = 200) => {
@@ -124,13 +117,6 @@ const parseMonthsInput = (months) => {
   return cleanMonthArray(arr);
 };
 
-// items: [{ jobId, domain }] (purana format: sirf jobId strings bhi chalega)
-// SPEED: pehle har job ke liye alag-alag 3-4 query chalti thi.
-// Ab ek saath (chunk me) check hota hai aur ek hi DELETE me hat jata hai.
-// Logic bilkul pehle jaisa hai:
-//  - domain ke saath: us (jobId + domain) ko koi work row use na kare to job_creation se hatao;
-//    blank-domain row tabhi hatao jab is job id ko koi bhi domain use nahi kar raha
-//  - domain ke bina: job id ko koi bhi use na kare to saari job_creation rows hatao
 const removeOrphanJobCreation = async (items) => {
   const seen = new Set();
   const pairs = [];
@@ -331,8 +317,6 @@ const fullMonthNameToIndex = [
   return acc;
 }, {});
 
-// Jab month me sirf naam ho (jaise Lumen sheet: "Feb", "May") tab ye saal lagega.
-// Import ke time Excel ke Month column se apne aap set hota hai.
 let monthDefaultYear = new Date().getFullYear();
 
 const formatMonth = (value) => {
@@ -616,17 +600,6 @@ const helperSyncToJobCreation = (data) => {
   });
 };
 
-/* ======================================
-   IMPORT (FAST VERSION)
-   Pehle: har Excel row ke liye 3-4 alag DB query, ek ke baad ek.
-   Ab:    1) poori Excel memory me padhi jati hai
-          2) purane job ids ek saath (chunk me) DB se laye jate hain
-          3) nayi rows bulk INSERT hoti hain, purani rows limited-parallel UPDATE
-          4) job_creation bhi isi tarah bulk sync hota hai
-   Result/logic pehle jaisa hi hai (same Job ID + same domain => merge).
-====================================== */
-
-// Ek Excel row -> ek record (sab values clean/format karke)
 const parseImportRow = (row, sheetName) => {
   const domain = normalize(sheetName);
   const sow = clean(findValueInRow(row, ["SOW"]));
@@ -1559,9 +1532,6 @@ const mapWorkRow = (row) => {
 
 const getAllWork = async (req, res) => {
   try {
-    // LITE MODE (?files=1): upload page ko sirf file ke naam chahiye, poora data nahi.
-    // Isse import ke baad aur page khulte hi bahut tez list aati hai.
-    // File wali rows me sirf file_name aata hai; bina file wali (manual) rows poori aati hain.
     if (req.query && (req.query.files === "1" || req.query.files === "true")) {
       const fileRows = await query(
         "SELECT file_name, MIN(id) AS first_id FROM work_updates WHERE file_name IS NOT NULL AND TRIM(file_name) <> '' GROUP BY file_name ORDER BY first_id ASC"
@@ -1751,10 +1721,6 @@ const deleteWork = async (req, res) => {
   }
 };
 
-// FAST + CHUNKED DELETE
-// Frontend (?lite=1) baar-baar call karta hai jab tak response me done:true na aaye.
-// Har call me server chhote tukde (id se) delete karta hai aur ~6 second me ruk jata hai
-// (Vercel time-limit se bachne ke liye). lite na ho to ek hi call me poori file delete hoti hai.
 const DELETE_CHUNK = 2000;
 const DELETE_TIME_BUDGET_MS = 6000;
 
@@ -1820,10 +1786,6 @@ const clearWork = async (req, res) => {
   }
 };
 
-/* ======================================
-   AUTO FIX: purani rows ko 1 karo (server start par apne aap chalega)
-   Manual SQL ki zaroorat nahi.
-====================================== */
 const fixOldJobsDelivered = async () => {
   try {
     const result = await query(
@@ -1838,11 +1800,6 @@ const fixOldJobsDelivered = async () => {
 };
 fixOldJobsDelivered();
 
-/* ======================================
-   AUTO INDEXES: import/delete tez karne ke liye (server start par apne aap)
-   Manual SQL ki zaroorat nahi. Index pehle se hai to kuchh nahi karta.
-   TEXT column ho to apne aap prefix length ke saath bana leta hai.
-====================================== */
 const ensureIndex = async (table, indexName, column) => {
   try {
     const found = await query(`SHOW INDEX FROM ${table} WHERE Key_name = ?`, [indexName]);
