@@ -1637,29 +1637,107 @@ const getDomainLastUpdate = (req, res) => {
 /* ======================================
    DELETE FUNCTIONS
    CHANGE: delete ke baad latest data response me aata hai
-   CHANGE (speed): removeOrphanJobCreation ab bulk me chalta hai
+   CHANGE (speed): removeOrphanJobCreation bulk me chalta hai
+   CHANGE (safe): agar bulk cleanup fail ho to purane tareeke (job-by-job) se cleanup hota hai,
+   aur cleanup me dikkat aaye tab bhi asli delete fail nahi hota.
 ====================================== */
+
+// Purana (job-by-job) cleanup - sirf backup ke taur par, agar bulk wala fail ho
+const removeOrphanJobCreationLegacy = async (items) => {
+  const seen = new Set();
+  const pairs = [];
+  (items || []).forEach((it) => {
+    const isObj = it && typeof it === "object";
+    const jobId = clean(isObj ? it.jobId : it);
+    const domain = domainKey(isObj ? it.domain : "");
+    if (!isRealJobId(jobId)) return;
+    const k = jobKey(domain, jobId);
+    if (seen.has(k)) return;
+    seen.add(k);
+    pairs.push({ jobId, domain });
+  });
+
+  for (const { jobId, domain } of pairs) {
+    if (domain) {
+      const stillUsed = await query(
+        "SELECT id FROM work_updates WHERE TRIM(job_id) = TRIM(?) AND UPPER(TRIM(domain)) = ? LIMIT 1",
+        [jobId, domain]
+      );
+      if (stillUsed && stillUsed.length > 0) continue;
+
+      await query(
+        "DELETE FROM job_creation WHERE TRIM(jobId) = TRIM(?) AND UPPER(TRIM(COALESCE(domain,''))) = ?",
+        [jobId, domain]
+      );
+
+      const anyUse = await query(
+        "SELECT id FROM work_updates WHERE TRIM(job_id) = TRIM(?) LIMIT 1",
+        [jobId]
+      );
+      if (!anyUse || anyUse.length === 0) {
+        await query(
+          "DELETE FROM job_creation WHERE TRIM(jobId) = TRIM(?) AND TRIM(COALESCE(domain,'')) = ''",
+          [jobId]
+        );
+      }
+    } else {
+      const stillUsed = await query(
+        "SELECT id FROM work_updates WHERE TRIM(job_id) = TRIM(?) LIMIT 1",
+        [jobId]
+      );
+      if (stillUsed && stillUsed.length > 0) continue;
+      await query("DELETE FROM job_creation WHERE TRIM(jobId) = TRIM(?)", [jobId]);
+    }
+  }
+};
+
+// Bulk try -> fail ho to legacy try -> dono fail ho to sirf log (delete response na toote)
+const safeRemoveOrphanJobCreation = async (items) => {
+  try {
+    await removeOrphanJobCreation(items);
+    return true;
+  } catch (bulkErr) {
+    console.error("Bulk job_creation cleanup failed, legacy try kar rahe hain:", bulkErr.message);
+    try {
+      await removeOrphanJobCreationLegacy(items);
+      return true;
+    } catch (legacyErr) {
+      console.error("Legacy job_creation cleanup bhi fail:", legacyErr.message);
+      return false;
+    }
+  }
+};
+
 const deleteWork = async (req, res) => {
   const workId = req.params.id;
 
   try {
     const rows = await query("SELECT job_id, domain FROM work_updates WHERE id = ?", [workId]);
-    const jobId = rows && rows.length > 0 ? clean(rows[0].job_id) : "";
-    const domain = rows && rows.length > 0 ? domainKey(rows[0].domain) : "";
+    const found = rows && rows.length > 0;
+    const jobId = found ? clean(rows[0].job_id) : "";
+    const domain = found ? domainKey(rows[0].domain) : "";
 
     await query("DELETE FROM work_updates WHERE id = ?", [workId]);
-    await removeOrphanJobCreation([{ jobId, domain }]);
+    const cleanupOk = await safeRemoveOrphanJobCreation([{ jobId, domain }]);
 
     const data = await tryBuildAllWork();
     noCache(res);
     return res.json({
-      message: "Deleted from both Work Controller and Job Creation successfully",
+      success: true,
+      message: found
+        ? "Record deleted successfully."
+        : "Record was already deleted.",
       id: workId,
+      jobCreationCleaned: cleanupOk,
       data
     });
   } catch (err) {
     console.error("deleteWork error:", err.message);
-    return res.status(500).json({ message: "Delete failed", error: err.message });
+    return res.status(500).json({
+      success: false,
+      message: "Could not delete the record. Please try again.",
+      error: err.message
+    });
   }
 };
 
@@ -1672,20 +1750,29 @@ const deleteFile = async (req, res) => {
       .map((r) => ({ jobId: clean(r.job_id), domain: domainKey(r.domain) }))
       .filter((r) => isRealJobId(r.jobId));
 
-    await query("DELETE FROM work_updates WHERE file_name = ?", [fileName]);
+    const delResult = await query("DELETE FROM work_updates WHERE file_name = ?", [fileName]);
+    const deletedCount =
+      delResult && delResult.affectedRows !== undefined ? delResult.affectedRows : (rows || []).length;
 
-    await removeOrphanJobCreation(items);
+    const cleanupOk = await safeRemoveOrphanJobCreation(items);
 
     const data = await tryBuildAllWork();
     noCache(res);
     return res.json({
-      message: "File and related jobs deleted successfully from both places",
+      success: true,
+      message: `File "${fileName}" deleted successfully (${deletedCount} record${deletedCount === 1 ? "" : "s"} removed).`,
       fileName,
+      deletedCount,
+      jobCreationCleaned: cleanupOk,
       data
     });
   } catch (err) {
     console.error("deleteFile error:", err.message);
-    return res.status(500).json({ message: "Delete failed", error: err.message });
+    return res.status(500).json({
+      success: false,
+      message: "Could not delete the file. Please try again.",
+      error: err.message
+    });
   }
 };
 
@@ -1695,7 +1782,7 @@ const clearWork = async (req, res) => {
     await query("DELETE FROM job_creation");
 
     noCache(res);
-    return res.json({ message: "All data cleared from both places", data: [] });
+    return res.json({ success: true, message: "All data cleared successfully.", data: [] });
   } catch (err) {
     console.error("clearWork error:", err.message);
     return res.status(500).json({ message: "Clear failed", error: err.message });
