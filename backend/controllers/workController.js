@@ -1750,23 +1750,36 @@ const deleteWork = async (req, res) => {
 
 const deleteFile = async (req, res) => {
   const fileName = req.params.fileName;
-  // CHANGE (speed): ?lite=1 bhejne par poora data wapas nahi banta/bheja jata (bahut fast)
+  // ?lite=1 -> poora data wapas nahi banta/bheja jata, aur job_creation cleanup background me chalta hai
   const lite = req.query && (req.query.lite === "1" || req.query.lite === "true");
   const t0 = Date.now();
 
   try {
-    const rows = await query("SELECT job_id, domain FROM work_updates WHERE file_name = ?", [fileName]);
+    // CHANGE (speed): id bhi laate hain, taaki delete primary key (id) se ho -> index ho ya na ho, fast
+    const rows = await query("SELECT id, job_id, domain FROM work_updates WHERE file_name = ?", [fileName]);
     const items = (rows || [])
       .map((r) => ({ jobId: clean(r.job_id), domain: domainKey(r.domain) }))
       .filter((r) => isRealJobId(r.jobId));
+    const ids = (rows || []).map((r) => r.id);
     const t1 = Date.now();
 
-    const delResult = await query("DELETE FROM work_updates WHERE file_name = ?", [fileName]);
-    const deletedCount =
-      delResult && delResult.affectedRows !== undefined ? delResult.affectedRows : (rows || []).length;
+    let deletedCount = 0;
+    for (const chunk of chunkArray(ids, 20000)) {
+      const delResult = await query("DELETE FROM work_updates WHERE id IN (?)", [chunk]);
+      deletedCount +=
+        delResult && delResult.affectedRows !== undefined ? delResult.affectedRows : chunk.length;
+    }
     const t2 = Date.now();
 
-    const cleanupOk = await safeRemoveOrphanJobCreation(items);
+    let cleanupOk = null;
+    if (lite) {
+      // user ko turant response; orphan job_creation rows peeche se saaf hoti hain
+      safeRemoveOrphanJobCreation(items)
+        .then((ok) => console.log(`deleteFile background cleanup done (ok=${ok}) in ${Date.now() - t2}ms`))
+        .catch((e) => console.error("deleteFile background cleanup error:", e.message));
+    } else {
+      cleanupOk = await safeRemoveOrphanJobCreation(items);
+    }
     const t3 = Date.now();
 
     const data = lite ? undefined : await tryBuildAllWork();
@@ -1783,6 +1796,7 @@ const deleteFile = async (req, res) => {
       fileName,
       deletedCount,
       jobCreationCleaned: cleanupOk,
+      cleanupInBackground: !!lite,
       ...(lite ? {} : { data })
     });
   } catch (err) {
@@ -1832,13 +1846,40 @@ fixOldJobsDelivered();
 ====================================== */
 const ensureIndexes = async () => {
   try {
-    await query("CREATE INDEX idx_work_updates_file_name ON work_updates (file_name(191))");
-    console.log("Index idx_work_updates_file_name created");
-  } catch (err) {
-    // ER_DUP_KEYNAME = index pehle se maujood hai, ye normal hai
-    if (err && err.code !== "ER_DUP_KEYNAME") {
-      console.log("Index skip:", err.message);
+    // pehle check: file_name par index pehle se hai?
+    try {
+      const existing = await query(
+        "SHOW INDEX FROM work_updates WHERE Column_name = 'file_name' AND Seq_in_index = 1"
+      );
+      if (existing && existing.length > 0) {
+        console.log("file_name index already exists - OK");
+        return;
+      }
+    } catch (checkErr) {
+      console.log("Index check skipped:", checkErr.message);
     }
+
+    // CHANGE: pehle sirf `file_name` (VARCHAR ke liye), fail ho to prefix length ke saath (TEXT ke liye).
+    // Pehle sirf file_name(191) try hota tha, jo chhote VARCHAR column par fail ho jata tha
+    // aur index kabhi banta hi nahi tha -> delete bahut slow.
+    const attempts = ["file_name", "file_name(191)", "file_name(100)", "file_name(50)"];
+    let lastErr = null;
+    for (const colDef of attempts) {
+      try {
+        await query(`CREATE INDEX idx_work_updates_file_name ON work_updates (${colDef})`);
+        console.log(`Index idx_work_updates_file_name created using ${colDef}`);
+        return;
+      } catch (err) {
+        if (err && err.code === "ER_DUP_KEYNAME") {
+          console.log("file_name index already exists - OK");
+          return;
+        }
+        lastErr = err;
+      }
+    }
+    console.log("Index create FAILED (delete slow rahega):", lastErr ? lastErr.message : "unknown");
+  } catch (err) {
+    console.log("Index step failed:", err.message);
   }
 };
 ensureIndexes();
