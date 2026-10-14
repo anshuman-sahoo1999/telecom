@@ -236,18 +236,15 @@ export default function WorkUpdate({ refreshDashboard }) {
       setDeleting(true);
 
       // CHANGE: file name me space, #, %, + jaise characters ho to bhi delete chale
+      // CHANGE (speed): ?lite=1 -> server poora data wapas nahi bhejta, delete bahut fast
       const res = await axios.delete(
-        `${API_BASE_URL}/api/work/delete-file/${encodeURIComponent(fileName)}`
+        `${API_BASE_URL}/api/work/delete-file/${encodeURIComponent(fileName)}?lite=1`
       );
 
       if (selectedFile === fileName) setSelectedFile(null);
 
-      // server ne latest data bhej diya ho to wahi use karo, warna dobara fetch
-      if (res && res.data && Array.isArray(res.data.data)) {
-        setImports(res.data.data);
-      } else {
-        fetchData();
-      }
+      // list se wahi file turant hata do (poora data dobara fetch karne ki zaroorat nahi)
+      setImports((prev) => prev.filter((r) => r.file_name !== fileName));
 
       setDeleteTarget(null);
 
