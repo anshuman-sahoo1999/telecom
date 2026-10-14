@@ -51,7 +51,7 @@ export default function WorkUpdate({ refreshDashboard }) {
 
   // DELETE CONFIRM POPUP (browser confirm ki jagah)
   const [deleteTarget, setDeleteTarget] = useState(null);
-  const [deleting, setDeleting] = useState(false);
+  const [deletingFiles, setDeletingFiles] = useState([]); // jin files ka delete chal raha hai
 
   // ERROR / INFO TOAST (browser alert ki jagah)
   const [toast, setToast] = useState(null); // { text, type }
@@ -228,15 +228,17 @@ export default function WorkUpdate({ refreshDashboard }) {
   };
 
   // Step 2: popup me "Yes, Delete" dabane par asli delete
+  // CHANGE: popup turant band hota hai aur us file ki row par "Deleting..." dikhta hai
   const confirmDelete = async () => {
     if (!deleteTarget) return;
     const fileName = deleteTarget.file_name;
 
-    try {
-      setDeleting(true);
+    setDeleteTarget(null);
+    setDeletingFiles((prev) => [...prev, fileName]);
 
+    try {
       // CHANGE: file name me space, #, %, + jaise characters ho to bhi delete chale
-      // CHANGE (speed): ?lite=1 -> server poora data wapas nahi bhejta, delete bahut fast
+      // ?lite=1 -> server poora data wapas nahi bhejta, delete bahut fast
       const res = await axios.delete(
         `${API_BASE_URL}/api/work/delete-file/${encodeURIComponent(fileName)}?lite=1`
       );
@@ -245,8 +247,6 @@ export default function WorkUpdate({ refreshDashboard }) {
 
       // list se wahi file turant hata do (poora data dobara fetch karne ki zaroorat nahi)
       setImports((prev) => prev.filter((r) => r.file_name !== fileName));
-
-      setDeleteTarget(null);
 
       setDeleteText(
         (res && res.data && res.data.message) || "File Deleted Successfully"
@@ -259,13 +259,12 @@ export default function WorkUpdate({ refreshDashboard }) {
       }
     } catch (err) {
       console.log(err);
-      setDeleteTarget(null);
       showToast(
         (err.response && err.response.data && err.response.data.message) ||
           "Could not delete the file. Please try again."
       );
     } finally {
-      setDeleting(false);
+      setDeletingFiles((prev) => prev.filter((n) => n !== fileName));
     }
   };
 
@@ -457,6 +456,7 @@ export default function WorkUpdate({ refreshDashboard }) {
                   <div className="btn-group">
                     <button
                       className="view-btn"
+                      disabled={deletingFiles.includes(item.file_name)}
                       onClick={() => handleView(item)}
                     >
                       <Eye size={14} /> View
@@ -464,9 +464,11 @@ export default function WorkUpdate({ refreshDashboard }) {
 
                     <button
                       className="delete-btn"
+                      disabled={deletingFiles.includes(item.file_name)}
                       onClick={() => handleDelete(item)}
                     >
-                      <Trash2 size={14} /> Delete
+                      <Trash2 size={14} />{" "}
+                      {deletingFiles.includes(item.file_name) ? "Deleting..." : "Delete"}
                     </button>
                   </div>
                 </div>
@@ -588,15 +590,8 @@ export default function WorkUpdate({ refreshDashboard }) {
               </p>
 
               <div className="popup-actions">
-                <button
-                  disabled={deleting}
-                  onClick={() => setDeleteTarget(null)}
-                >
-                  Cancel
-                </button>
-                <button disabled={deleting} onClick={confirmDelete}>
-                  {deleting ? "Deleting..." : "Yes, Delete"}
-                </button>
+                <button onClick={() => setDeleteTarget(null)}>Cancel</button>
+                <button onClick={confirmDelete}>Yes, Delete</button>
               </div>
             </div>
           </div>
