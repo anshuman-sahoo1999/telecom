@@ -35,6 +35,42 @@ const qcVal = (v) => {
   return f === "" ? null : f;
 };
 
+/* ======================================
+   DOMAIN-SCOPED HELPERS (NEW)
+   Same Job ID alag-alag domain (ASE / PERMIT / F2 / PLA ...) me ho sakta hai.
+   Isliye identity hamesha (domain + job id) se hoti hai, sirf job id se nahi.
+====================================== */
+const domainKey = (v) => clean(v).toUpperCase();
+const mapKey = (domain, jobId) => `${domainKey(domain)}|${clean(jobId).toLowerCase()}`;
+
+// job_creation: (jobId + domain). Purani blank-domain row bhi match hoti hai,
+// lekin exact domain wali row ko priority milti hai.
+const jcScope = (jobId, domain) => {
+  const d = domainKey(domain);
+  if (!d) {
+    return { where: "TRIM(jobId) = TRIM(?)", params: [jobId], order: "", orderParams: [] };
+  }
+  return {
+    where:
+      "TRIM(jobId) = TRIM(?) AND (UPPER(TRIM(COALESCE(domain,''))) = ? OR TRIM(COALESCE(domain,'')) = '')",
+    params: [jobId, d],
+    order: "ORDER BY (UPPER(TRIM(COALESCE(domain,''))) = ?) DESC",
+    orderParams: [d]
+  };
+};
+
+// work_updates: (job_id + domain)
+const wuScope = (jobId, domain) => {
+  const d = domainKey(domain);
+  if (!d) {
+    return { where: "TRIM(job_id) = TRIM(?)", params: [jobId] };
+  }
+  return {
+    where: "TRIM(job_id) = TRIM(?) AND UPPER(TRIM(COALESCE(domain,''))) = ?",
+    params: [jobId, d]
+  };
+};
+
 let stateData = {};
 try {
   stateData = require("../stateCodes") || {};
@@ -83,6 +119,7 @@ const monthNameToIndex = monthNames.reduce((acc, m, idx) => {
   acc[m.toLowerCase()] = idx;
   return acc;
 }, {});
+monthNameToIndex["sept"] = 8; // "Sept, 2026" bhi chale
 const fullMonthNameToIndex = [
   "january", "february", "march", "april", "may", "june",
   "july", "august", "september", "october", "november", "december"
@@ -112,8 +149,16 @@ const cleanSingleMonth = (m) => {
   match = strVal.match(/^([A-Za-z]+)[\s\-/,]+(\d{4})$/);
   if (match) {
     const key = match[1].toLowerCase();
-    const monthIdx = key.length === 3 ? monthNameToIndex[key] : fullMonthNameToIndex[key];
+    const monthIdx = monthNameToIndex[key] !== undefined ? monthNameToIndex[key] : fullMonthNameToIndex[key];
     if (monthIdx !== undefined) return `${monthNames[monthIdx]},${match[2]}`;
+  }
+
+  // sirf month ka naam (bina saal) -> current saal
+  match = strVal.match(/^([A-Za-z]+)\.?$/);
+  if (match) {
+    const key = match[1].toLowerCase();
+    const monthIdx = monthNameToIndex[key] !== undefined ? monthNameToIndex[key] : fullMonthNameToIndex[key];
+    if (monthIdx !== undefined) return `${monthNames[monthIdx]},${new Date().getFullYear()}`;
   }
 
   const d = new Date(strVal);
@@ -154,14 +199,17 @@ exports.createJob = (req, res) => {
   const cleanMarket = clean(market);
   const cleanMonth = cleanSingleMonth(month);
 
-  const checkSql = `SELECT id FROM job_creation WHERE TRIM(jobId) = TRIM(?) LIMIT 1`;
+  // FIX: (jobId + domain) se check, taaki dusre domain ki same Job ID overwrite na ho
+  const jcSc = jcScope(cleanJobId, cleanDomain);
+  const checkSql = `SELECT id FROM job_creation WHERE ${jcSc.where} ${jcSc.order} LIMIT 1`;
 
-  db.query(checkSql, [cleanJobId], (checkErr, checkRows) => {
+  db.query(checkSql, [...jcSc.params, ...jcSc.orderParams], (checkErr, checkRows) => {
     if (checkErr) {
       return res.status(500).json({ success: false, message: checkErr.message });
     }
 
     if (checkRows && checkRows.length > 0) {
+      // FIX: WHERE id = ? (pehle jobId se hota tha, jo dusre domain ki row bhi badal deta)
       const updateSql = `
         UPDATE job_creation
         SET domain = COALESCE(NULLIF(?, ''), domain),
@@ -174,9 +222,9 @@ exports.createJob = (req, res) => {
             amdocsQc = COALESCE(NULLIF(?, ''), amdocsQc),
             internalQc = COALESCE(NULLIF(?, ''), internalQc),
             updated_at = CURRENT_TIMESTAMP
-        WHERE TRIM(jobId) = TRIM(?)
+        WHERE id = ?
       `;
-      db.query(updateSql, [cleanDomain, cleanMarket, cleanMonth, finalReceiveDate, formattedEcdDate, formattedSubmissionDate, finalOtp, finalAmdocsQc, finalInternalQc, cleanJobId], (upErr) => {
+      db.query(updateSql, [cleanDomain, cleanMarket, cleanMonth, finalReceiveDate, formattedEcdDate, formattedSubmissionDate, finalOtp, finalAmdocsQc, finalInternalQc, checkRows[0].id], (upErr) => {
         if (upErr) return res.status(500).json({ success: false, message: upErr.message });
         syncToWorkController();
       });
@@ -201,8 +249,9 @@ exports.createJob = (req, res) => {
       });
     }
 
-    const checkWorkSql = `SELECT id FROM work_updates WHERE TRIM(job_id) = TRIM(?) LIMIT 1`;
-    db.query(checkWorkSql, [cleanJobId], (wErr, wRows) => {
+    const wuSc = wuScope(cleanJobId, cleanDomain);
+    const checkWorkSql = `SELECT id FROM work_updates WHERE ${wuSc.where} LIMIT 1`;
+    db.query(checkWorkSql, wuSc.params, (wErr, wRows) => {
       if (!wErr && wRows && wRows.length > 0) {
         const updateWorkSql = `
           UPDATE work_updates
@@ -217,9 +266,9 @@ exports.createJob = (req, res) => {
               internal_qc = COALESCE(NULLIF(?, ''), internal_qc),
               otp = COALESCE(NULLIF(?, ''), otp),
               updated_at = CURRENT_TIMESTAMP
-          WHERE TRIM(job_id) = TRIM(?)
+          WHERE id = ?
         `;
-        db.query(updateWorkSql, [cleanDomain, cleanMarket, regionFromMarket(cleanMarket), monthsParam(cleanMonth), finalReceiveDate, formattedEcdDate, formattedSubmissionDate, finalAmdocsQc, finalInternalQc, finalOtp, cleanJobId], (uwErr) => {
+        db.query(updateWorkSql, [cleanDomain, cleanMarket, regionFromMarket(cleanMarket), monthsParam(cleanMonth), finalReceiveDate, formattedEcdDate, formattedSubmissionDate, finalAmdocsQc, finalInternalQc, finalOtp, wRows[0].id], (uwErr) => {
           if (uwErr) return res.status(500).json({ success: false, message: uwErr.message });
           return res.json({
             success: true,
@@ -267,10 +316,16 @@ exports.getAllJobs = (req, res) => {
       }
       const keyOf = (v) => (v ? v.toString().trim().toLowerCase() : "");
       const isValidKey = (k) => k !== "" && k !== "-";
+
+      // FIX: key = domain + jobId (pehle sirf jobId tha, isse dusre domain ki row merge ho jaati thi)
       const workJobKeys = new Set();
+      const workJobIds = new Set();
       wuRows.forEach((row) => {
         const k = keyOf(row.jobId);
-        if (isValidKey(k)) workJobKeys.add(k);
+        if (isValidKey(k)) {
+          workJobKeys.add(mapKey(row.domain, row.jobId));
+          workJobIds.add(k);
+        }
       });
 
       const monthFromWork = (val) => {
@@ -297,9 +352,11 @@ exports.getAllJobs = (req, res) => {
       const jobMap = new Map();
 
       jcRows.forEach((row) => {
-        const k = keyOf(row.jobId);
-        if (!isValidKey(k)) return;
-        if (!workJobKeys.has(k)) return; 
+        const idKey = keyOf(row.jobId);
+        if (!isValidKey(idKey)) return;
+        const k = mapKey(row.domain, row.jobId);
+        const hasWork = domainKey(row.domain) ? workJobKeys.has(k) : workJobIds.has(idKey);
+        if (!hasWork) return; 
 
         jobMap.set(k, {
           ...row,
@@ -311,8 +368,19 @@ exports.getAllJobs = (req, res) => {
       });
 
       wuRows.forEach((row) => {
-        const k = keyOf(row.jobId);
-        if (!isValidKey(k)) return;
+        const idKey = keyOf(row.jobId);
+        if (!isValidKey(idKey)) return;
+
+        const k = mapKey(row.domain, row.jobId);
+
+        // purani blank-domain job_creation row ko is domain ki work row se jod do
+        if (!jobMap.has(k)) {
+          const blankKey = mapKey("", row.jobId);
+          if (jobMap.has(blankKey)) {
+            jobMap.set(k, jobMap.get(blankKey));
+            jobMap.delete(blankKey);
+          }
+        }
 
         if (jobMap.has(k)) {
           const existing = jobMap.get(k);
@@ -397,12 +465,14 @@ exports.updateJob = (req, res) => {
     return res.status(400).json({ success: false, message: "A row ID or Job ID is required for updating." });
   }
 
+  // FIX: id na mile to (jobId + domain) se dhoondho
+  const wuSc = wuScope(requestedJobId, domain);
   const findWorkSql = cleanWorkId
     ? `SELECT id, job_id FROM work_updates WHERE id = ? LIMIT 1`
-    : `SELECT id, job_id FROM work_updates WHERE TRIM(job_id) = TRIM(?) LIMIT 1`;
-  const findWorkParam = cleanWorkId || requestedJobId;
+    : `SELECT id, job_id FROM work_updates WHERE ${wuSc.where} LIMIT 1`;
+  const findWorkParams = cleanWorkId ? [cleanWorkId] : wuSc.params;
 
-  db.query(findWorkSql, [findWorkParam], (wErr, wRows) => {
+  db.query(findWorkSql, findWorkParams, (wErr, wRows) => {
     if (wErr) {
       return res.status(500).json({ success: false, message: wErr.message });
     }
@@ -440,12 +510,13 @@ exports.updateJob = (req, res) => {
       );
     };
 
+    const jcSc = jcScope(requestedJobId, domain);
     const findJcSql = cleanJcId
       ? `SELECT id FROM job_creation WHERE id = ? LIMIT 1`
-      : `SELECT id FROM job_creation WHERE TRIM(jobId) = TRIM(?) LIMIT 1`;
-    const findJcParam = cleanJcId || requestedJobId;
+      : `SELECT id FROM job_creation WHERE ${jcSc.where} ${jcSc.order} LIMIT 1`;
+    const findJcParams = cleanJcId ? [cleanJcId] : [...jcSc.params, ...jcSc.orderParams];
 
-    db.query(findJcSql, [findJcParam], (jErr, jRows) => {
+    db.query(findJcSql, findJcParams, (jErr, jRows) => {
       if (jErr) {
         return res.status(500).json({ success: false, message: jErr.message });
       }
@@ -545,29 +616,37 @@ exports.deleteJob = (req, res) => {
   const requestedJobId = clean((req.query || {}).jobId);
   const jcId = clean((req.query || {}).jcId);
   const workId = clean((req.query || {}).workId);
+  const requestedDomain = clean((req.query || {}).domain);
 
+  const jcSc0 = jcScope(requestedJobId || rowId, requestedDomain);
   const findJcSql = jcId
-    ? `SELECT jobId FROM job_creation WHERE id = ? LIMIT 1`
-    : `SELECT jobId FROM job_creation WHERE TRIM(jobId) = TRIM(?) LIMIT 1`;
-  const findJcParam = jcId || requestedJobId || rowId;
+    ? `SELECT jobId, domain FROM job_creation WHERE id = ? LIMIT 1`
+    : `SELECT jobId, domain FROM job_creation WHERE ${jcSc0.where} ${jcSc0.order} LIMIT 1`;
+  const findJcParams = jcId ? [jcId] : [...jcSc0.params, ...jcSc0.orderParams];
 
+  const wuSc0 = wuScope(requestedJobId || rowId, requestedDomain);
   const findWorkSql = workId
-    ? `SELECT job_id FROM work_updates WHERE id = ? LIMIT 1`
-    : `SELECT job_id FROM work_updates WHERE TRIM(job_id) = TRIM(?) LIMIT 1`;
-  const findWorkParam = workId || requestedJobId || rowId;
+    ? `SELECT job_id, domain FROM work_updates WHERE id = ? LIMIT 1`
+    : `SELECT job_id, domain FROM work_updates WHERE ${wuSc0.where} LIMIT 1`;
+  const findWorkParams = workId ? [workId] : wuSc0.params;
 
-  db.query(findJcSql, [findJcParam], (jcErr, jcRows) => {
-    db.query(findWorkSql, [findWorkParam], (wErr, wRows) => {
+  db.query(findJcSql, findJcParams, (jcErr, jcRows) => {
+    db.query(findWorkSql, findWorkParams, (wErr, wRows) => {
       const jcJobId = (!jcErr && jcRows && jcRows[0]) ? jcRows[0].jobId : "";
       const workJobId = (!wErr && wRows && wRows[0]) ? wRows[0].job_id : "";
+      const jcDomain = (!jcErr && jcRows && jcRows[0]) ? jcRows[0].domain : "";
+      const workDomain = (!wErr && wRows && wRows[0]) ? wRows[0].domain : "";
 
       const targetJobId = requestedJobId || jcJobId || workJobId || "";
+      // FIX: sirf usi domain ki rows delete hongi jiski row delete ho rahi hai
+      const targetDomain = requestedDomain || workDomain || jcDomain || "";
 
       const deleteFromJc = (cb) => {
         if (jcId) {
           db.query("DELETE FROM job_creation WHERE id = ?", [jcId], cb);
         } else if (targetJobId) {
-          db.query("DELETE FROM job_creation WHERE TRIM(jobId) = TRIM(?)", [targetJobId], cb);
+          const sc = jcScope(targetJobId, targetDomain);
+          db.query(`DELETE FROM job_creation WHERE ${sc.where}`, sc.params, cb);
         } else if (rowId) {
 
           db.query("DELETE FROM job_creation WHERE id = ?", [rowId], cb);
@@ -580,7 +659,8 @@ exports.deleteJob = (req, res) => {
         if (workId) {
           db.query("DELETE FROM work_updates WHERE id = ?", [workId], cb);
         } else if (targetJobId) {
-          db.query("DELETE FROM work_updates WHERE TRIM(job_id) = TRIM(?)", [targetJobId], cb);
+          const sc = wuScope(targetJobId, targetDomain);
+          db.query(`DELETE FROM work_updates WHERE ${sc.where}`, sc.params, cb);
         } else if (rowId) {
           db.query("DELETE FROM work_updates WHERE id = ?", [rowId], cb);
         } else {
@@ -613,50 +693,62 @@ exports.deleteJob = (req, res) => {
 
 exports.submitJob = (req, res) => {
  try {
-  const { jobId, month, submissionDate } = req.body || {};
+  // domain / jcId / workId optional hain: frontend bheje to exact row update hogi
+  const { jobId, month, submissionDate, domain, jcId, workId } = req.body || {};
   const formattedSubmissionDate = submissionDate && submissionDate !== "" ? submissionDate : null;
   const cleanJobId = clean(jobId);
   const cleanMonth = cleanSingleMonth(month);
+  const cleanJcId = clean(jcId);
+  const cleanWorkId = clean(workId);
 
-  const sql = `
-    UPDATE job_creation
-    SET submissionDate = ?,
-        month = COALESCE(?, month),
-        updated_at = CURRENT_TIMESTAMP
-    WHERE TRIM(jobId) = TRIM(?)
-  `;
+  const fail = (e) =>
+    res.status(500).json({
+      success: false,
+      message: e.message,
+    });
+  const done = () =>
+    res.json({
+      success: true,
+      message: "Job Submitted Successfully",
+    });
 
-  db.query(sql, [formattedSubmissionDate, cleanMonth, cleanJobId], (err, result) => {
-    if (err) {
-      return res.status(500).json({
-        success: false,
-        message: err.message,
-      });
-    }
+  const jcSc = jcScope(cleanJobId, domain);
+  const findJcSql = cleanJcId
+    ? "SELECT id, domain, market, month, receiveDate, ecdDate, otp, amdocsQc, internalQc FROM job_creation WHERE id = ? LIMIT 1"
+    : `SELECT id, domain, market, month, receiveDate, ecdDate, otp, amdocsQc, internalQc FROM job_creation WHERE ${jcSc.where} ${jcSc.order} LIMIT 1`;
+  const findJcParams = cleanJcId ? [cleanJcId] : [...jcSc.params, ...jcSc.orderParams];
 
-    if (result.affectedRows === 0) {
+  db.query(findJcSql, findJcParams, (jfErr, jfRows) => {
+    if (jfErr) return fail(jfErr);
+
+    if (!jfRows || jfRows.length === 0) {
       return res.status(404).json({
         success: false,
         message: "Job ID not found",
       });
     }
 
-    const done = () =>
-      res.json({
-        success: true,
-        message: "Job Submitted Successfully",
-      });
-    const fail = (e) =>
-      res.status(500).json({
-        success: false,
-        message: e.message,
-      });
+    const jc = jfRows[0];
+    const rowDomain = clean(domain) || clean(jc.domain);
 
- 
-    db.query(
-      "SELECT id FROM work_updates WHERE TRIM(job_id) = TRIM(?) LIMIT 1",
-      [cleanJobId],
-      (wErr, wRows) => {
+    const sql = `
+      UPDATE job_creation
+      SET submissionDate = ?,
+          month = COALESCE(?, month),
+          updated_at = CURRENT_TIMESTAMP
+      WHERE id = ?
+    `;
+
+    db.query(sql, [formattedSubmissionDate, cleanMonth, jc.id], (err) => {
+      if (err) return fail(err);
+
+      const wuSc = wuScope(cleanJobId, rowDomain);
+      const findWorkSql = cleanWorkId
+        ? "SELECT id FROM work_updates WHERE id = ? LIMIT 1"
+        : `SELECT id FROM work_updates WHERE ${wuSc.where} LIMIT 1`;
+      const findWorkParams = cleanWorkId ? [cleanWorkId] : wuSc.params;
+
+      db.query(findWorkSql, findWorkParams, (wErr, wRows) => {
         if (wErr) return fail(wErr);
 
         if (wRows && wRows.length > 0) {
@@ -665,37 +757,29 @@ exports.submitJob = (req, res) => {
             SET submission_date = ?,
                 months = COALESCE(?, months),
                 updated_at = CURRENT_TIMESTAMP
-            WHERE TRIM(job_id) = TRIM(?)
+            WHERE id = ?
           `;
           return db.query(
             updateWorkSync,
-            [formattedSubmissionDate, monthsParam(cleanMonth), cleanJobId],
+            [formattedSubmissionDate, monthsParam(cleanMonth), wRows[0].id],
             (uErr) => (uErr ? fail(uErr) : done())
           );
         }
 
         // work_updates me row hi nahi thi -> job_creation se bana do
-        db.query(
-          "SELECT domain, market, month, receiveDate, ecdDate, otp, amdocsQc, internalQc FROM job_creation WHERE TRIM(jobId) = TRIM(?) LIMIT 1",
-          [cleanJobId],
-          (jErr, jRows) => {
-            if (jErr) return fail(jErr);
-            const jc = (jRows && jRows[0]) || {};
-            const monthToStore = cleanMonth || cleanSingleMonth(jc.month);
+        const monthToStore = cleanMonth || cleanSingleMonth(jc.month);
 
-            db.query(
-              WORK_INSERT_SQL,
-              workInsertParams({
-                domain: jc.domain, state: jc.market, jobId: cleanJobId, month: monthToStore,
-                receiveDate: jc.receiveDate, ecdDate: jc.ecdDate, submissionDate: formattedSubmissionDate,
-                amdocsQc: jc.amdocsQc, internalQc: jc.internalQc, otp: jc.otp
-              }),
-              (iErr) => (iErr ? fail(iErr) : done())
-            );
-          }
+        db.query(
+          WORK_INSERT_SQL,
+          workInsertParams({
+            domain: jc.domain || rowDomain, state: jc.market, jobId: cleanJobId, month: monthToStore,
+            receiveDate: jc.receiveDate, ecdDate: jc.ecdDate, submissionDate: formattedSubmissionDate,
+            amdocsQc: jc.amdocsQc, internalQc: jc.internalQc, otp: jc.otp
+          }),
+          (iErr) => (iErr ? fail(iErr) : done())
         );
-      }
-    );
+      });
+    });
   });
  } catch (e) {
   console.error("submitJob crashed:", e.message);
