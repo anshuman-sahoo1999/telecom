@@ -70,6 +70,8 @@ const parseMonthField = (job) => {
         return parsed.length > 0 ? parsed[0] : "-";
       }
     } catch (e) {
+      // JSON nahi hai to normal string ki tarah hi use hoga
+      return val;
     }
   }
   return val;
@@ -91,7 +93,8 @@ const qcColor = (value) => {
 // "80%", "↑ 80%", "0.8" jaisi value se number nikalta hai (nahi mila to null)
 const parsePercent = (v) => {
   if (v === null || v === undefined) return null;
-  const t = v.toString().replace(/[↑▲⬆↓▼⬇%\s]/g, "");
+  // Arrow, % aur space hata ke sirf number (digits, dot, minus) rakhta hai
+  const t = v.toString().replace(/[^0-9.-]/g, "");
   if (t === "" || t === "-") return null;
   const n = parseFloat(t);
   return isNaN(n) ? null : n;
