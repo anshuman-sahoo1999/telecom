@@ -11,18 +11,38 @@ import geoData from "../us-states.json";
 import { geoCentroid } from "d3-geo";
 
 const pad2 = (n) => String(n).padStart(2, "0");
+
+// Date ko "YYYY-MM-DD" banata hai. "MM-DD-YYYY HH:mm" me time ho to bhi date sahi nikalti hai.
 const toDateKey = (value) => {
   if (!value) return "";
   if (typeof value === "string") {
     const v = value.trim();
     let m = v.match(/^(\d{4})-(\d{2})-(\d{2})/);
     if (m) return `${m[1]}-${m[2]}-${m[3]}`;
-    m = v.match(/^(\d{1,2})[-/](\d{1,2})[-/](\d{4})$/);
+    m = v.match(/^(\d{1,2})[-/](\d{1,2})[-/](\d{4})(?:[ T].*)?$/);
     if (m) return `${m[3]}-${pad2(m[1])}-${pad2(m[2])}`;
   }
   const d = new Date(value);
   if (isNaN(d.getTime())) return "";
   return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
+};
+
+// "03-05-2026 10:30" me se "10:30" nikalta hai. Time na ho (ya 00:00) to "".
+const toTimeKey = (value) => {
+  if (typeof value !== "string") return "";
+  const v = value.trim();
+  // ISO + Z (timezone wali string) ka time bharosemand nahi, isliye ignore
+  if (/^\d{4}-\d{2}-\d{2}T.*Z$/.test(v)) return "";
+  const m = v.match(/(?:^|[\sT])(\d{1,2}):(\d{2})/);
+  if (!m) return "";
+  if (Number(m[1]) === 0 && Number(m[2]) === 0) return "";
+  return `${pad2(m[1])}:${m[2]}`;
+};
+
+// Date aur time ko ek text me jodta hai (PDF / Excel ke liye)
+const joinDateTime = (date, time) => {
+  if (!date) return "";
+  return time ? `${date} ${time}` : date;
 };
 
 const parseDate = (d) => {
@@ -61,13 +81,28 @@ const formatArrayOrString = (val) => {
   return val;
 };
 
+// "Received Time" / "Submission Time" jaisi keys UOM nahi hain (purane data me galti se UOM me aa gayi thi)
+const isTimeUomKey = (key) => {
+  const c = (key || "").toString().toLowerCase().replace(/[^a-z0-9]/g, "");
+  return /(receiv|submi).*time/.test(c);
+};
+
+const cleanUom = (uom) => {
+  if (!uom || typeof uom !== "object" || Array.isArray(uom)) return uom || {};
+  const out = {};
+  Object.entries(uom).forEach(([k, v]) => {
+    if (!isTimeUomKey(k)) out[k] = v;
+  });
+  return out;
+};
+
 const formatUOM = (uom) => {
   if (!uom) return "-";
   if (typeof uom === "string") {
     return uom;
   }
   if (typeof uom === "object") {
-    const entries = Object.entries(uom);
+    const entries = Object.entries(cleanUom(uom));
     if (entries.length === 0) return "-";
 
     return entries
@@ -75,6 +110,57 @@ const formatUOM = (uom) => {
       .join(" | ");
   }
   return "-";
+};
+
+// Amdocs QC: arrow nikaal ke value saaf karta hai (backend ne fields na bheje ho tab ye kaam aata hai)
+// Arrow ka rule: 1) cell me ↑ ▲ / ↓ ▼ ho  2) value me +/- sign ho  3) warna Internal QC se compare
+const ARROW_UP_RE = /[↑▲⬆]/;
+const ARROW_DOWN_RE = /[↓▼⬇]/;
+const ARROW_ANY_RE = /[↑▲⬆↓▼⬇]/g;
+
+const parseQc = (rawAmdocs, rawInternal) => {
+  const raw = (rawAmdocs ?? "").toString().trim();
+  if (!raw) return { value: "", trend: "" };
+
+  let trend = "";
+  if (ARROW_UP_RE.test(raw)) trend = "up";
+  else if (ARROW_DOWN_RE.test(raw)) trend = "down";
+
+  let value = raw.replace(ARROW_ANY_RE, "").trim();
+
+  if (!trend) {
+    if (value.startsWith("-")) {
+      trend = "down";
+      value = value.slice(1).trim();
+    } else if (value.startsWith("+")) {
+      trend = "up";
+      value = value.slice(1).trim();
+    }
+  }
+
+  if (!trend) {
+    const num = parseFloat(value.replace("%", ""));
+    const internalNum = parseFloat(
+      (rawInternal ?? "").toString().replace(ARROW_ANY_RE, "").replace(/[%+]/g, "")
+    );
+    if (!isNaN(num) && !isNaN(internalNum)) {
+      if (num > internalNum) trend = "up";
+      else if (num < internalNum) trend = "down";
+    }
+  }
+
+  return { value, trend };
+};
+
+// Table me date ke side me time dikhane ke liye
+const DateTimeCell = ({ date, time }) => {
+  if (!date) return "-";
+  return (
+    <>
+      <span>{date}</span>
+      {time ? <span className="time-chip">{time}</span> : null}
+    </>
+  );
 };
 
 // Table mein dikhne wale placeholder ("-", "N/A") ko edit box mein khaali dikhao,
@@ -297,6 +383,24 @@ export default function Report() {
     const monthYear =
       `${month !== "-" ? month : ""} ${year !== "-" ? year : ""}`.trim() || "-";
 
+    // OTP khaali hai ya nahi (backend ka otp_missing flag; na aaye to yahin se check)
+    const otpValue = item.otp || item.internalOtp || "";
+    const otpMissing =
+      item.otp_missing !== undefined ? !!item.otp_missing : !String(otpValue).trim();
+
+    // Amdocs QC: value + arrow (backend ke amdocs_qc_trend se, warna yahin nikalta hai)
+    const qc =
+      item.amdocs_qc_trend !== undefined
+        ? {
+            value: (item.amdocs_qc ?? "").toString().trim(),
+            trend: item.amdocs_qc_trend || "",
+          }
+        : parseQc(
+            item.amdocs_qc ?? item.amdocsQc,
+            item.internal_qc ?? item.internalQc
+          );
+    const qcArrow = qc.trend === "up" ? "↑" : qc.trend === "down" ? "↓" : "";
+
     rows.push({
       id: item.id || item._id,
       monthYear,
@@ -338,13 +442,18 @@ export default function Report() {
       production_engineers: formatArrayOrString(item.production_engineers),
       qc_engineers: formatArrayOrString(item.qc_engineers),
       jobsDelivered: Number(item.jobs_delivered ?? item.jobsDelivered) || 0,
-      uom: item.uom || {},
-      otp: item.otp || item.internalOtp || "-",
+      uom: cleanUom(item.uom),
+      otp: otpValue || "-",
+      otpMissing,
       internal_qc: item.internal_qc || item.internalQc || "-",
-      amdocs_qc: item.amdocs_qc || item.amdocsQc || "-",
+      amdocs_qc: qc.value || "-",
+      amdocsTrend: qc.trend,
+      amdocsArrow: qcArrow,
       receive_date: toDateKey(item.receive_date),
+      receive_time: toTimeKey(item.receive_date),
       ecd_date: toDateKey(item.ecd_date),
       submission_date: toDateKey(item.submission_date),
+      submission_time: toTimeKey(item.submission_date),
 
       createdAt: parseDate(item.created_at),
       lastUpdate: parseDate(dateObj),
@@ -511,6 +620,18 @@ export default function Report() {
         ? `${r.state} (${r.county})`
         : r.state;
 
+  // PDF ka font arrow (↑ ↓) nahi chhap sakta, isliye PDF me "Up" / "Down" likha jata hai
+  const getPdfQcText = (r) => {
+    if (r.amdocs_qc === "-") return "-";
+    if (r.amdocsTrend === "up") return `Up ${r.amdocs_qc}`;
+    if (r.amdocsTrend === "down") return `Down ${r.amdocs_qc}`;
+    return r.amdocs_qc;
+  };
+
+  // Excel me asli arrow chal jata hai
+  const getExcelQcText = (r) =>
+    r.amdocsArrow && r.amdocs_qc !== "-" ? `${r.amdocsArrow} ${r.amdocs_qc}` : r.amdocs_qc;
+
   const downloadPDF = async () => {
     if (isGeneratingPDF) return;
     setOpenExport(false);
@@ -622,10 +743,10 @@ export default function Report() {
         formatUOM(r.uom),
         r.otp,
         r.internal_qc,
-        r.amdocs_qc,
-        r.receive_date || "-",
+        getPdfQcText(r),
+        joinDateTime(r.receive_date, r.receive_time) || "-",
         r.ecd_date || "-",
-        r.submission_date || "-",
+        joinDateTime(r.submission_date, r.submission_time) || "-",
       ]);
 
       autoTable(pdf, {
@@ -641,6 +762,24 @@ export default function Report() {
         headStyles: { fillColor: [22, 78, 99], textColor: 255, fontStyle: "bold" },
         alternateRowStyles: { fillColor: [248, 250, 252] },
         margin: { left: 5, right: 5 },
+        // OTP khaali ho to sirf OTP cell red; Amdocs QC up = green, down = red
+        didParseCell: (hook) => {
+          if (hook.section !== "body") return;
+          const r = filteredRows[hook.row.index];
+          if (!r) return;
+
+          if (hook.column.index === 14 && r.otpMissing) {
+            hook.cell.styles.fillColor = [254, 226, 226];
+            hook.cell.styles.textColor = [185, 28, 28];
+            hook.cell.styles.fontStyle = "bold";
+          }
+
+          if (hook.column.index === 16 && r.amdocsTrend) {
+            hook.cell.styles.textColor =
+              r.amdocsTrend === "up" ? [22, 163, 74] : [220, 38, 38];
+            hook.cell.styles.fontStyle = "bold";
+          }
+        },
         didDrawPage: () => {
           pdf.setFontSize(10);
           pdf.setTextColor(120);
@@ -722,13 +861,13 @@ export default function Report() {
         { header: "OTP", key: "otp", width: 15 },
         { header: "Internal QC", key: "internal_qc", width: 15 },
         { header: "Amdocs QC", key: "amdocs_qc", width: 15 },
-        { header: "Receive Date", key: "receive_date", width: 15 },
+        { header: "Receive Date", key: "receive_date", width: 20 },
         { header: "ECD Date", key: "ecd_date", width: 15 },
-        { header: "Submission Date", key: "submission_date", width: 15 },
+        { header: "Submission Date", key: "submission_date", width: 20 },
       ];
 
       filteredRows.forEach((r, i) => {
-        sheet.addRow({
+        const excelRow = sheet.addRow({
           sl: i + 1,
           month: r.month,
           year: r.year,
@@ -745,11 +884,30 @@ export default function Report() {
           uom: formatUOM(r.uom),
           otp: r.otp,
           internal_qc: r.internal_qc,
-          amdocs_qc: r.amdocs_qc,
-          receive_date: r.receive_date || "",
+          amdocs_qc: getExcelQcText(r),
+          receive_date: joinDateTime(r.receive_date, r.receive_time),
           ecd_date: r.ecd_date || "",
-          submission_date: r.submission_date || "",
+          submission_date: joinDateTime(r.submission_date, r.submission_time),
         });
+
+        // OTP khaali ho to sirf OTP cell red
+        if (r.otpMissing) {
+          const otpCell = excelRow.getCell("otp");
+          otpCell.fill = {
+            type: "pattern",
+            pattern: "solid",
+            fgColor: { argb: "FFFEE2E2" },
+          };
+          otpCell.font = { bold: true, color: { argb: "FFB91C1C" } };
+        }
+
+        // Amdocs QC: up = green, down = red
+        if (r.amdocsTrend) {
+          excelRow.getCell("amdocs_qc").font = {
+            bold: true,
+            color: { argb: r.amdocsTrend === "up" ? "FF16A34A" : "FFDC2626" },
+          };
+        }
       });
 
       sheet.addRow({ domain: "TOTAL", jobs: totalJobs });
@@ -793,7 +951,7 @@ export default function Report() {
       county: row.county || "",
       region: fromDisplay(row.region),
       sow: fromDisplay(row.sow),
-      uom: { ...(row.uom || {}) },
+      uom: { ...cleanUom(row.uom) },
       job_id: fromDisplay(row.job_id),
       current_status: fromDisplay(row.current_status),
       production_engineers: fromDisplay(row.production_engineers),
@@ -801,10 +959,12 @@ export default function Report() {
       otp: fromDisplay(row.otp),
       internal_qc: fromDisplay(row.internal_qc),
       amdocs_qc: fromDisplay(row.amdocs_qc),
-      // Ye pehle se "YYYY-MM-DD" hain (pehle dobara convert hokar galat ho jate the)
+      // Date "YYYY-MM-DD" me, time "HH:mm" me (alag alag box)
       receive_date: row.receive_date || "",
+      receive_time: row.receive_time || "",
       ecd_date: row.ecd_date || "",
       submission_date: row.submission_date || "",
+      submission_time: row.submission_time || "",
       month: fromDisplay(row.month),
       year: fromDisplay(row.year),
       listTypes: {
@@ -890,9 +1050,12 @@ export default function Report() {
         amdocsQc: editForm.amdocs_qc,
         internalOtp: editForm.otp,
         jobs_delivered: Number(editForm.jobsDelivered || 0),
+        // Date aur time alag bhejte hain, backend inhe "MM-DD-YYYY HH:mm" me jod deta hai
         receive_date: editForm.receive_date || null,
+        receive_time: editForm.receive_time || "",
         ecd_date: editForm.ecd_date || null,
         submission_date: editForm.submission_date || null,
+        submission_time: editForm.submission_time || "",
       };
 
       await axios.put(`${API_BASE_URL}/api/work/update/${editForm.id}`, payload);
@@ -1228,16 +1391,11 @@ export default function Report() {
               <tbody>
                 {currentRows.length > 0 ? (
                   currentRows.map((r, i) => {
-                    const isMissingOtpOrAmdocs =
-                      !r.otp || r.otp === "-" || !r.amdocs_qc || r.amdocs_qc === "-";
                     // r.id undefined ho to sab rows ek saath edit mode mein na jayein
                     const isEditing = r.id !== undefined && editingRowId === r.id;
 
                     return (
-                      <tr
-                        key={r.id ?? `row-${i}`}
-                        className={isMissingOtpOrAmdocs ? "light-orange-row" : ""}
-                      >
+                      <tr key={r.id ?? `row-${i}`}>
                         <td>{(currentPage - 1) * rowsPerPage + i + 1}</td>
 
                         <td>
@@ -1427,7 +1585,8 @@ export default function Report() {
                           )}
                         </td>
 
-                        <td>
+                        {/* OTP khaali ho to sirf ye cell red hota hai */}
+                        <td className={!isEditing && r.otpMissing ? "cell-missing" : ""}>
                           {isEditing ? (
                             <input
                               value={editForm.otp || ""}
@@ -1451,6 +1610,7 @@ export default function Report() {
                           )}
                         </td>
 
+                        {/* Amdocs QC: arrow (↑ green / ↓ red) aur uske bilkul right me value */}
                         <td>
                           {isEditing ? (
                             <input
@@ -1458,20 +1618,35 @@ export default function Report() {
                               onChange={(e) => handleChange("amdocs_qc", e.target.value)}
                               style={{ width: "60px" }}
                             />
+                          ) : r.amdocs_qc === "-" ? (
+                            "-"
                           ) : (
-                            r.amdocs_qc
+                            <span className={`qc-trend ${r.amdocsTrend}`}>
+                              {r.amdocsArrow ? (
+                                <span className="qc-arrow">{r.amdocsArrow}</span>
+                              ) : null}
+                              <span className="qc-value">{r.amdocs_qc}</span>
+                            </span>
                           )}
                         </td>
 
+                        {/* Receive Date: date ke side me time */}
                         <td>
                           {isEditing ? (
-                            <input
-                              type="date"
-                              value={editForm.receive_date || ""}
-                              onChange={(e) => handleChange("receive_date", e.target.value)}
-                            />
+                            <div className="datetime-edit">
+                              <input
+                                type="date"
+                                value={editForm.receive_date || ""}
+                                onChange={(e) => handleChange("receive_date", e.target.value)}
+                              />
+                              <input
+                                type="time"
+                                value={editForm.receive_time || ""}
+                                onChange={(e) => handleChange("receive_time", e.target.value)}
+                              />
+                            </div>
                           ) : (
-                            r.receive_date || "-"
+                            <DateTimeCell date={r.receive_date} time={r.receive_time} />
                           )}
                         </td>
 
@@ -1487,15 +1662,23 @@ export default function Report() {
                           )}
                         </td>
 
+                        {/* Submission Date: date ke side me time */}
                         <td>
                           {isEditing ? (
-                            <input
-                              type="date"
-                              value={editForm.submission_date || ""}
-                              onChange={(e) => handleChange("submission_date", e.target.value)}
-                            />
+                            <div className="datetime-edit">
+                              <input
+                                type="date"
+                                value={editForm.submission_date || ""}
+                                onChange={(e) => handleChange("submission_date", e.target.value)}
+                              />
+                              <input
+                                type="time"
+                                value={editForm.submission_time || ""}
+                                onChange={(e) => handleChange("submission_time", e.target.value)}
+                              />
+                            </div>
                           ) : (
-                            r.submission_date || "-"
+                            <DateTimeCell date={r.submission_date} time={r.submission_time} />
                           )}
                         </td>
 
