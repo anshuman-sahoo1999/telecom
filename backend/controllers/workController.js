@@ -239,9 +239,63 @@ const parseExcelDate = (value) => {
   return `${month}-${day}-${year}`;
 };
 
+// Kisi bhi value (Date / Excel number / text) me se "HH:mm" (24 ghante) nikalta hai.
+// Time na ho ya 00:00 ho to "" (matlab sirf date).
+const extractTime = (v) => {
+  if (v === null || v === undefined || v === "") return "";
+  const pad = (n) => String(n).padStart(2, "0");
+
+  if (v instanceof Date) {
+    if (isNaN(v.getTime())) return "";
+    const h = v.getUTCHours();
+    const m = v.getUTCMinutes();
+    return h === 0 && m === 0 ? "" : `${pad(h)}:${pad(m)}`;
+  }
+
+  const s = v.toString().trim();
+  if (!s) return "";
+
+  // Excel number: poora hissa = din, dashmlav ka hissa = time (0.5 = 12:00)
+  if (typeof v === "number" || /^\d+(\.\d+)?$/.test(s)) {
+    const n = Number(s);
+    if (isNaN(n)) return "";
+    const total = Math.round((n - Math.floor(n)) * 1440);
+    if (total <= 0 || total >= 1440) return "";
+    return `${pad(Math.floor(total / 60))}:${pad(total % 60)}`;
+  }
+
+  // Text: "10:30", "10:30:15", "10:30 PM"
+  const m = s.match(/(\d{1,2}):(\d{2})(?::\d{2}(?:\.\d+)?)?\s*([AaPp][Mm])?/);
+  if (!m) return "";
+  let h = Number(m[1]);
+  const min = Number(m[2]);
+  const ap = m[3] ? m[3].toLowerCase() : "";
+  if (ap === "pm" && h < 12) h += 12;
+  if (ap === "am" && h === 12) h = 0;
+  if (h > 23 || min > 59) return "";
+  return h === 0 && min === 0 ? "" : `${pad(h)}:${pad(min)}`;
+};
+
+// Date + (alag Time column ho to wo) -> "MM-DD-YYYY HH:mm"; time na ho to sirf "MM-DD-YYYY"
+const parseDateTime = (dateVal, timeVal) => {
+  if (dateVal === null || dateVal === undefined || dateVal === "") return null;
+
+  let datePart;
+  const mdy = typeof dateVal === "string" ? dateVal.trim().match(/^(\d{2}-\d{2}-\d{4})(?=$|[\sT])/) : null;
+  datePart = mdy ? mdy[1] : parseExcelDate(dateVal);
+  if (!datePart) return null;
+
+  const time = extractTime(dateVal) || extractTime(timeVal);
+  return time ? `${datePart} ${time}` : datePart;
+};
+
 const formatDateToMMDDYYYY = (dateVal) => {
   if (!dateVal) return "";
   let strVal = dateVal.toString().trim();
+
+  // "MM-DD-YYYY" ya "MM-DD-YYYY HH:mm" pehle se sahi format me hai to waisa hi rakho (time bhi)
+  const mdyTime = strVal.match(/^(\d{2}-\d{2}-\d{4})(?:[ T]+(\d{1,2}:\d{2}))?$/);
+  if (mdyTime) return mdyTime[2] ? `${mdyTime[1]} ${mdyTime[2]}` : mdyTime[1];
 
   const isoMatch = strVal.match(/^(\d{4})-(\d{2})-(\d{2})/);
   if (isoMatch) {
@@ -258,22 +312,41 @@ const isZeroValue = (v) => {
   return s !== "" && !isNaN(Number(s)) && Number(s) === 0;
 };
 
-const formatPercentage = (value) => {
-  if (value === null || value === undefined || value === "") return "";
-  let str = value.toString().trim();
+const QC_ARROW_UP = "↑▲⬆";
+const QC_ARROW_DOWN = "↓▼⬇";
+const QC_ARROW_RE = /[↑▲⬆↓▼⬇]/g;
+
+const formatPercentageCore = (str) => {
   if (str === "") return "";
   if (isZeroValue(str)) return "";
   if (str.endsWith("%")) return str;
 
-  let num = Number(str);
+  const num = Number(str);
   if (!isNaN(num)) {
-    if (num > 0 && num <= 1) {
-      return `${Number((num * 100).toFixed(2))}%`;
-    } else {
-      return `${num}%`;
-    }
+    const sign = str.startsWith("+") ? "+" : ""; // "+5" me + bacha ke rakho (up ka matlab)
+    const abs = Math.abs(num);
+    // 0.95 -> 95%, -0.05 -> -5%, 95 -> 95%
+    if (abs > 0 && abs <= 1) return `${sign}${Number((num * 100).toFixed(2))}%`;
+    return `${sign}${num}%`;
   }
   return str;
+};
+
+const formatPercentage = (value) => {
+  if (value === null || value === undefined || value === "") return "";
+  let str = value.toString().trim();
+  if (str === "") return "";
+
+  // Cell me arrow (↑ ▲ ↓ ▼) likha ho to alag nikalo, baaki value format karo, arrow wapas laga do
+  const arrowHit = str.match(QC_ARROW_RE);
+  if (arrowHit) {
+    const arrow = arrowHit[0];
+    str = str.replace(QC_ARROW_RE, "").trim();
+    const body = formatPercentageCore(str);
+    return body === "" ? "" : `${arrow} ${body}`;
+  }
+
+  return formatPercentageCore(str);
 };
 
 const cleanOtp = (v) => formatPercentage(v);
@@ -289,6 +362,16 @@ const compressKey = (s) => {
   }
   return v;
 };
+
+// Time wale columns: ye UOM me nahi jaane chahiye, ye date ke saath judte hain
+const RECEIVE_TIME_KEYS = ["Receive Time", "Received Time", "receive_time", "received_time", "Receiving Time"];
+const SUBMISSION_TIME_KEYS = ["Submission Time", "submission_time", "Submitted Time"];
+const DATETIME_COLUMN_KEYS = [
+  "Receive Date Time", "Received Date Time", "receive_datetime", "received_datetime",
+  "Submission Date Time", "submission_datetime"
+];
+const TIME_COLUMN_KEYS = [...RECEIVE_TIME_KEYS, ...SUBMISSION_TIME_KEYS, ...DATETIME_COLUMN_KEYS];
+const timeKeySet = new Set(TIME_COLUMN_KEYS.map((k) => compressKey(k)));
 
 const getMonthValue = (row) => {
   for (const key of Object.keys(row)) {
@@ -397,7 +480,8 @@ const extractUOM = (row) => {
     "ecd date", "ecd_date", "ecd-date", "ecddate", "ecd", "submission date", "submission_date", 
     "current status", "current_status", "production engineers", "production_engineers", 
     "qc engineers", "qc_engineers", "sl no", "sl.no", "sl", "sl.", "sl_no", "slno", 
-    "file name", "file_name", "jobs delivered", "jobs_delivered", "domain", "status"
+    "file name", "file_name", "jobs delivered", "jobs_delivered", "domain", "status",
+    ...TIME_COLUMN_KEYS
   ];
 
   if (!extractUOM._sysSet) {
@@ -614,9 +698,15 @@ const parseImportRow = (row, sheetName) => {
   const amdocsQcVal = formatPercentage(findValueInRow(row, ["Amdocs QC", "amdocs_qc"]));
   const internalQcVal = formatPercentage(findValueInRow(row, ["Internal QC", "internal_qc"]));
 
-  const receiveDateVal = parseExcelDate(findValueInRow(row, ["Receive Date", "receive_date", "receive-date", "received date", "received_date"]));
+  const receiveDateVal = parseDateTime(
+    findValueInRow(row, ["Receive Date", "receive_date", "receive-date", "received date", "received_date", "Receive Date Time", "Received Date Time"]),
+    findValueInRow(row, RECEIVE_TIME_KEYS)
+  );
   const ecdDateVal = parseExcelDate(findValueInRow(row, ["ECD Date", "ecd_date", "ecd-date", "ecddate", "ECD"]));
-  const submissionDateVal = parseExcelDate(findValueInRow(row, ["Submission Date", "submission_date", "submission-date"]));
+  const submissionDateVal = parseDateTime(
+    findValueInRow(row, ["Submission Date", "submission_date", "submission-date", "Submission Date Time"]),
+    findValueInRow(row, SUBMISSION_TIME_KEYS)
+  );
 
   // State -> Market -> Region ke order me pehli non-empty value
   let rawLocation =
@@ -1082,7 +1172,7 @@ const importExcel = async (req, res) => {
             if (!monthsArr.includes(m)) monthsArr.push(m);
           });
 
-          const mergedUOM = { ...existingUOM, ...merged.uom };
+          const mergedUOM = { ...cleanUomOutput(existingUOM), ...merged.uom };
 
           await query(updateSql, [
             JSON.stringify(monthsArr),
@@ -1185,6 +1275,8 @@ const createWork = async (req, res) => {
   const receive_date = pick(b, "receive_date", "receiveDate", "receivedDate");
   const ecd_date = pick(b, "ecd_date", "ecdDate");
   const submission_date = pick(b, "submission_date", "submissionDate");
+  const receive_time = pick(b, "receive_time", "receiveTime", "received_time", "receivedTime");
+  const submission_time = pick(b, "submission_time", "submissionTime");
 
   const fixedDomain = normalize(domain);
   const fixedJobType = normalize(job_type);
@@ -1193,9 +1285,9 @@ const createWork = async (req, res) => {
   const formattedInternalQc = formatPercentage(internal_qc);
   const formattedAmdocsQc = formatPercentage(amdocs_qc);
 
-  const formattedReceiveDate = parseExcelDate(receive_date);
+  const formattedReceiveDate = parseDateTime(receive_date, receive_time);
   const formattedEcdDate = parseExcelDate(ecd_date);
-  const formattedSubmissionDate = parseExcelDate(submission_date);
+  const formattedSubmissionDate = parseDateTime(submission_date, submission_time);
 
   const parsedMonths = parseMonthsInput(months);
   const firstMonth = parsedMonths.length > 0 ? parsedMonths[0] : null;
@@ -1338,6 +1430,8 @@ const updateWork = async (req, res) => {
   const receive_date = pick(b, "receive_date", "receiveDate", "receivedDate");
   const ecd_date = pick(b, "ecd_date", "ecdDate");
   const submission_date = pick(b, "submission_date", "submissionDate");
+  const receive_time = pick(b, "receive_time", "receiveTime", "received_time", "receivedTime");
+  const submission_time = pick(b, "submission_time", "submissionTime");
 
   const has = (v) => v !== undefined;
 
@@ -1383,7 +1477,7 @@ const updateWork = async (req, res) => {
   const dateVals = { receiveDate: null, ecdDate: null, submissionDate: null };
 
   if (has(receive_date)) {
-    dateVals.receiveDate = parseExcelDate(receive_date);
+    dateVals.receiveDate = parseDateTime(receive_date, receive_time);
     setCol("receive_date", dateVals.receiveDate);
     if (dateVals.receiveDate === null) clearedDateCols.push("receiveDate");
   }
@@ -1393,7 +1487,7 @@ const updateWork = async (req, res) => {
     if (dateVals.ecdDate === null) clearedDateCols.push("ecdDate");
   }
   if (has(submission_date)) {
-    dateVals.submissionDate = parseExcelDate(submission_date);
+    dateVals.submissionDate = parseDateTime(submission_date, submission_time);
     setCol("submission_date", dateVals.submissionDate);
     if (dateVals.submissionDate === null) clearedDateCols.push("submissionDate");
   }
@@ -1497,17 +1591,66 @@ const regionForState = (state) => {
 
 const displayOtp = (v) => cleanOtp(v);
 
-// Har field alag check hota hai, taaki frontend sirf wahi cell red kare:
-//  - otp_missing          -> sirf OTP cell red
-//  - amdocs_qc_missing    -> sirf Amdocs QC cell red
-//  - internal_qc_missing  -> sirf Internal QC cell red
-// (r me otp / amdocs_qc / internal_qc pehle se formatted hone chahiye)
-const withMissingFlags = (r) => ({
-  ...r,
-  otp_missing: isBlank(r.otp),
-  amdocs_qc_missing: isBlank(r.amdocs_qc),
-  internal_qc_missing: isBlank(r.internal_qc)
-});
+// UOM se time wale keys hata do (purane imports me ye galti se UOM me chali gayi thi)
+const cleanUomOutput = (uom) => {
+  if (uom === null || uom === undefined) return uom;
+  const wasString = typeof uom === "string";
+  const obj = wasString ? safeParseJson(uom, null) : uom;
+  if (!obj || typeof obj !== "object" || Array.isArray(obj)) return uom;
+  const out = {};
+  Object.keys(obj).forEach((k) => {
+    if (!timeKeySet.has(compressKey(k))) out[k] = obj[k];
+  });
+  return wasString ? JSON.stringify(out) : out;
+};
+
+// Amdocs QC: value saaf karke arrow nikalta hai.
+// Arrow ka rule (upar se neeche, pehla jo mile):
+//   1) Excel/cell me ↑ ▲ ya ↓ ▼ likha ho to wahi
+//   2) value me +/- sign ho (+5% up, -5% down)
+//   3) warna Internal QC se compare: Amdocs QC zyada = up, kam = down, barabar = koi arrow nahi
+const withQcTrend = (r) => {
+  const raw = clean(r.amdocs_qc);
+  if (!raw) return { ...r, amdocs_qc: "", amdocs_qc_trend: "", amdocs_qc_arrow: "", amdocs_qc_display: "" };
+
+  let trend = "";
+  if (new RegExp(`[${QC_ARROW_UP}]`).test(raw)) trend = "up";
+  else if (new RegExp(`[${QC_ARROW_DOWN}]`).test(raw)) trend = "down";
+
+  let value = raw.replace(QC_ARROW_RE, "").trim();
+
+  if (!trend) {
+    if (value.startsWith("-")) { trend = "down"; value = value.slice(1).trim(); }
+    else if (value.startsWith("+")) { trend = "up"; value = value.slice(1).trim(); }
+  }
+
+  if (!trend) {
+    const num = parseFloat(value.replace("%", ""));
+    const internalNum = parseFloat(clean(r.internal_qc).replace(QC_ARROW_RE, "").replace(/[%+]/g, ""));
+    if (!isNaN(num) && !isNaN(internalNum)) {
+      if (num > internalNum) trend = "up";
+      else if (num < internalNum) trend = "down";
+    }
+  }
+
+  const arrow = trend === "up" ? "↑" : trend === "down" ? "↓" : "";
+  return {
+    ...r,
+    amdocs_qc: value,
+    amdocs_qc_trend: trend,
+    amdocs_qc_arrow: arrow,
+    amdocs_qc_display: arrow ? `${arrow} ${value}` : value
+  };
+};
+
+// Har row bhejne se pehle: OTP red flag + Amdocs QC arrow + UOM safai
+//  - otp_missing -> sirf OTP khaali ho to true (frontend sirf OTP cell red kare)
+const finalizeRow = (r) =>
+  withQcTrend({
+    ...r,
+    uom: cleanUomOutput(r.uom),
+    otp_missing: isBlank(r.otp)
+  });
 
 const mapWorkRow = (row) => {
   const { jc_month, jc_receive, jc_ecd, jc_submission, ...work } = row;
@@ -1526,7 +1669,7 @@ const mapWorkRow = (row) => {
   const displayMonth = monthsArr.length > 0 ? monthsArr[monthsArr.length - 1] : "";
   const dateOf = (own, fallback) => (isBlank(own) ? fallback : own);
 
-  return withMissingFlags({
+  return finalizeRow({
     ...work,
     month: displayMonth,
     months: monthsArr,
@@ -1632,7 +1775,7 @@ const getFileData = (req, res) => {
 
     const cleaned = rows.map((row) => {
       const { created_at, updated_at, file_name, id, ...rest } = row;
-      return withMissingFlags({
+      return finalizeRow({
         ...rest,
         jobs_delivered: 1, // FIX: ek row = hamesha 1 job delivered
         otp: displayOtp(rest.otp),
@@ -1672,7 +1815,7 @@ const getJobTypeStats = (req, res) => {
 const getMonthWiseReport = (req, res) => {
   db.query("SELECT * FROM work_updates ORDER BY id ASC", (err, rows) => {
     if (err) return res.status(500).json([]);
-    const formatted = rows.map(r => withMissingFlags({
+    const formatted = rows.map(r => finalizeRow({
       ...r,
       jobs_delivered: 1, // FIX: ek row = hamesha 1 job delivered
       otp: displayOtp(r.otp),
