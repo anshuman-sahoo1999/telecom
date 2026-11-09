@@ -152,11 +152,12 @@
 
 /* ===================================
    TABLE
+   (Deviation column judne se min-width 1300 -> 1450)
 =================================== */
 
 .job-history-table {
   width: 100%;
-  min-width: 1300px;
+  min-width: 1450px;
   border-collapse: collapse;
 }
 
@@ -452,13 +453,41 @@
   width: 20%;
   text-align: center;
 }
-/* Light orange row highlight jab OTP ya Amdocs QC missing ya '-' ho */
-.job-history-table tbody tr.light-orange-row {
-  background-color: #ffedd5 !important;
+
+/* ===================================
+   OTP khaali ho to POORI ROW RED
+   (row ka class "row-missing-otp" JobHistory.jsx se lagta hai)
+=================================== */
+
+.job-history-table tbody tr.row-missing-otp,
+.job-history-table tbody tr.row-missing-otp:nth-child(even) {
+  background-color: #fee2e2 !important;
 }
 
-.job-history-table tbody tr.light-orange-row:hover {
-  background-color: #fed7aa !important;
+.job-history-table tbody tr.row-missing-otp:hover {
+  background-color: #fecaca !important;
+}
+
+.job-history-table tbody tr.row-missing-otp td {
+  color: #b91c1c;
+  border-color: #fecaca;
+}
+
+/* ===================================
+   DATE KE SIDE ME TIME + DEVIATION
+   (JobHistory.jsx me inline style bhi hai, ye sirf backup / override ke liye)
+=================================== */
+
+.job-history-table .time-chip {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: #e0e7ff;
+  color: #3730a3;
+  font-size: 11px;
+  font-weight: 600;
+  vertical-align: middle;
 }
 
 @media (max-width: 992px) {
@@ -508,7 +537,7 @@
   }
 
   .job-history-table {
-    min-width: 1300px;
+    min-width: 1450px;
   }
 
   .jobwork-modal {
