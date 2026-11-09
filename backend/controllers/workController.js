@@ -312,41 +312,24 @@ const isZeroValue = (v) => {
   return s !== "" && !isNaN(Number(s)) && Number(s) === 0;
 };
 
-const QC_ARROW_UP = "↑▲⬆";
-const QC_ARROW_DOWN = "↓▼⬇";
 const QC_ARROW_RE = /[↑▲⬆↓▼⬇]/g;
 
-const formatPercentageCore = (str) => {
+const formatPercentage = (value) => {
+  if (value === null || value === undefined || value === "") return "";
+  // Cell me arrow (↑ ↓) likha ho to hata do, sirf value rakho
+  let str = value.toString().replace(QC_ARROW_RE, "").trim();
   if (str === "") return "";
   if (isZeroValue(str)) return "";
   if (str.endsWith("%")) return str;
 
   const num = Number(str);
   if (!isNaN(num)) {
-    const sign = str.startsWith("+") ? "+" : ""; // "+5" me + bacha ke rakho (up ka matlab)
     const abs = Math.abs(num);
     // 0.95 -> 95%, -0.05 -> -5%, 95 -> 95%
-    if (abs > 0 && abs <= 1) return `${sign}${Number((num * 100).toFixed(2))}%`;
-    return `${sign}${num}%`;
+    if (abs > 0 && abs <= 1) return `${Number((num * 100).toFixed(2))}%`;
+    return `${num}%`;
   }
   return str;
-};
-
-const formatPercentage = (value) => {
-  if (value === null || value === undefined || value === "") return "";
-  let str = value.toString().trim();
-  if (str === "") return "";
-
-  // Cell me arrow (↑ ▲ ↓ ▼) likha ho to alag nikalo, baaki value format karo, arrow wapas laga do
-  const arrowHit = str.match(QC_ARROW_RE);
-  if (arrowHit) {
-    const arrow = arrowHit[0];
-    str = str.replace(QC_ARROW_RE, "").trim();
-    const body = formatPercentageCore(str);
-    return body === "" ? "" : `${arrow} ${body}`;
-  }
-
-  return formatPercentageCore(str);
 };
 
 const cleanOtp = (v) => formatPercentage(v);
@@ -363,15 +346,22 @@ const compressKey = (s) => {
   return v;
 };
 
-// Time wale columns: ye UOM me nahi jaane chahiye, ye date ke saath judte hain
-const RECEIVE_TIME_KEYS = ["Receive Time", "Received Time", "receive_time", "received_time", "Receiving Time"];
-const SUBMISSION_TIME_KEYS = ["Submission Time", "submission_time", "Submitted Time"];
-const DATETIME_COLUMN_KEYS = [
-  "Receive Date Time", "Received Date Time", "receive_datetime", "received_datetime",
-  "Submission Date Time", "submission_datetime"
-];
-const TIME_COLUMN_KEYS = [...RECEIVE_TIME_KEYS, ...SUBMISSION_TIME_KEYS, ...DATETIME_COLUMN_KEYS];
-const timeKeySet = new Set(TIME_COLUMN_KEYS.map((k) => compressKey(k)));
+// Time wale columns: koi bhi header jisme "receive...time" ya "submi...time" ho (Received Time, Receive Time (IST), ...)
+// Ye UOM me nahi jaane chahiye, ye date ke saath judte hain
+const RECEIVE_TIME_RE = /receiv.*time/;
+const SUBMISSION_TIME_RE = /submi.*time/;
+const isTimeColumnKey = (key) => {
+  const c = compressKey(key);
+  return RECEIVE_TIME_RE.test(c) || SUBMISSION_TIME_RE.test(c);
+};
+const findTimeInRow = (row, re) => {
+  for (const key of Object.keys(row)) {
+    if (!re.test(compressKey(key))) continue;
+    const val = unwrapCell(row[key]);
+    if (val !== null && val !== undefined && val !== "") return val;
+  }
+  return "";
+};
 
 const getMonthValue = (row) => {
   for (const key of Object.keys(row)) {
@@ -480,8 +470,7 @@ const extractUOM = (row) => {
     "ecd date", "ecd_date", "ecd-date", "ecddate", "ecd", "submission date", "submission_date", 
     "current status", "current_status", "production engineers", "production_engineers", 
     "qc engineers", "qc_engineers", "sl no", "sl.no", "sl", "sl.", "sl_no", "slno", 
-    "file name", "file_name", "jobs delivered", "jobs_delivered", "domain", "status",
-    ...TIME_COLUMN_KEYS
+    "file name", "file_name", "jobs delivered", "jobs_delivered", "domain", "status"
   ];
 
   if (!extractUOM._sysSet) {
@@ -494,7 +483,7 @@ const extractUOM = (row) => {
 
     const compressedKey = compressKey(key);
 
-    const isSystemCol = sysSet.has(compressedKey);
+    const isSystemCol = sysSet.has(compressedKey) || isTimeColumnKey(key);
 
     if (!isSystemCol) {
       let value = unwrapCell(row[key]);
@@ -700,12 +689,12 @@ const parseImportRow = (row, sheetName) => {
 
   const receiveDateVal = parseDateTime(
     findValueInRow(row, ["Receive Date", "receive_date", "receive-date", "received date", "received_date", "Receive Date Time", "Received Date Time"]),
-    findValueInRow(row, RECEIVE_TIME_KEYS)
+    findTimeInRow(row, RECEIVE_TIME_RE)
   );
   const ecdDateVal = parseExcelDate(findValueInRow(row, ["ECD Date", "ecd_date", "ecd-date", "ecddate", "ECD"]));
   const submissionDateVal = parseDateTime(
     findValueInRow(row, ["Submission Date", "submission_date", "submission-date", "Submission Date Time"]),
-    findValueInRow(row, SUBMISSION_TIME_KEYS)
+    findTimeInRow(row, SUBMISSION_TIME_RE)
   );
 
   // State -> Market -> Region ke order me pehli non-empty value
@@ -1591,7 +1580,7 @@ const regionForState = (state) => {
 
 const displayOtp = (v) => cleanOtp(v);
 
-// UOM se time wale keys hata do (purane imports me ye galti se UOM me chali gayi thi)
+// UOM se time wale keys hata do (re-import par purani UOM me bachi time keys saaf ho jaye)
 const cleanUomOutput = (uom) => {
   if (uom === null || uom === undefined) return uom;
   const wasString = typeof uom === "string";
@@ -1599,58 +1588,45 @@ const cleanUomOutput = (uom) => {
   if (!obj || typeof obj !== "object" || Array.isArray(obj)) return uom;
   const out = {};
   Object.keys(obj).forEach((k) => {
-    if (!timeKeySet.has(compressKey(k))) out[k] = obj[k];
+    if (!isTimeColumnKey(k)) out[k] = obj[k];
   });
   return wasString ? JSON.stringify(out) : out;
 };
 
-// Amdocs QC: value saaf karke arrow nikalta hai.
-// Arrow ka rule (upar se neeche, pehla jo mile):
-//   1) Excel/cell me ↑ ▲ ya ↓ ▼ likha ho to wahi
-//   2) value me +/- sign ho (+5% up, -5% down)
-//   3) warna Internal QC se compare: Amdocs QC zyada = up, kam = down, barabar = koi arrow nahi
-const withQcTrend = (r) => {
-  const raw = clean(r.amdocs_qc);
-  if (!raw) return { ...r, amdocs_qc: "", amdocs_qc_trend: "", amdocs_qc_arrow: "", amdocs_qc_display: "" };
+// Purane imports me "Received Time" / "Submission Time" galti se UOM me save ho gayi thi.
+// Yahan wo time wapas date ke saath jod dete hain aur UOM se hata dete hain.
+// (Koi naya field / column nahi banta, sirf receive_date / submission_date me time judta hai)
+const finalizeRow = (r) => {
+  const raw = r.uom;
+  if (raw === null || raw === undefined) return r;
 
-  let trend = "";
-  if (new RegExp(`[${QC_ARROW_UP}]`).test(raw)) trend = "up";
-  else if (new RegExp(`[${QC_ARROW_DOWN}]`).test(raw)) trend = "down";
+  const wasString = typeof raw === "string";
+  const obj = wasString ? safeParseJson(raw, null) : raw;
+  if (!obj || typeof obj !== "object" || Array.isArray(obj)) return r;
 
-  let value = raw.replace(QC_ARROW_RE, "").trim();
+  const out = {};
+  let recvTime = "";
+  let subTime = "";
+  Object.keys(obj).forEach((k) => {
+    const c = compressKey(k);
+    if (RECEIVE_TIME_RE.test(c)) recvTime = recvTime || extractTime(obj[k]);
+    else if (SUBMISSION_TIME_RE.test(c)) subTime = subTime || extractTime(obj[k]);
+    else out[k] = obj[k];
+  });
 
-  if (!trend) {
-    if (value.startsWith("-")) { trend = "down"; value = value.slice(1).trim(); }
-    else if (value.startsWith("+")) { trend = "up"; value = value.slice(1).trim(); }
-  }
+  const withTime = (dateStr, t) => {
+    if (!dateStr || !t) return dateStr;
+    if (/\d{1,2}:\d{2}/.test(String(dateStr))) return dateStr; // time pehle se hai
+    return `${dateStr} ${t}`;
+  };
 
-  if (!trend) {
-    const num = parseFloat(value.replace("%", ""));
-    const internalNum = parseFloat(clean(r.internal_qc).replace(QC_ARROW_RE, "").replace(/[%+]/g, ""));
-    if (!isNaN(num) && !isNaN(internalNum)) {
-      if (num > internalNum) trend = "up";
-      else if (num < internalNum) trend = "down";
-    }
-  }
-
-  const arrow = trend === "up" ? "↑" : trend === "down" ? "↓" : "";
   return {
     ...r,
-    amdocs_qc: value,
-    amdocs_qc_trend: trend,
-    amdocs_qc_arrow: arrow,
-    amdocs_qc_display: arrow ? `${arrow} ${value}` : value
+    uom: wasString ? JSON.stringify(out) : out,
+    receive_date: withTime(r.receive_date, recvTime),
+    submission_date: withTime(r.submission_date, subTime)
   };
 };
-
-// Har row bhejne se pehle: OTP red flag + Amdocs QC arrow + UOM safai
-//  - otp_missing -> sirf OTP khaali ho to true (frontend sirf OTP cell red kare)
-const finalizeRow = (r) =>
-  withQcTrend({
-    ...r,
-    uom: cleanUomOutput(r.uom),
-    otp_missing: isBlank(r.otp)
-  });
 
 const mapWorkRow = (row) => {
   const { jc_month, jc_receive, jc_ecd, jc_submission, ...work } = row;
@@ -1979,6 +1955,39 @@ const ensureIndexes = async () => {
   await ensureIndex("job_creation", "idx_jc_job_id", "jobId");
 };
 ensureIndexes();
+
+// "03-05-2026 10:30" = 16 akshar. Date columns VARCHAR(10) jaise chhote hon to MySQL time ko
+// chup-chaap kaat deta hai (isi wajah se date ke saath time nahi dikhta). Server start par chaude kar dete hain.
+const DATETIME_COLUMNS = [
+  { table: "work_updates", columns: ["receive_date", "ecd_date", "submission_date"] },
+  { table: "job_creation", columns: ["receiveDate", "ecdDate", "submissionDate"] }
+];
+
+const ensureDateTimeColumns = async () => {
+  for (const { table, columns } of DATETIME_COLUMNS) {
+    try {
+      const found = await query(
+        `SELECT COLUMN_NAME AS name, DATA_TYPE AS type, CHARACTER_MAXIMUM_LENGTH AS len
+         FROM information_schema.COLUMNS
+         WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ? AND COLUMN_NAME IN (${inClause(columns)})`,
+        [table, ...columns]
+      );
+
+      for (const col of found || []) {
+        const type = String(col.type || "").toLowerCase();
+        if ((type === "varchar" || type === "char") && Number(col.len) < 30) {
+          await query(`ALTER TABLE ${table} MODIFY ${col.name} VARCHAR(30) NULL DEFAULT NULL`);
+          console.log(`Column widened: ${table}.${col.name} ${type}(${col.len}) -> VARCHAR(30)`);
+        } else if (!["varchar", "char", "text", "tinytext", "mediumtext", "longtext"].includes(type)) {
+          console.warn(`${table}.${col.name} ka type ${type} hai, time save nahi hoga. Ise VARCHAR(30) kar do.`);
+        }
+      }
+    } catch (err) {
+      console.error(`ensureDateTimeColumns(${table}) skipped:`, err.message);
+    }
+  }
+};
+ensureDateTimeColumns();
 
 /* ======================================
    MODULE EXPORTS
