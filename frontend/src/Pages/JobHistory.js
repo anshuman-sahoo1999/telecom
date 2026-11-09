@@ -7,14 +7,39 @@ import "../style/jobhistory.css";
 const normalizeUpper = (d) => (d || "").toString().trim().toUpperCase();
 
 const pad2 = (n) => String(n).padStart(2, "0");
+
+// Date ko "YYYY-MM-DD" banata hai. "03-05-2026 10:30" jaisi value me time ho tab bhi date sahi nikalti hai.
 const toDateKey = (value) => {
   if (!value) return null;
-  if (typeof value === "string" && /^\d{4}-\d{2}-\d{2}$/.test(value.trim())) {
-    return value.trim();
+  if (typeof value === "string") {
+    const v = value.trim();
+    if (/^\d{4}-\d{2}-\d{2}$/.test(v)) return v;
+
+    // "2026-03-05 10:30"
+    let m = v.match(/^(\d{4})-(\d{2})-(\d{2})\s+\d{1,2}:\d{2}/);
+    if (m) return `${m[1]}-${m[2]}-${m[3]}`;
+
+    // "03-05-2026" ya "03-05-2026 10:30" (MM-DD-YYYY)
+    m = v.match(/^(\d{1,2})[-/](\d{1,2})[-/](\d{4})(?:\s|$)/);
+    if (m && Number(m[1]) >= 1 && Number(m[1]) <= 12 && Number(m[2]) >= 1 && Number(m[2]) <= 31) {
+      return `${m[3]}-${pad2(m[1])}-${pad2(m[2])}`;
+    }
   }
   const d = new Date(value);
   if (isNaN(d.getTime())) return null;
   return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
+};
+
+// "03-05-2026 10:30" me se "10:30" nikalta hai. Time na ho (ya 00:00 ho) to "".
+const toTimeKey = (value) => {
+  if (typeof value !== "string") return "";
+  const v = value.trim();
+  // ISO + Z (timezone wali string) ka time bharosemand nahi, isliye ignore
+  if (/^\d{4}-\d{2}-\d{2}T.*Z$/.test(v)) return "";
+  const m = v.match(/(?:^|[\sT])(\d{1,2}):(\d{2})/);
+  if (!m) return "";
+  if (Number(m[1]) === 0 && Number(m[2]) === 0) return "";
+  return `${pad2(m[1])}:${m[2]}`;
 };
 
 // UI ke liye MM-DD-YYYY
@@ -61,6 +86,77 @@ const qcColor = (value) => {
   if (val >= 80) return "green";
   if (val >= 50) return "#b8860b";
   return "red";
+};
+
+// "80%", "↑ 80%", "0.8" jaisi value se number nikalta hai (nahi mila to null)
+const parsePercent = (v) => {
+  if (v === null || v === undefined) return null;
+  const t = v.toString().replace(/[↑▲⬆↓▼⬇%\s]/g, "");
+  if (t === "" || t === "-") return null;
+  const n = parseFloat(t);
+  return isNaN(n) ? null : n;
+};
+
+// Deviation = Amdocs QC - Internal QC
+//   Internal 80%, Amdocs 90%  -> 10%  ↑ (green)
+//   Internal 70%, Amdocs 60%  -> 10%  ↓ (red)
+// Dono me se koi khaali ho to "-"
+const getDeviation = (internalQc, amdocsQc) => {
+  const internal = parsePercent(internalQc);
+  const amdocs = parsePercent(amdocsQc);
+  if (internal === null || amdocs === null) return { text: "-", trend: "" };
+
+  const diff = Math.round((amdocs - internal) * 100) / 100;
+  if (diff === 0) return { text: "0%", trend: "" };
+  return { text: `${Math.abs(diff)}%`, trend: diff > 0 ? "up" : "down" };
+};
+
+const DEVIATION_UP = "#16a34a";
+const DEVIATION_DOWN = "#dc2626";
+
+// Deviation cell: value + uske side me arrow
+const DeviationCell = ({ text, trend }) => {
+  if (!trend) return text || "-";
+  const color = trend === "up" ? DEVIATION_UP : DEVIATION_DOWN;
+  return (
+    <span style={{ display: "inline-flex", alignItems: "center", gap: 4, fontWeight: 700, color }}>
+      <span>{text}</span>
+      <span style={{ fontSize: 16, lineHeight: 1 }}>{trend === "up" ? "↑" : "↓"}</span>
+    </span>
+  );
+};
+
+// Date ke side me time ka chhota chip (inline style: css purani ho tab bhi dikhe)
+const timeChipStyle = {
+  display: "inline-block",
+  marginLeft: 6,
+  padding: "1px 7px",
+  borderRadius: 999,
+  background: "#e0e7ff",
+  color: "#3730a3",
+  fontSize: 11,
+  fontWeight: 600,
+  verticalAlign: "middle",
+};
+
+const DateTimeCell = ({ value }) => {
+  const date = formatLocalDate(value);
+  if (date === "-") return "-";
+  const time = toTimeKey(typeof value === "string" ? value : "");
+  return (
+    <>
+      <span>{date}</span>
+      {time ? <span style={timeChipStyle}>{time}</span> : null}
+    </>
+  );
+};
+
+// OTP khaali ho to poori row red
+const rowMissingStyle = { background: "#fee2e2", color: "#b91c1c" };
+const otpCellMissingStyle = {
+  background: "#fecaca",
+  color: "#b91c1c",
+  fontWeight: 700,
 };
 
 const toastBaseStyle = {
@@ -726,7 +822,7 @@ const JobHistory = () => {
               <th rowSpan="2">ECD Date</th>
               <th rowSpan="2">Submission Date</th>
               <th rowSpan="2">View Work</th>
-              <th colSpan="2">QC Status</th>
+              <th colSpan="3">QC Status</th>
               <th rowSpan="2">OTP Status</th>
               <th rowSpan="2">Action</th>
               <th rowSpan="2">Last Updated Date</th>
@@ -734,40 +830,60 @@ const JobHistory = () => {
             <tr>
               <th>Internal QC</th>
               <th>Amdocs QC</th>
+              <th>Deviation</th>
             </tr>
           </thead>
 
           <tbody>
             {currentJobs.length > 0 ? (
               currentJobs.map((job, index) => {
-                // Dates MM-DD-YYYY mein dikhengi
-                const receiveStr = formatLocalDate(job.receiveDate || job.receive_date);
-                const ecdStr = formatLocalDate(job.ecdDate || job.ecd_date);
-                const subDateVal = formatLocalDate(
-                  job.submissionDate || job.submission_date || job.submissiondate
-                );
                 const monthVal = parseMonthField(job);
 
                 const otpVal = getOtp(job);
+                const internalVal = getInternalQc(job);
                 const amdocsVal = getAmdocsQc(job);
 
-                const isMissingOtpOrAmdocs =
-                  !otpVal || otpVal === "-" || !amdocsVal || amdocsVal === "-";
+                // OTP khaali ("", "-" ya sirf space) ho to poori row red
+                const otpText = String(otpVal || "").trim();
+                const otpMissing = otpText === "" || otpText === "-";
+                const cellStyle = otpMissing ? rowMissingStyle : undefined;
+
+                const isEditingRow = editingId === job.id;
+
+                // Deviation = Amdocs QC - Internal QC (edit karte waqt live badalta hai)
+                const dev = isEditingRow
+                  ? getDeviation(editData.internalQc, editData.amdocsQc)
+                  : getDeviation(internalVal, amdocsVal);
 
                 return (
                   <tr
                     key={`${job.id ?? "row"}-${startIndex + index}`}
-                    className={isMissingOtpOrAmdocs ? "light-orange-row" : ""}
+                    className={otpMissing ? "row-missing-otp" : ""}
+                    style={otpMissing ? rowMissingStyle : undefined}
                   >
-                    <td>{startIndex + index + 1}</td>
-                    <td>{monthVal}</td>
-                    <td>{job.domain ? String(job.domain).toUpperCase() : "-"}</td>
-                    <td>{job.market || job.state || "-"}</td>
-                    <td>{getJobId(job) || "-"}</td>
-                    <td>{receiveStr}</td>
-                    <td>{ecdStr}</td>
-                    <td>{subDateVal}</td>
-                    <td>
+                    <td style={cellStyle}>{startIndex + index + 1}</td>
+                    <td style={cellStyle}>{monthVal}</td>
+                    <td style={cellStyle}>
+                      {job.domain ? String(job.domain).toUpperCase() : "-"}
+                    </td>
+                    <td style={cellStyle}>{job.market || job.state || "-"}</td>
+                    <td style={cellStyle}>{getJobId(job) || "-"}</td>
+
+                    {/* Received Date: date ke side me time */}
+                    <td style={cellStyle}>
+                      <DateTimeCell value={job.receiveDate || job.receive_date} />
+                    </td>
+
+                    <td style={cellStyle}>{formatLocalDate(job.ecdDate || job.ecd_date)}</td>
+
+                    {/* Submission Date: date ke side me time */}
+                    <td style={cellStyle}>
+                      <DateTimeCell
+                        value={job.submissionDate || job.submission_date || job.submissiondate}
+                      />
+                    </td>
+
+                    <td style={cellStyle}>
                       <button
                         type="button"
                         className="view-work-btn"
@@ -777,8 +893,8 @@ const JobHistory = () => {
                       </button>
                     </td>
 
-                    <td>
-                      {editingId === job.id ? (
+                    <td style={cellStyle}>
+                      {isEditingRow ? (
                         <input
                           type="text"
                           style={{ width: "70px", padding: "4px" }}
@@ -788,12 +904,12 @@ const JobHistory = () => {
                           }
                         />
                       ) : (
-                        getInternalQc(job) || "-"
+                        internalVal || "-"
                       )}
                     </td>
 
-                    <td>
-                      {editingId === job.id ? (
+                    <td style={cellStyle}>
+                      {isEditingRow ? (
                         <input
                           type="text"
                           style={{ width: "70px", padding: "4px" }}
@@ -803,12 +919,17 @@ const JobHistory = () => {
                           }
                         />
                       ) : (
-                        getAmdocsQc(job) || "-"
+                        amdocsVal || "-"
                       )}
                     </td>
 
-                    <td>
-                      {editingId === job.id ? (
+                    {/* Deviation = Amdocs QC - Internal QC (value ke side me ↑ green / ↓ red) */}
+                    <td style={cellStyle}>
+                      <DeviationCell text={dev.text} trend={dev.trend} />
+                    </td>
+
+                    <td style={otpMissing ? otpCellMissingStyle : undefined}>
+                      {isEditingRow ? (
                         <input
                           type="text"
                           style={{ width: "70px", padding: "4px" }}
@@ -818,12 +939,12 @@ const JobHistory = () => {
                           }
                         />
                       ) : (
-                        getOtp(job) || "-"
+                        otpVal || "-"
                       )}
                     </td>
 
-                    <td>
-                      {editingId === job.id ? (
+                    <td style={cellStyle}>
+                      {isEditingRow ? (
                         <div style={{ display: "flex", gap: "8px" }}>
                           <button type="button" onClick={() => requestSave(job.id)}>
                             Save
@@ -852,13 +973,13 @@ const JobHistory = () => {
                       )}
                     </td>
 
-                    <td>{formatDateTime(job.updated_at || job.updatedAt)}</td>
+                    <td style={cellStyle}>{formatDateTime(job.updated_at || job.updatedAt)}</td>
                   </tr>
                 );
               })
             ) : (
               <tr>
-                <td colSpan="14" style={{ textAlign: "center", padding: "20px" }}>
+                <td colSpan="15" style={{ textAlign: "center", padding: "20px" }}>
                   No Job History Found
                 </td>
               </tr>
