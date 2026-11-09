@@ -210,7 +210,7 @@ input:disabled {
   background: #f8fafc;
 }
 
-/* --- OTP khaali ho to poori row red --- */
+/* --- OTP khaali ho to poori row ka background red (text ka color normal rahega) --- */
 .table tbody tr.row-missing-otp {
   background-color: #fee2e2;
 }
@@ -220,7 +220,6 @@ input:disabled {
 }
 
 .table tbody tr.row-missing-otp td {
-  color: #b91c1c;
   border-bottom-color: #fecaca;
 }
 
@@ -231,10 +230,9 @@ input:disabled {
   font-weight: 600;
 }
 
-/* --- OTP khaali ho to sirf OTP cell red (poori row nahi) --- */
+/* --- OTP khaali ho to sirf OTP cell ka background thoda gehra red (text normal) --- */
 .table td.cell-missing {
-  background-color: #fee2e2;
-  color: #b91c1c;
+  background-color: #fecaca;
   font-weight: 700;
   text-align: center;
 }
