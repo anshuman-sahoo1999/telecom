@@ -139,8 +139,12 @@ const DEVIATION_UP = "#16a34a";
 const DEVIATION_DOWN = "#dc2626";
 
 // Inline style isliye ki css file purani ho tab bhi red / chip dikhe
+// OTP khaali ho to poori row ka background light red
+const rowMissingStyle = { background: "#fee2e2" };
+
+// Us row me OTP wala cell thoda gehra red (alag se pehchaan ke liye)
 const otpMissingStyle = {
-  background: "#fee2e2",
+  background: "#fecaca",
   color: "#b91c1c",
   fontWeight: 700,
   textAlign: "center",
@@ -1416,7 +1420,11 @@ export default function Report() {
                       : { text: r.deviation, trend: r.deviationTrend };
 
                     return (
-                      <tr key={r.id ?? `row-${i}`}>
+                      <tr
+                        key={r.id ?? `row-${i}`}
+                        className={r.otpMissing ? "row-missing-otp" : ""}
+                        style={r.otpMissing ? rowMissingStyle : undefined}
+                      >
                         <td>{(currentPage - 1) * rowsPerPage + i + 1}</td>
 
                         <td>
@@ -1608,8 +1616,8 @@ export default function Report() {
 
                         {/* OTP khaali ho to sirf ye cell red hota hai */}
                         <td
-                          className={!isEditing && r.otpMissing ? "cell-missing" : ""}
-                          style={!isEditing && r.otpMissing ? otpMissingStyle : undefined}
+                          className={r.otpMissing ? "cell-missing" : ""}
+                          style={r.otpMissing ? otpMissingStyle : undefined}
                         >
                           {isEditing ? (
                             <input
