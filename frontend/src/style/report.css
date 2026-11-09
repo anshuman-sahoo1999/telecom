@@ -210,6 +210,20 @@ input:disabled {
   background: #f8fafc;
 }
 
+/* --- OTP khaali ho to poori row red --- */
+.table tbody tr.row-missing-otp {
+  background-color: #fee2e2;
+}
+
+.table tbody tr.row-missing-otp:hover {
+  background-color: #fecaca;
+}
+
+.table tbody tr.row-missing-otp td {
+  color: #b91c1c;
+  border-bottom-color: #fecaca;
+}
+
 .table td.no-data {
   text-align: center;
   padding: 40px;
