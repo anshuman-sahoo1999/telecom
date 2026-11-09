@@ -151,11 +151,10 @@ const DateTimeCell = ({ value }) => {
   );
 };
 
-// OTP khaali ho to poori row red
-const rowMissingStyle = { background: "#fee2e2", color: "#b91c1c" };
+// OTP khaali ho to poori row ka background red (text ka color normal rahega)
+const rowMissingStyle = { background: "#fee2e2" };
 const otpCellMissingStyle = {
   background: "#fecaca",
-  color: "#b91c1c",
   fontWeight: 700,
 };
 
