@@ -36,6 +36,90 @@ const qcVal = (v) => {
 };
 
 /* ======================================
+   DATE + TIME HELPERS
+   Receive / Submission date ke saath time "MM-DD-YYYY HH:mm" me save hota hai
+   (work_updates ke format jaisa). Time na ho to date waisi hi rehti hai jaisi aayi.
+====================================== */
+const pad2 = (n) => String(n).padStart(2, "0");
+
+// "10:30", "10:30 PM", Excel fraction (0.4375) se "HH:mm" (24 ghante). Time na ho / 00:00 ho to "".
+const extractTime = (v) => {
+  if (v === null || v === undefined) return "";
+  const s = v.toString().trim();
+  if (!s) return "";
+
+  if (/^\d+(\.\d+)?$/.test(s)) {
+    const n = Number(s);
+    const total = Math.round((n - Math.floor(n)) * 1440);
+    if (total <= 0 || total >= 1440) return "";
+    return `${pad2(Math.floor(total / 60))}:${pad2(total % 60)}`;
+  }
+
+  const m = s.match(/(\d{1,2}):(\d{2})(?::\d{2}(?:\.\d+)?)?\s*([AaPp][Mm])?/);
+  if (!m) return "";
+  let h = Number(m[1]);
+  const min = Number(m[2]);
+  const ap = m[3] ? m[3].toLowerCase() : "";
+  if (ap === "pm" && h < 12) h += 12;
+  if (ap === "am" && h === 12) h = 0;
+  if (h > 23 || min > 59) return "";
+  return h === 0 && min === 0 ? "" : `${pad2(h)}:${pad2(min)}`;
+};
+
+// Date text ko "MM-DD-YYYY" banata hai (nahi bana to null)
+const toMdy = (v) => {
+  const s = clean(v);
+  let m = s.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (m) return `${m[2]}-${m[3]}-${m[1]}`;
+  m = s.match(/^(\d{1,2})[-/](\d{1,2})[-/](\d{4})/);
+  if (m) return `${pad2(m[1])}-${pad2(m[2])}-${m[3]}`;
+  const d = new Date(s);
+  if (!isNaN(d.getTime())) return `${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}-${d.getFullYear()}`;
+  return null;
+};
+
+// Date + (alag time ya date ke andar ka time) -> "MM-DD-YYYY HH:mm"
+// Time na ho to date jaisi aayi waisi hi wapas (purana behaviour)
+const joinDateTime = (dateVal, timeVal) => {
+  if (dateVal === undefined || dateVal === null || clean(dateVal) === "") return null;
+
+  const dateStr = clean(dateVal);
+  // ISO + Z (timezone wali string) ke andar ka time bharosemand nahi
+  const embedded = /T.*Z$/.test(dateStr) ? "" : extractTime(dateStr.includes(":") ? dateStr : "");
+  const time = embedded || extractTime(timeVal);
+  if (!time) return dateVal;
+
+  const mdy = toMdy(dateStr);
+  if (!mdy) return dateVal;
+  return `${mdy} ${time}`;
+};
+
+// Purane imports me "Received Time" / "Submission Time" galti se UOM me chali gayi thi.
+// Yahan se wo time nikal lete hain taaki date ke saath dikh jaye.
+const timeFromUom = (uomRaw) => {
+  const out = { receive: "", submission: "" };
+  let obj = uomRaw;
+  if (typeof obj === "string") {
+    try { obj = JSON.parse(obj); } catch { obj = null; }
+  }
+  if (!obj || typeof obj !== "object" || Array.isArray(obj)) return out;
+
+  Object.keys(obj).forEach((k) => {
+    const c = k.toLowerCase().replace(/[^a-z0-9]/g, "");
+    if (/receiv.*time/.test(c)) out.receive = out.receive || extractTime(obj[k]);
+    else if (/submi.*time/.test(c)) out.submission = out.submission || extractTime(obj[k]);
+  });
+  return out;
+};
+
+// Date me time pehle se na ho to hi time jodta hai
+const withTimeIfMissing = (dateVal, time) => {
+  if (!time || typeof dateVal !== "string" || dateVal.trim() === "") return dateVal;
+  if (/\d{1,2}:\d{2}/.test(dateVal)) return dateVal;
+  return `${dateVal.trim()} ${time}`;
+};
+
+/* ======================================
    DOMAIN-SCOPED HELPERS (NEW)
    Same Job ID alag-alag domain (ASE / PERMIT / F2 / PLA ...) me ho sakta hai.
    Isliye identity hamesha (domain + job id) se hoti hai, sirf job id se nahi.
@@ -175,8 +259,14 @@ exports.createJob = (req, res) => {
     jobId,
     receiveDate,
     receivedDate,
+    receiveTime,
+    receivedTime,
+    receive_time,
+    received_time,
     ecdDate,
     submissionDate,
+    submissionTime,
+    submission_time,
     month,
     amdocsQc,
     amdocs_qc,
@@ -186,9 +276,16 @@ exports.createJob = (req, res) => {
     internalOtp
   } = req.body || {};
 
-  const finalReceiveDate = receiveDate || receivedDate || null;
+  // Date ke saath time (alag aaye ya date ke andar ho) "MM-DD-YYYY HH:mm" ban jata hai
+  const finalReceiveDate = joinDateTime(
+    receiveDate || receivedDate || null,
+    receiveTime || receivedTime || receive_time || received_time
+  );
   const formattedEcdDate = ecdDate && ecdDate !== "" ? ecdDate : null;
-  const formattedSubmissionDate = submissionDate && submissionDate !== "" ? submissionDate : null;
+  const formattedSubmissionDate = joinDateTime(
+    submissionDate && submissionDate !== "" ? submissionDate : null,
+    submissionTime || submission_time
+  );
 
   const finalAmdocsQc = qcVal(amdocsQc !== undefined ? amdocsQc : amdocs_qc);
   const finalInternalQc = qcVal(internalQc !== undefined ? internalQc : internal_qc);
@@ -304,7 +401,8 @@ exports.createJob = (req, res) => {
 exports.getAllJobs = (req, res) => {
  try {
   const queryJC = "SELECT id, jobId, domain, market, month, receiveDate, ecdDate, submissionDate, otp, amdocsQc, internalQc, updated_at FROM job_creation";
-  const queryWU = "SELECT id, job_id AS jobId, domain, state AS market, months, receive_date AS receiveDate, ecd_date AS ecdDate, submission_date AS submissionDate, amdocs_qc, internal_qc, otp, updated_at FROM work_updates WHERE job_id IS NOT NULL AND job_id != '-' AND job_id != ''";
+  // uom isliye ki purane imports ka time (UOM me chala gaya tha) date ke saath wapas jod sakein
+  const queryWU = "SELECT id, job_id AS jobId, domain, state AS market, months, receive_date AS receiveDate, ecd_date AS ecdDate, submission_date AS submissionDate, amdocs_qc, internal_qc, otp, uom, updated_at FROM work_updates WHERE job_id IS NOT NULL AND job_id != '-' AND job_id != ''";
 
   db.query(queryJC, (errJC, jcRows) => {
     if (errJC) {
@@ -347,6 +445,12 @@ exports.getAllJobs = (req, res) => {
         row.otp = displayPct(row.otp);
         row.amdocs_qc = displayPct(row.amdocs_qc);
         row.internal_qc = displayPct(row.internal_qc);
+
+        // Date me time nahi hai aur UOM me "Received/Submission Time" padi hai to wo date ke saath jod do
+        const t = timeFromUom(row.uom);
+        row.receiveDate = withTimeIfMissing(row.receiveDate, t.receive);
+        row.submissionDate = withTimeIfMissing(row.submissionDate, t.submission);
+        delete row.uom; // UOM frontend ko nahi bhejna
       });
 
       const jobMap = new Map();
@@ -435,8 +539,10 @@ exports.updateJob = (req, res) => {
     domain,
     market,
     receiveDate, receive_date,
+    receiveTime, receivedTime, receive_time, received_time,
     ecdDate, ecd_date,
     submissionDate, submission_date,
+    submissionTime, submission_time,
     month,
     jobId,
     newJobId,
@@ -454,9 +560,16 @@ exports.updateJob = (req, res) => {
   const finalAmdocsQc = qcVal(amdocsQc !== undefined ? amdocsQc : amdocs_qc);
   const finalOtp = qcVal(otp) || qcVal(internalOtp) || null;
   const cleanMonth = cleanSingleMonth(month);
-  const finalReceiveDate = (receiveDate || receive_date) || null;
+  // Date ke saath time (alag aaye ya date ke andar ho) "MM-DD-YYYY HH:mm" ban jata hai
+  const finalReceiveDate = joinDateTime(
+    (receiveDate || receive_date) || null,
+    receiveTime || receivedTime || receive_time || received_time
+  );
   const finalEcdDate = (ecdDate || ecd_date) || null;
-  const finalSubmissionDate = (submissionDate || submission_date) || null;
+  const finalSubmissionDate = joinDateTime(
+    (submissionDate || submission_date) || null,
+    submissionTime || submission_time
+  );
 
   const cleanJcId = clean(jcId);
   const cleanWorkId = clean(workId);
@@ -694,8 +807,12 @@ exports.deleteJob = (req, res) => {
 exports.submitJob = (req, res) => {
  try {
   // domain / jcId / workId optional hain: frontend bheje to exact row update hogi
-  const { jobId, month, submissionDate, domain, jcId, workId } = req.body || {};
-  const formattedSubmissionDate = submissionDate && submissionDate !== "" ? submissionDate : null;
+  const { jobId, month, submissionDate, submissionTime, submission_time, domain, jcId, workId } = req.body || {};
+  // Submission date ke saath time (alag aaye ya date ke andar ho) "MM-DD-YYYY HH:mm" ban jata hai
+  const formattedSubmissionDate = joinDateTime(
+    submissionDate && submissionDate !== "" ? submissionDate : null,
+    submissionTime || submission_time
+  );
   const cleanJobId = clean(jobId);
   const cleanMonth = cleanSingleMonth(month);
   const cleanJcId = clean(jcId);
