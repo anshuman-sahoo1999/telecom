@@ -1497,6 +1497,18 @@ const regionForState = (state) => {
 
 const displayOtp = (v) => cleanOtp(v);
 
+// Har field alag check hota hai, taaki frontend sirf wahi cell red kare:
+//  - otp_missing          -> sirf OTP cell red
+//  - amdocs_qc_missing    -> sirf Amdocs QC cell red
+//  - internal_qc_missing  -> sirf Internal QC cell red
+// (r me otp / amdocs_qc / internal_qc pehle se formatted hone chahiye)
+const withMissingFlags = (r) => ({
+  ...r,
+  otp_missing: isBlank(r.otp),
+  amdocs_qc_missing: isBlank(r.amdocs_qc),
+  internal_qc_missing: isBlank(r.internal_qc)
+});
+
 const mapWorkRow = (row) => {
   const { jc_month, jc_receive, jc_ecd, jc_submission, ...work } = row;
   if (isBlank(work.region)) {
@@ -1514,7 +1526,7 @@ const mapWorkRow = (row) => {
   const displayMonth = monthsArr.length > 0 ? monthsArr[monthsArr.length - 1] : "";
   const dateOf = (own, fallback) => (isBlank(own) ? fallback : own);
 
-  return {
+  return withMissingFlags({
     ...work,
     month: displayMonth,
     months: monthsArr,
@@ -1527,7 +1539,7 @@ const mapWorkRow = (row) => {
     ecd_date: formatDateToMMDDYYYY(dateOf(work.ecd_date, jc_ecd)),
     submission_date: formatDateToMMDDYYYY(dateOf(work.submission_date, jc_submission)),
     lastUpdate: work.updated_at ? work.updated_at : work.created_at
-  };
+  });
 };
 
 const getAllWork = async (req, res) => {
@@ -1620,7 +1632,7 @@ const getFileData = (req, res) => {
 
     const cleaned = rows.map((row) => {
       const { created_at, updated_at, file_name, id, ...rest } = row;
-      return {
+      return withMissingFlags({
         ...rest,
         jobs_delivered: 1, // FIX: ek row = hamesha 1 job delivered
         otp: displayOtp(rest.otp),
@@ -1629,7 +1641,7 @@ const getFileData = (req, res) => {
         receive_date: formatDateToMMDDYYYY(rest.receive_date),
         ecd_date: formatDateToMMDDYYYY(rest.ecd_date),
         submission_date: formatDateToMMDDYYYY(rest.submission_date)
-      };
+      });
     });
 
     res.json(cleaned);
@@ -1660,7 +1672,7 @@ const getJobTypeStats = (req, res) => {
 const getMonthWiseReport = (req, res) => {
   db.query("SELECT * FROM work_updates ORDER BY id ASC", (err, rows) => {
     if (err) return res.status(500).json([]);
-    const formatted = rows.map(r => ({
+    const formatted = rows.map(r => withMissingFlags({
       ...r,
       jobs_delivered: 1, // FIX: ek row = hamesha 1 job delivered
       otp: displayOtp(r.otp),
