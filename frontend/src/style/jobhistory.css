@@ -455,8 +455,9 @@
 }
 
 /* ===================================
-   OTP khaali ho to POORI ROW RED
+   OTP khaali ho to POORI ROW ka background RED
    (row ka class "row-missing-otp" JobHistory.jsx se lagta hai)
+   Text ka color normal rahega, sirf background red hoga.
 =================================== */
 
 .job-history-table tbody tr.row-missing-otp,
@@ -469,7 +470,6 @@
 }
 
 .job-history-table tbody tr.row-missing-otp td {
-  color: #b91c1c;
   border-color: #fecaca;
 }
 
