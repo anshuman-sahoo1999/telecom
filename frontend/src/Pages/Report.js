@@ -115,7 +115,8 @@ const formatUOM = (uom) => {
 // "80%", "↑ 80%", "0.8" jaisi value se number nikalta hai (nahi mila to null)
 const parsePercent = (v) => {
   if (v === null || v === undefined) return null;
-  const t = v.toString().replace(/[↑▲⬆↓▼⬇%\s]/g, "");
+  // Arrow, % aur space hata ke sirf number (digits, dot, minus) rakhta hai
+  const t = v.toString().replace(/[^0-9.-]/g, "");
   if (t === "" || t === "-") return null;
   const n = parseFloat(t);
   return isNaN(n) ? null : n;
@@ -139,13 +140,12 @@ const DEVIATION_UP = "#16a34a";
 const DEVIATION_DOWN = "#dc2626";
 
 // Inline style isliye ki css file purani ho tab bhi red / chip dikhe
-// OTP khaali ho to poori row ka background light red
+// OTP khaali ho to poori row ka background light red (text ka color normal rahega)
 const rowMissingStyle = { background: "#fee2e2" };
 
-// Us row me OTP wala cell thoda gehra red (alag se pehchaan ke liye)
+// Us row me OTP wala cell thoda gehra red background (text ka color normal rahega)
 const otpMissingStyle = {
   background: "#fecaca",
-  color: "#b91c1c",
   fontWeight: 700,
   textAlign: "center",
 };
@@ -405,7 +405,7 @@ export default function Report() {
     const monthYear =
       `${month !== "-" ? month : ""} ${year !== "-" ? year : ""}`.trim() || "-";
 
-    // OTP khaali ho ("", "-" ya sirf space) to us cell ko red karna hai
+    // OTP khaali ho ("", "-" ya sirf space) to us row / cell ko red karna hai
     const otpValue = item.otp || item.internalOtp || "";
     const otpText = String(otpValue).trim();
     const otpMissing = otpText === "" || otpText === "-";
@@ -780,7 +780,8 @@ export default function Report() {
         headStyles: { fillColor: [22, 78, 99], textColor: 255, fontStyle: "bold" },
         alternateRowStyles: { fillColor: [248, 250, 252] },
         margin: { left: 5, right: 5 },
-        // OTP khaali ho to sirf OTP cell red; Deviation up = green, down = red
+        // OTP khaali ho to sirf OTP cell ka background red (text normal);
+        // Deviation up = green, down = red
         didParseCell: (hook) => {
           if (hook.section !== "body") return;
           const r = filteredRows[hook.row.index];
@@ -788,7 +789,6 @@ export default function Report() {
 
           if (hook.column.index === 14 && r.otpMissing) {
             hook.cell.styles.fillColor = [254, 226, 226];
-            hook.cell.styles.textColor = [185, 28, 28];
             hook.cell.styles.fontStyle = "bold";
           }
 
@@ -910,7 +910,7 @@ export default function Report() {
           submission_date: joinDateTime(r.submission_date, r.submission_time),
         });
 
-        // OTP khaali ho to sirf OTP cell red
+        // OTP khaali ho to sirf OTP cell ka background red (text normal)
         if (r.otpMissing) {
           const otpCell = excelRow.getCell("otp");
           otpCell.fill = {
@@ -918,7 +918,7 @@ export default function Report() {
             pattern: "solid",
             fgColor: { argb: "FFFEE2E2" },
           };
-          otpCell.font = { bold: true, color: { argb: "FFB91C1C" } };
+          otpCell.font = { bold: true };
         }
 
         // Deviation: up = green, down = red
@@ -1614,7 +1614,7 @@ export default function Report() {
                           )}
                         </td>
 
-                        {/* OTP khaali ho to sirf ye cell red hota hai */}
+                        {/* OTP khaali ho to ye cell thoda gehra red background hota hai */}
                         <td
                           className={r.otpMissing ? "cell-missing" : ""}
                           style={r.otpMissing ? otpMissingStyle : undefined}
