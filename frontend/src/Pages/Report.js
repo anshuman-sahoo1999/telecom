@@ -112,44 +112,62 @@ const formatUOM = (uom) => {
   return "-";
 };
 
-// Amdocs QC: arrow nikaal ke value saaf karta hai (backend ne fields na bheje ho tab ye kaam aata hai)
-// Arrow ka rule: 1) cell me ↑ ▲ / ↓ ▼ ho  2) value me +/- sign ho  3) warna Internal QC se compare
-const ARROW_UP_RE = /[↑▲⬆]/;
-const ARROW_DOWN_RE = /[↓▼⬇]/;
-const ARROW_ANY_RE = /[↑▲⬆↓▼⬇]/g;
+// "80%", "↑ 80%", "0.8" jaisi value se number nikalta hai (nahi mila to null)
+const parsePercent = (v) => {
+  if (v === null || v === undefined) return null;
+  const t = v.toString().replace(/[↑▲⬆↓▼⬇%\s]/g, "");
+  if (t === "" || t === "-") return null;
+  const n = parseFloat(t);
+  return isNaN(n) ? null : n;
+};
 
-const parseQc = (rawAmdocs, rawInternal) => {
-  const raw = (rawAmdocs ?? "").toString().trim();
-  if (!raw) return { value: "", trend: "" };
+// Deviation = Amdocs QC - Internal QC
+//   Internal 80%, Amdocs 90%  -> 10%  ↑ (green)
+//   Internal 70%, Amdocs 60%  -> 10%  ↓ (red)
+// Dono me se koi khaali ho to "-"
+const getDeviation = (internalQc, amdocsQc) => {
+  const internal = parsePercent(internalQc);
+  const amdocs = parsePercent(amdocsQc);
+  if (internal === null || amdocs === null) return { text: "-", trend: "" };
 
-  let trend = "";
-  if (ARROW_UP_RE.test(raw)) trend = "up";
-  else if (ARROW_DOWN_RE.test(raw)) trend = "down";
+  const diff = Math.round((amdocs - internal) * 100) / 100;
+  if (diff === 0) return { text: "0%", trend: "" };
+  return { text: `${Math.abs(diff)}%`, trend: diff > 0 ? "up" : "down" };
+};
 
-  let value = raw.replace(ARROW_ANY_RE, "").trim();
+const DEVIATION_UP = "#16a34a";
+const DEVIATION_DOWN = "#dc2626";
 
-  if (!trend) {
-    if (value.startsWith("-")) {
-      trend = "down";
-      value = value.slice(1).trim();
-    } else if (value.startsWith("+")) {
-      trend = "up";
-      value = value.slice(1).trim();
-    }
-  }
+// Inline style isliye ki css file purani ho tab bhi red / chip dikhe
+const otpMissingStyle = {
+  background: "#fee2e2",
+  color: "#b91c1c",
+  fontWeight: 700,
+  textAlign: "center",
+};
 
-  if (!trend) {
-    const num = parseFloat(value.replace("%", ""));
-    const internalNum = parseFloat(
-      (rawInternal ?? "").toString().replace(ARROW_ANY_RE, "").replace(/[%+]/g, "")
-    );
-    if (!isNaN(num) && !isNaN(internalNum)) {
-      if (num > internalNum) trend = "up";
-      else if (num < internalNum) trend = "down";
-    }
-  }
+const timeChipStyle = {
+  display: "inline-block",
+  marginLeft: 6,
+  padding: "1px 7px",
+  borderRadius: 999,
+  background: "#e0e7ff",
+  color: "#3730a3",
+  fontSize: 11,
+  fontWeight: 600,
+  verticalAlign: "middle",
+};
 
-  return { value, trend };
+// Deviation cell: value + uske side me arrow
+const DeviationCell = ({ text, trend }) => {
+  if (!trend) return text || "-";
+  const color = trend === "up" ? DEVIATION_UP : DEVIATION_DOWN;
+  return (
+    <span style={{ display: "inline-flex", alignItems: "center", gap: 4, fontWeight: 700, color }}>
+      <span>{text}</span>
+      <span style={{ fontSize: 16, lineHeight: 1 }}>{trend === "up" ? "↑" : "↓"}</span>
+    </span>
+  );
 };
 
 // Table me date ke side me time dikhane ke liye
@@ -158,7 +176,7 @@ const DateTimeCell = ({ date, time }) => {
   return (
     <>
       <span>{date}</span>
-      {time ? <span className="time-chip">{time}</span> : null}
+      {time ? <span className="time-chip" style={timeChipStyle}>{time}</span> : null}
     </>
   );
 };
@@ -383,23 +401,15 @@ export default function Report() {
     const monthYear =
       `${month !== "-" ? month : ""} ${year !== "-" ? year : ""}`.trim() || "-";
 
-    // OTP khaali hai ya nahi (backend ka otp_missing flag; na aaye to yahin se check)
+    // OTP khaali ho ("", "-" ya sirf space) to us cell ko red karna hai
     const otpValue = item.otp || item.internalOtp || "";
-    const otpMissing =
-      item.otp_missing !== undefined ? !!item.otp_missing : !String(otpValue).trim();
+    const otpText = String(otpValue).trim();
+    const otpMissing = otpText === "" || otpText === "-";
 
-    // Amdocs QC: value + arrow (backend ke amdocs_qc_trend se, warna yahin nikalta hai)
-    const qc =
-      item.amdocs_qc_trend !== undefined
-        ? {
-            value: (item.amdocs_qc ?? "").toString().trim(),
-            trend: item.amdocs_qc_trend || "",
-          }
-        : parseQc(
-            item.amdocs_qc ?? item.amdocsQc,
-            item.internal_qc ?? item.internalQc
-          );
-    const qcArrow = qc.trend === "up" ? "↑" : qc.trend === "down" ? "↓" : "";
+    // Deviation = Amdocs QC - Internal QC
+    const internalQcValue = item.internal_qc || item.internalQc || "";
+    const amdocsQcValue = item.amdocs_qc || item.amdocsQc || "";
+    const dev = getDeviation(internalQcValue, amdocsQcValue);
 
     rows.push({
       id: item.id || item._id,
@@ -445,10 +455,10 @@ export default function Report() {
       uom: cleanUom(item.uom),
       otp: otpValue || "-",
       otpMissing,
-      internal_qc: item.internal_qc || item.internalQc || "-",
-      amdocs_qc: qc.value || "-",
-      amdocsTrend: qc.trend,
-      amdocsArrow: qcArrow,
+      internal_qc: internalQcValue || "-",
+      amdocs_qc: amdocsQcValue || "-",
+      deviation: dev.text,
+      deviationTrend: dev.trend,
       receive_date: toDateKey(item.receive_date),
       receive_time: toTimeKey(item.receive_date),
       ecd_date: toDateKey(item.ecd_date),
@@ -621,16 +631,19 @@ export default function Report() {
         : r.state;
 
   // PDF ka font arrow (↑ ↓) nahi chhap sakta, isliye PDF me "Up" / "Down" likha jata hai
-  const getPdfQcText = (r) => {
-    if (r.amdocs_qc === "-") return "-";
-    if (r.amdocsTrend === "up") return `Up ${r.amdocs_qc}`;
-    if (r.amdocsTrend === "down") return `Down ${r.amdocs_qc}`;
-    return r.amdocs_qc;
+  const getPdfDeviationText = (r) => {
+    if (r.deviation === "-") return "-";
+    if (r.deviationTrend === "up") return `${r.deviation} Up`;
+    if (r.deviationTrend === "down") return `${r.deviation} Down`;
+    return r.deviation;
   };
 
   // Excel me asli arrow chal jata hai
-  const getExcelQcText = (r) =>
-    r.amdocsArrow && r.amdocs_qc !== "-" ? `${r.amdocsArrow} ${r.amdocs_qc}` : r.amdocs_qc;
+  const getExcelDeviationText = (r) => {
+    if (r.deviationTrend === "up") return `${r.deviation} ↑`;
+    if (r.deviationTrend === "down") return `${r.deviation} ↓`;
+    return r.deviation;
+  };
 
   const downloadPDF = async () => {
     if (isGeneratingPDF) return;
@@ -743,7 +756,8 @@ export default function Report() {
         formatUOM(r.uom),
         r.otp,
         r.internal_qc,
-        getPdfQcText(r),
+        r.amdocs_qc,
+        getPdfDeviationText(r),
         joinDateTime(r.receive_date, r.receive_time) || "-",
         r.ecd_date || "-",
         joinDateTime(r.submission_date, r.submission_time) || "-",
@@ -755,14 +769,14 @@ export default function Report() {
         head: [[
           "Sl", "Month", "Year", "Domain", "SOW", "Job Type", "Region", "Market",
           "Job ID", "Status", "Prod Eng", "QC Eng", "Jobs", "UOM", "OTP",
-          "Int QC", "Amdocs QC", "Receive Date", "ECD Date", "Submission Date"
+          "Int QC", "Amdocs QC", "Deviation", "Receive Date", "ECD Date", "Submission Date"
         ]],
         body: tableData,
         styles: { fontSize: 4.5, cellPadding: 1.5, overflow: "linebreak", valign: "middle", halign: "center" },
         headStyles: { fillColor: [22, 78, 99], textColor: 255, fontStyle: "bold" },
         alternateRowStyles: { fillColor: [248, 250, 252] },
         margin: { left: 5, right: 5 },
-        // OTP khaali ho to sirf OTP cell red; Amdocs QC up = green, down = red
+        // OTP khaali ho to sirf OTP cell red; Deviation up = green, down = red
         didParseCell: (hook) => {
           if (hook.section !== "body") return;
           const r = filteredRows[hook.row.index];
@@ -774,9 +788,9 @@ export default function Report() {
             hook.cell.styles.fontStyle = "bold";
           }
 
-          if (hook.column.index === 16 && r.amdocsTrend) {
+          if (hook.column.index === 17 && r.deviationTrend) {
             hook.cell.styles.textColor =
-              r.amdocsTrend === "up" ? [22, 163, 74] : [220, 38, 38];
+              r.deviationTrend === "up" ? [22, 163, 74] : [220, 38, 38];
             hook.cell.styles.fontStyle = "bold";
           }
         },
@@ -861,6 +875,7 @@ export default function Report() {
         { header: "OTP", key: "otp", width: 15 },
         { header: "Internal QC", key: "internal_qc", width: 15 },
         { header: "Amdocs QC", key: "amdocs_qc", width: 15 },
+        { header: "Deviation", key: "deviation", width: 15 },
         { header: "Receive Date", key: "receive_date", width: 20 },
         { header: "ECD Date", key: "ecd_date", width: 15 },
         { header: "Submission Date", key: "submission_date", width: 20 },
@@ -884,7 +899,8 @@ export default function Report() {
           uom: formatUOM(r.uom),
           otp: r.otp,
           internal_qc: r.internal_qc,
-          amdocs_qc: getExcelQcText(r),
+          amdocs_qc: r.amdocs_qc,
+          deviation: getExcelDeviationText(r),
           receive_date: joinDateTime(r.receive_date, r.receive_time),
           ecd_date: r.ecd_date || "",
           submission_date: joinDateTime(r.submission_date, r.submission_time),
@@ -901,11 +917,11 @@ export default function Report() {
           otpCell.font = { bold: true, color: { argb: "FFB91C1C" } };
         }
 
-        // Amdocs QC: up = green, down = red
-        if (r.amdocsTrend) {
-          excelRow.getCell("amdocs_qc").font = {
+        // Deviation: up = green, down = red
+        if (r.deviationTrend) {
+          excelRow.getCell("deviation").font = {
             bold: true,
-            color: { argb: r.amdocsTrend === "up" ? "FF16A34A" : "FFDC2626" },
+            color: { argb: r.deviationTrend === "up" ? "FF16A34A" : "FFDC2626" },
           };
         }
       });
@@ -1382,6 +1398,7 @@ export default function Report() {
                   <th>OTP</th>
                   <th>Internal QC</th>
                   <th>Amdocs QC</th>
+                  <th>Deviation</th>
                   <th>Receive Date</th>
                   <th>ECD Date</th>
                   <th>Submission Date</th>
@@ -1393,6 +1410,10 @@ export default function Report() {
                   currentRows.map((r, i) => {
                     // r.id undefined ho to sab rows ek saath edit mode mein na jayein
                     const isEditing = r.id !== undefined && editingRowId === r.id;
+                    // Edit karte waqt deviation live badalta hai
+                    const dev = isEditing
+                      ? getDeviation(editForm.internal_qc, editForm.amdocs_qc)
+                      : { text: r.deviation, trend: r.deviationTrend };
 
                     return (
                       <tr key={r.id ?? `row-${i}`}>
@@ -1586,7 +1607,10 @@ export default function Report() {
                         </td>
 
                         {/* OTP khaali ho to sirf ye cell red hota hai */}
-                        <td className={!isEditing && r.otpMissing ? "cell-missing" : ""}>
+                        <td
+                          className={!isEditing && r.otpMissing ? "cell-missing" : ""}
+                          style={!isEditing && r.otpMissing ? otpMissingStyle : undefined}
+                        >
                           {isEditing ? (
                             <input
                               value={editForm.otp || ""}
@@ -1610,7 +1634,6 @@ export default function Report() {
                           )}
                         </td>
 
-                        {/* Amdocs QC: arrow (↑ green / ↓ red) aur uske bilkul right me value */}
                         <td>
                           {isEditing ? (
                             <input
@@ -1618,16 +1641,14 @@ export default function Report() {
                               onChange={(e) => handleChange("amdocs_qc", e.target.value)}
                               style={{ width: "60px" }}
                             />
-                          ) : r.amdocs_qc === "-" ? (
-                            "-"
                           ) : (
-                            <span className={`qc-trend ${r.amdocsTrend}`}>
-                              {r.amdocsArrow ? (
-                                <span className="qc-arrow">{r.amdocsArrow}</span>
-                              ) : null}
-                              <span className="qc-value">{r.amdocs_qc}</span>
-                            </span>
+                            r.amdocs_qc
                           )}
+                        </td>
+
+                        {/* Deviation = Amdocs QC - Internal QC (value ke side me ↑ green / ↓ red) */}
+                        <td>
+                          <DeviationCell text={dev.text} trend={dev.trend} />
                         </td>
 
                         {/* Receive Date: date ke side me time */}
@@ -1720,7 +1741,7 @@ export default function Report() {
                   })
                 ) : (
                   <tr>
-                    <td colSpan="20" className="no-data">
+                    <td colSpan="21" className="no-data">
                       ❌ No data found
                     </td>
                   </tr>
