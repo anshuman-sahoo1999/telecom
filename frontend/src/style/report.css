@@ -210,19 +210,64 @@ input:disabled {
   background: #f8fafc;
 }
 
-.table tbody tr.light-orange-row {
-  background-color: #ffedd5 !important;
-}
-
-.table tbody tr.light-orange-row:hover {
-  background-color: #fed7aa !important;
-}
-
 .table td.no-data {
   text-align: center;
   padding: 40px;
   color: #64748b;
   font-weight: 600;
+}
+
+/* --- OTP khaali ho to sirf OTP cell red (poori row nahi) --- */
+.table td.cell-missing {
+  background-color: #fee2e2;
+  color: #b91c1c;
+  font-weight: 700;
+  text-align: center;
+}
+
+/* --- Amdocs QC: arrow aur uske bilkul right me value --- */
+.qc-trend {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-weight: 700;
+}
+
+.qc-trend.up   { color: #16a34a; }
+.qc-trend.down { color: #dc2626; }
+
+.qc-arrow {
+  font-size: 16px;
+  line-height: 1;
+}
+
+.qc-value {
+  line-height: 1;
+}
+
+/* --- Date ke side me time --- */
+.time-chip {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: #e0e7ff;
+  color: #3730a3;
+  font-size: 11px;
+  font-weight: 600;
+  vertical-align: middle;
+}
+
+/* --- Edit mode me date + time ek line me --- */
+.datetime-edit {
+  display: flex;
+  gap: 4px;
+  align-items: center;
+}
+
+.datetime-edit input {
+  padding: 6px 8px;
+  font-size: 12px;
 }
 
 /* ==========================================================================
