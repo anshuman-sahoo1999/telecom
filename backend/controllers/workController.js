@@ -277,6 +277,7 @@ const extractTime = (v) => {
 };
 
 // Date + (alag Time column ho to wo) -> "MM-DD-YYYY HH:mm"; time na ho to sirf "MM-DD-YYYY"
+// Ye Receive, ECD aur Submission, teeno dates ke liye use hota hai
 const parseDateTime = (dateVal, timeVal) => {
   if (dateVal === null || dateVal === undefined || dateVal === "") return null;
 
@@ -294,7 +295,7 @@ const formatDateToMMDDYYYY = (dateVal) => {
   let strVal = dateVal.toString().trim();
 
   // "MM-DD-YYYY" ya "MM-DD-YYYY HH:mm" pehle se sahi format me hai to waisa hi rakho (time bhi)
-  const mdyTime = strVal.match(/^(\d{2}-\d{2}-\d{4})(?:[ T]+(\d{1,2}:\d{2}))?$/);
+  const mdyTime = strVal.match(/^(\d{2}-\d{2}-\d{4})(?:[ T]+(\d{1,2}:\d{2})(?::\d{2})?)?$/);
   if (mdyTime) return mdyTime[2] ? `${mdyTime[1]} ${mdyTime[2]}` : mdyTime[1];
 
   const isoMatch = strVal.match(/^(\d{4})-(\d{2})-(\d{2})/);
@@ -346,13 +347,15 @@ const compressKey = (s) => {
   return v;
 };
 
-// Time wale columns: koi bhi header jisme "receive...time" ya "submi...time" ho (Received Time, Receive Time (IST), ...)
-// Ye UOM me nahi jaane chahiye, ye date ke saath judte hain
+// Time wale columns: koi bhi header jisme "receive...time", "ecd...time" ya "submi...time" ho
+// (Received Time, Receive Time (IST), ECD Time, Submission Time, ...)
+// Ye UOM me nahi jaane chahiye, ye apni date ke saath judte hain
 const RECEIVE_TIME_RE = /receiv.*time/;
+const ECD_TIME_RE = /ecd.*time/;
 const SUBMISSION_TIME_RE = /submi.*time/;
 const isTimeColumnKey = (key) => {
   const c = compressKey(key);
-  return RECEIVE_TIME_RE.test(c) || SUBMISSION_TIME_RE.test(c);
+  return RECEIVE_TIME_RE.test(c) || ECD_TIME_RE.test(c) || SUBMISSION_TIME_RE.test(c);
 };
 const findTimeInRow = (row, re) => {
   for (const key of Object.keys(row)) {
@@ -691,7 +694,11 @@ const parseImportRow = (row, sheetName) => {
     findValueInRow(row, ["Receive Date", "receive_date", "receive-date", "received date", "received_date", "Receive Date Time", "Received Date Time"]),
     findTimeInRow(row, RECEIVE_TIME_RE)
   );
-  const ecdDateVal = parseExcelDate(findValueInRow(row, ["ECD Date", "ecd_date", "ecd-date", "ecddate", "ECD"]));
+  // ECD Date bhi ab date + time ke saath save hoti hai (pehle sirf date jaati thi)
+  const ecdDateVal = parseDateTime(
+    findValueInRow(row, ["ECD Date", "ecd_date", "ecd-date", "ecddate", "ECD", "ECD Date Time"]),
+    findTimeInRow(row, ECD_TIME_RE)
+  );
   const submissionDateVal = parseDateTime(
     findValueInRow(row, ["Submission Date", "submission_date", "submission-date", "Submission Date Time"]),
     findTimeInRow(row, SUBMISSION_TIME_RE)
@@ -1265,6 +1272,7 @@ const createWork = async (req, res) => {
   const ecd_date = pick(b, "ecd_date", "ecdDate");
   const submission_date = pick(b, "submission_date", "submissionDate");
   const receive_time = pick(b, "receive_time", "receiveTime", "received_time", "receivedTime");
+  const ecd_time = pick(b, "ecd_time", "ecdTime");
   const submission_time = pick(b, "submission_time", "submissionTime");
 
   const fixedDomain = normalize(domain);
@@ -1275,7 +1283,7 @@ const createWork = async (req, res) => {
   const formattedAmdocsQc = formatPercentage(amdocs_qc);
 
   const formattedReceiveDate = parseDateTime(receive_date, receive_time);
-  const formattedEcdDate = parseExcelDate(ecd_date);
+  const formattedEcdDate = parseDateTime(ecd_date, ecd_time);
   const formattedSubmissionDate = parseDateTime(submission_date, submission_time);
 
   const parsedMonths = parseMonthsInput(months);
@@ -1420,6 +1428,7 @@ const updateWork = async (req, res) => {
   const ecd_date = pick(b, "ecd_date", "ecdDate");
   const submission_date = pick(b, "submission_date", "submissionDate");
   const receive_time = pick(b, "receive_time", "receiveTime", "received_time", "receivedTime");
+  const ecd_time = pick(b, "ecd_time", "ecdTime");
   const submission_time = pick(b, "submission_time", "submissionTime");
 
   const has = (v) => v !== undefined;
@@ -1471,7 +1480,8 @@ const updateWork = async (req, res) => {
     if (dateVals.receiveDate === null) clearedDateCols.push("receiveDate");
   }
   if (has(ecd_date)) {
-    dateVals.ecdDate = parseExcelDate(ecd_date);
+    // ECD me bhi ab date ke saath time save hota hai
+    dateVals.ecdDate = parseDateTime(ecd_date, ecd_time);
     setCol("ecd_date", dateVals.ecdDate);
     if (dateVals.ecdDate === null) clearedDateCols.push("ecdDate");
   }
@@ -1593,9 +1603,9 @@ const cleanUomOutput = (uom) => {
   return wasString ? JSON.stringify(out) : out;
 };
 
-// Purane imports me "Received Time" / "Submission Time" galti se UOM me save ho gayi thi.
+// Purane imports me "Received Time" / "ECD Time" / "Submission Time" galti se UOM me save ho gayi thi.
 // Yahan wo time wapas date ke saath jod dete hain aur UOM se hata dete hain.
-// (Koi naya field / column nahi banta, sirf receive_date / submission_date me time judta hai)
+// (Koi naya field / column nahi banta, sirf receive_date / ecd_date / submission_date me time judta hai)
 const finalizeRow = (r) => {
   const raw = r.uom;
   if (raw === null || raw === undefined) return r;
@@ -1606,10 +1616,12 @@ const finalizeRow = (r) => {
 
   const out = {};
   let recvTime = "";
+  let ecdTime = "";
   let subTime = "";
   Object.keys(obj).forEach((k) => {
     const c = compressKey(k);
     if (RECEIVE_TIME_RE.test(c)) recvTime = recvTime || extractTime(obj[k]);
+    else if (ECD_TIME_RE.test(c)) ecdTime = ecdTime || extractTime(obj[k]);
     else if (SUBMISSION_TIME_RE.test(c)) subTime = subTime || extractTime(obj[k]);
     else out[k] = obj[k];
   });
@@ -1624,6 +1636,7 @@ const finalizeRow = (r) => {
     ...r,
     uom: wasString ? JSON.stringify(out) : out,
     receive_date: withTime(r.receive_date, recvTime),
+    ecd_date: withTime(r.ecd_date, ecdTime),
     submission_date: withTime(r.submission_date, subTime)
   };
 };
