@@ -84,7 +84,7 @@ const formatArrayOrString = (val) => {
 // "Received Time" / "Submission Time" jaisi keys UOM nahi hain (purane data me galti se UOM me aa gayi thi)
 const isTimeUomKey = (key) => {
   const c = (key || "").toString().toLowerCase().replace(/[^a-z0-9]/g, "");
-  return /(receiv|submi|ecd).*time/.test(c);
+  return /(receiv|submi).*time/.test(c);
 };
 
 const cleanUom = (uom) => {
@@ -466,7 +466,6 @@ export default function Report() {
       receive_date: toDateKey(item.receive_date),
       receive_time: toTimeKey(item.receive_date),
       ecd_date: toDateKey(item.ecd_date),
-      ecd_time: toTimeKey(item.ecd_date),
       submission_date: toDateKey(item.submission_date),
       submission_time: toTimeKey(item.submission_date),
 
@@ -764,7 +763,7 @@ export default function Report() {
         r.amdocs_qc,
         getPdfDeviationText(r),
         joinDateTime(r.receive_date, r.receive_time) || "-",
-        joinDateTime(r.ecd_date, r.ecd_time) || "-",
+        r.ecd_date || "-",
         joinDateTime(r.submission_date, r.submission_time) || "-",
       ]);
 
@@ -882,7 +881,7 @@ export default function Report() {
         { header: "Amdocs QC", key: "amdocs_qc", width: 15 },
         { header: "Deviation", key: "deviation", width: 15 },
         { header: "Receive Date", key: "receive_date", width: 20 },
-        { header: "ECD Date", key: "ecd_date", width: 20 },
+        { header: "ECD Date", key: "ecd_date", width: 15 },
         { header: "Submission Date", key: "submission_date", width: 20 },
       ];
 
@@ -907,7 +906,7 @@ export default function Report() {
           amdocs_qc: r.amdocs_qc,
           deviation: getExcelDeviationText(r),
           receive_date: joinDateTime(r.receive_date, r.receive_time),
-          ecd_date: joinDateTime(r.ecd_date, r.ecd_time),
+          ecd_date: r.ecd_date || "",
           submission_date: joinDateTime(r.submission_date, r.submission_time),
         });
 
@@ -984,7 +983,6 @@ export default function Report() {
       receive_date: row.receive_date || "",
       receive_time: row.receive_time || "",
       ecd_date: row.ecd_date || "",
-      ecd_time: row.ecd_time || "",
       submission_date: row.submission_date || "",
       submission_time: row.submission_time || "",
       month: fromDisplay(row.month),
@@ -1076,7 +1074,6 @@ export default function Report() {
         receive_date: editForm.receive_date || null,
         receive_time: editForm.receive_time || "",
         ecd_date: editForm.ecd_date || null,
-        ecd_time: editForm.ecd_time || "",
         submission_date: editForm.submission_date || null,
         submission_time: editForm.submission_time || "",
       };
@@ -1682,23 +1679,15 @@ export default function Report() {
                           )}
                         </td>
 
-                        {/* ECD Date: date ke side me time */}
                         <td>
                           {isEditing ? (
-                            <div className="datetime-edit">
-                              <input
-                                type="date"
-                                value={editForm.ecd_date || ""}
-                                onChange={(e) => handleChange("ecd_date", e.target.value)}
-                              />
-                              <input
-                                type="time"
-                                value={editForm.ecd_time || ""}
-                                onChange={(e) => handleChange("ecd_time", e.target.value)}
-                              />
-                            </div>
+                            <input
+                              type="date"
+                              value={editForm.ecd_date || ""}
+                              onChange={(e) => handleChange("ecd_date", e.target.value)}
+                            />
                           ) : (
-                            <DateTimeCell date={r.ecd_date} time={r.ecd_time} />
+                            r.ecd_date || "-"
                           )}
                         </td>
 
