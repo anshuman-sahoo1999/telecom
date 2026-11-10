@@ -204,15 +204,70 @@ const unwrapCell = (val) => {
   return val;
 };
 
+/* ======================================
+   DATE / TIME HELPERS (FIXED)
+   Ab ye sab formats sahi padhe jaate hain:
+   - "11/3/2026, 3.32 AM"   (comma + nbsp + dot wala time)
+   - "11-04-2026, 5.53 PM"
+   - "01-02--2026"          (double dash)
+   - Time column: "9.00 PM", "12.55 PM", "10-31 PM", Excel time cell
+====================================== */
+const pad = (n) => String(n).padStart(2, "0");
+
+// nbsp / zero-width / extra spaces saaf
+const cleanText = (s) =>
+  String(s).replace(/[\u00A0\u200B\uFEFF]/g, " ").replace(/\s+/g, " ").trim();
+
+// "11/3/2026", "11-04-2026", "01-02--2026"
+const TEXT_DATE_RE = /(?<!\d)(\d{1,2})\s*[-/.]+\s*(\d{1,2})\s*[-/.]+\s*(\d{4})(?!\d)/;
+// "3.32 AM", "10-31 PM", "9:05 pm", "9 PM"
+const TEXT_TIME_AMPM_RE = /(?<!\d)(\d{1,2})(?:\s*[:.\-]\s*(\d{2}))?(?:\s*[:.\-]\s*\d{2})?\s*([AaPp])\.?\s*[Mm]\.?(?![A-Za-z])/;
+// 24 ghante: "17:53", "17:53:10"
+const TEXT_TIME_24_RE = /(?<!\d)(\d{1,2}):(\d{2})(?::\d{2}(?:\.\d+)?)?(?!\d)/;
+
+const timeFromText = (s) => {
+  const t = cleanText(s);
+  let h, min;
+  let m = t.match(TEXT_TIME_AMPM_RE);
+  if (m) {
+    h = Number(m[1]);
+    min = m[2] !== undefined ? Number(m[2]) : 0;
+    const ap = m[3].toLowerCase(); // "a" ya "p"
+    if (h < 1 || h > 12 || min > 59) return "";
+    if (ap === "p" && h < 12) h += 12;
+    if (ap === "a" && h === 12) h = 0;
+  } else {
+    m = t.match(TEXT_TIME_24_RE);
+    if (!m) return "";
+    h = Number(m[1]);
+    min = Number(m[2]);
+    if (h > 23 || min > 59) return "";
+  }
+  return h === 0 && min === 0 ? "" : `${pad(h)}:${pad(min)}`;
+};
+
 const parseExcelDate = (value) => {
   if (!value) return null;
 
-  let strVal = value.toString().trim();
+  let strVal = cleanText(value instanceof Date ? "" : value.toString());
   if (/^\d{2}-\d{2}-\d{4}$/.test(strVal)) return strVal;
   const isoMatch = strVal.match(/^(\d{4})-(\d{2})-(\d{2})/);
   if (isoMatch) {
     const [, year, month, day] = isoMatch;
     return `${month}-${day}-${year}`;
+  }
+
+  // Text date: "11/3/2026, 3.32 AM", "11-04-2026, 5.53 PM", "01-02--2026", "1/20/2026"
+  if (typeof value === "string") {
+    const tm = strVal.match(TEXT_DATE_RE);
+    if (tm) {
+      let mo = Number(tm[1]);
+      let dy = Number(tm[2]);
+      if (mo > 12 && dy <= 12) [mo, dy] = [dy, mo]; // DD-MM likha ho to ulta
+      if (mo >= 1 && mo <= 12 && dy >= 1 && dy <= 31) {
+        return `${pad(mo)}-${pad(dy)}-${tm[3]}`;
+      }
+    }
   }
 
   let d;
@@ -222,7 +277,7 @@ const parseExcelDate = (value) => {
     d = value;
     useUTC = true;
   } else if (typeof value === "number" || /^\d{5}(\.\d+)?$/.test(strVal)) {
-    d = new Date(Math.round((Number(value) - (25567 + 2)) * 86400 * 1000));
+    d = new Date(Math.round((Number(value) - 25569) * 86400 * 1000));
     useUTC = true;
   } else if (/^\d+(\.\d+)?$/.test(strVal)) {
     return strVal;
@@ -233,8 +288,8 @@ const parseExcelDate = (value) => {
   if (!d || isNaN(d.getTime())) return strVal;
 
   const year = useUTC ? d.getUTCFullYear() : d.getFullYear();
-  const month = String((useUTC ? d.getUTCMonth() : d.getMonth()) + 1).padStart(2, '0');
-  const day = String(useUTC ? d.getUTCDate() : d.getDate()).padStart(2, '0');
+  const month = pad((useUTC ? d.getUTCMonth() : d.getMonth()) + 1);
+  const day = pad(useUTC ? d.getUTCDate() : d.getDate());
 
   return `${month}-${day}-${year}`;
 };
@@ -243,16 +298,17 @@ const parseExcelDate = (value) => {
 // Time na ho ya 00:00 ho to "" (matlab sirf date).
 const extractTime = (v) => {
   if (v === null || v === undefined || v === "") return "";
-  const pad = (n) => String(n).padStart(2, "0");
 
   if (v instanceof Date) {
     if (isNaN(v.getTime())) return "";
-    const h = v.getUTCHours();
-    const m = v.getUTCMinutes();
+    // +30s: Excel float error se 10:59:59.99 -> 10:59 na ban jaye
+    const d = new Date(v.getTime() + 30000);
+    const h = d.getUTCHours();
+    const m = d.getUTCMinutes();
     return h === 0 && m === 0 ? "" : `${pad(h)}:${pad(m)}`;
   }
 
-  const s = v.toString().trim();
+  const s = cleanText(v);
   if (!s) return "";
 
   // Excel number: poora hissa = din, dashmlav ka hissa = time (0.5 = 12:00)
@@ -264,34 +320,25 @@ const extractTime = (v) => {
     return `${pad(Math.floor(total / 60))}:${pad(total % 60)}`;
   }
 
-  // Text: "10:30", "10:30:15", "10:30 PM"
-  const m = s.match(/(\d{1,2}):(\d{2})(?::\d{2}(?:\.\d+)?)?\s*([AaPp][Mm])?/);
-  if (!m) return "";
-  let h = Number(m[1]);
-  const min = Number(m[2]);
-  const ap = m[3] ? m[3].toLowerCase() : "";
-  if (ap === "pm" && h < 12) h += 12;
-  if (ap === "am" && h === 12) h = 0;
-  if (h > 23 || min > 59) return "";
-  return h === 0 && min === 0 ? "" : `${pad(h)}:${pad(min)}`;
+  // Text: "10:30", "10:30 PM", "9.00 PM", "10-31 PM"
+  return timeFromText(s);
 };
 
 // Date + (alag Time column ho to wo) -> "MM-DD-YYYY HH:mm"; time na ho to sirf "MM-DD-YYYY"
 const parseDateTime = (dateVal, timeVal) => {
   if (dateVal === null || dateVal === undefined || dateVal === "") return null;
 
-  let datePart;
-  const mdy = typeof dateVal === "string" ? dateVal.trim().match(/^(\d{2}-\d{2}-\d{4})(?=$|[\sT])/) : null;
-  datePart = mdy ? mdy[1] : parseExcelDate(dateVal);
+  const datePart = parseExcelDate(dateVal);
   if (!datePart) return null;
 
+  // pehle date ke andar se time (e.g. "11/3/2026, 3.32 AM"), na mile to alag Time column se
   const time = extractTime(dateVal) || extractTime(timeVal);
   return time ? `${datePart} ${time}` : datePart;
 };
 
 const formatDateToMMDDYYYY = (dateVal) => {
   if (!dateVal) return "";
-  let strVal = dateVal.toString().trim();
+  const strVal = cleanText(dateVal.toString());
 
   // "MM-DD-YYYY" ya "MM-DD-YYYY HH:mm" pehle se sahi format me hai to waisa hi rakho (time bhi)
   const mdyTime = strVal.match(/^(\d{2}-\d{2}-\d{4})(?:[ T]+(\d{1,2}:\d{2}))?$/);
@@ -303,7 +350,8 @@ const formatDateToMMDDYYYY = (dateVal) => {
     return `${month}-${day}-${year}`;
   }
 
-  return parseExcelDate(strVal) || strVal;
+  // purani galat raw text wali rows bhi (date + time) sahi dikhengi
+  return parseDateTime(strVal, "") || strVal;
 };
 
 const isZeroValue = (v) => {
@@ -407,7 +455,7 @@ const formatMonth = (value) => {
     }
   }
 
-  let strVal = String(value).trim();
+  let strVal = cleanText(String(value));
   if (!strVal) return null;
   if (/^[A-Za-z]{3},\d{4}$/.test(strVal)) return strVal;
   let m = strVal.match(/^(\d{4})-(\d{1,2})(?:-\d{1,2})?$/);
