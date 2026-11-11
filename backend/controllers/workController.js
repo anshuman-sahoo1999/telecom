@@ -288,10 +288,19 @@ const parseExcelDate = (value) => {
   if (!d || isNaN(d.getTime())) return strVal;
 
   const year = useUTC ? d.getUTCFullYear() : d.getFullYear();
-  const month = pad((useUTC ? d.getUTCMonth() : d.getMonth()) + 1);
-  const day = pad(useUTC ? d.getUTCDate() : d.getDate());
+  let monthNum = (useUTC ? d.getUTCMonth() : d.getMonth()) + 1;
+  let dayNum = useUTC ? d.getUTCDate() : d.getDate();
 
-  return `${month}-${day}-${year}`;
+  // Excel ke asli Date cells (Date object / serial number) me din aur mahina ulta aata hai:
+  // sheet me "01-05-2026" (Jan 5) likha tha, par Excel ne use 1 May padh liya.
+  // Excel wahi cell din-pehle dikhata hai ("01-05-2026"), isliye jo Excel me dikhta hai wahi
+  // chahiye to din ko mahina maanna padega. (Month column se match karne par ~90% rows me yahi sahi nikla.)
+  // Agar din 12 se bada hai to wo asli date hai, use waisa hi rakho.
+  if (useUTC && dayNum <= 12) {
+    [monthNum, dayNum] = [dayNum, monthNum];
+  }
+
+  return `${pad(monthNum)}-${pad(dayNum)}-${year}`;
 };
 
 // Kisi bhi value (Date / Excel number / text) me se "HH:mm" (24 ghante) nikalta hai.
@@ -1004,6 +1013,8 @@ const importExcel = async (req, res) => {
     }
 
     lastBulkError = "";
+    // Import se pehle date columns ko time ke layak chaude kar do (chhote hon to time kat jata hai)
+    const dateColumnWarnings = await ensureDateTimeColumns();
     const importStartedAt = Date.now();
     const workbook = new ExcelJS.Workbook();
     await workbook.xlsx.load(req.file.buffer);
@@ -1082,6 +1093,11 @@ const importExcel = async (req, res) => {
         }
       }
     }
+
+    const hasClock = (v) => /\d{1,2}:\d{2}/.test(String(v || ""));
+    const timeRowsParsed = records.filter(
+      (r) => hasClock(r.receiveDateVal) || hasClock(r.submissionDateVal)
+    ).length;
 
     lap("readExcelRows");
 
@@ -1246,6 +1262,17 @@ const importExcel = async (req, res) => {
     }
     lap("syncJobCreation");
 
+    // Check: DB me kitni rows ke date me time (HH:mm) save hua
+    let timeRowsInDb = null;
+    try {
+      const chk = await query(
+        "SELECT COUNT(*) AS c FROM work_updates WHERE receive_date LIKE '%:%' OR submission_date LIKE '%:%'"
+      );
+      timeRowsInDb = chk && chk[0] ? Number(chk[0].c) : null;
+    } catch (e) {
+      console.error("time check failed:", e.message);
+    }
+
     timings.total = Date.now() - importStartedAt;
     console.log(
       `Import timings (ms) for "${req.file.originalname}": rows=${totalRows}, inserts=${inserts.length}, updates=${updates.length}`,
@@ -1268,6 +1295,9 @@ const importExcel = async (req, res) => {
       insertedOrUpdated: success,
       failed,
       timings,
+      timeRowsParsed,
+      timeRowsInDb,
+      dateColumnWarnings,
       lastError: failed > 0 ? lastBulkError : ""
     });
 
@@ -2012,6 +2042,7 @@ const DATETIME_COLUMNS = [
 ];
 
 const ensureDateTimeColumns = async () => {
+  const warnings = [];
   for (const { table, columns } of DATETIME_COLUMNS) {
     try {
       const found = await query(
@@ -2024,16 +2055,26 @@ const ensureDateTimeColumns = async () => {
       for (const col of found || []) {
         const type = String(col.type || "").toLowerCase();
         if ((type === "varchar" || type === "char") && Number(col.len) < 30) {
-          await query(`ALTER TABLE ${table} MODIFY ${col.name} VARCHAR(30) NULL DEFAULT NULL`);
-          console.log(`Column widened: ${table}.${col.name} ${type}(${col.len}) -> VARCHAR(30)`);
+          try {
+            await query(`ALTER TABLE ${table} MODIFY ${col.name} VARCHAR(30) NULL DEFAULT NULL`);
+            console.log(`Column widened: ${table}.${col.name} ${type}(${col.len}) -> VARCHAR(30)`);
+          } catch (alterErr) {
+            const msg = `${table}.${col.name} chhota hai (${type}(${col.len})) aur widen nahi ho paya: ${alterErr.message}`;
+            console.error(msg);
+            warnings.push(msg);
+          }
         } else if (!["varchar", "char", "text", "tinytext", "mediumtext", "longtext"].includes(type)) {
-          console.warn(`${table}.${col.name} ka type ${type} hai, time save nahi hoga. Ise VARCHAR(30) kar do.`);
+          const msg = `${table}.${col.name} ka type ${type} hai, time save nahi hoga. Ise VARCHAR(30) kar do.`;
+          console.warn(msg);
+          warnings.push(msg);
         }
       }
     } catch (err) {
       console.error(`ensureDateTimeColumns(${table}) skipped:`, err.message);
+      warnings.push(`${table}: ${err.message}`);
     }
   }
+  return warnings;
 };
 ensureDateTimeColumns();
 
