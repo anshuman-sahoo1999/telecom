@@ -12,54 +12,46 @@ import {
 } from "lucide-react";
 
 import "../style/workupdate.css";
-const pad2 = (n) => String(n).padStart(2, "0");
-
-// "03-05-2026 10:30" / "2026-03-05 10:30" me se "10:30" nikalta hai. Time na ho (ya 00:00) to "".
-const timeFromString = (s) => {
-  // ISO + Z (timezone wali string) ka time bharosemand nahi
-  if (/^\d{4}-\d{2}-\d{2}T.*Z$/.test(s)) return "";
-  const m = s.match(/[\sT](\d{1,2}):(\d{2})/);
-  if (!m) return "";
-  if (Number(m[1]) === 0 && Number(m[2]) === 0) return "";
-  return `${pad2(m[1])}:${m[2]}`;
+// "17:53" -> "5.53 PM" (Excel jaisa). 00:00 ya galat value ho to "" (matlab sirf date)
+const timeToAmPm = (hh, mm) => {
+  const h = Number(hh);
+  const m = Number(mm);
+  if (isNaN(h) || isNaN(m) || h > 23 || m > 59) return "";
+  if (h === 0 && m === 0) return "";
+  return `${h % 12 || 12}.${String(m).padStart(2, "0")} ${h >= 12 ? "PM" : "AM"}`;
 };
 
-// Saved date ko "YYYY-MM-DD HH:mm" me dikhata hai (time ho tab). Time na ho to sirf date.
-const formatDateForView = (val) => {
+// Date + time dono dikhata hai: "11/4/2026, 5.53 PM". Time na ho to sirf "11/4/2026".
+// `display` backend se aata hai (receive_date_display, ...), wahi sabse pehle use hota hai.
+// Fallback me "MM-DD-YYYY HH:mm" aur "YYYY-MM-DD[ T]HH:mm" ko string se hi todte hain
+// (new Date()/toISOString() nahi, kyunki usse time kat jata hai aur timezone se date khisak jaati hai).
+const formatDateForView = (val, display) => {
+  if (display && String(display).trim()) return String(display).trim();
   if (!val) return "";
   const str = val.toString().trim();
-  const time = timeFromString(str);
-  const withTime = (date) => (time ? `${date} ${time}` : date);
 
-  let m = str.match(/^(\d{4})-(\d{2})-(\d{2})/);
-  if (m) return withTime(`${m[1]}-${m[2]}-${m[3]}`);
-
-  m = str.match(/^(\d{1,2})[-/](\d{1,2})[-/](\d{4})(?:\s|$)/);
+  // "MM-DD-YYYY" ya "MM-DD-YYYY HH:mm" (backend ka stored format)
+  let m = str.match(/^(\d{1,2})[-/](\d{1,2})[-/](\d{4})(?:[ T,]+(\d{1,2}):(\d{2}))?/);
   if (m) {
-    return withTime(`${m[3]}-${pad2(m[1])}-${pad2(m[2])}`);
+    const t = m[4] !== undefined ? timeToAmPm(m[4], m[5]) : "";
+    const d = `${Number(m[1])}/${Number(m[2])}/${m[3]}`;
+    return t ? `${d}, ${t}` : d;
   }
 
-  const d = new Date(str);
-  if (!isNaN(d.getTime())) return d.toISOString().split("T")[0];
+  // "YYYY-MM-DD" ya "YYYY-MM-DD HH:mm" / "YYYY-MM-DDTHH:mm"
+  m = str.match(/^(\d{4})-(\d{2})-(\d{2})(?:[ T]+(\d{1,2}):(\d{2}))?/);
+  if (m) {
+    const t = m[4] !== undefined ? timeToAmPm(m[4], m[5]) : "";
+    const d = `${Number(m[2])}/${Number(m[3])}/${m[1]}`;
+    return t ? `${d}, ${t}` : d;
+  }
 
   return str;
 };
 
-// Upload preview: Excel ke Date cell ko "MM/DD/YYYY HH:mm" dikhata hai.
-// Sirf time wala cell (Receive Time / Submission Time) "HH:mm" dikhega. 00:00 = time nahi.
-const formatExcelDateCell = (d) => {
-  if (isNaN(d.getTime())) return "";
-  // +30s: Excel float error se 10:59:59.99 -> 10:59 na ban jaye
-  const t = new Date(d.getTime() + 30000);
-  const hasTime = !(t.getUTCHours() === 0 && t.getUTCMinutes() === 0);
-  const hhmm = `${pad2(t.getUTCHours())}:${pad2(t.getUTCMinutes())}`;
-
-  // Excel ka sirf-time cell 1899 ki date ke saath aata hai
-  if (d.getUTCFullYear() < 1950) return hasTime ? hhmm : "";
-
-  const date = `${pad2(d.getUTCMonth() + 1)}/${pad2(d.getUTCDate())}/${d.getUTCFullYear()}`;
-  return hasTime ? `${date} ${hhmm}` : date;
-};
+// Table me ye alag columns nahi banne chahiye; inka data date ke saath hi dikhta hai
+const isDateHelperKey = (k) =>
+  /_date_display$/.test(k) || /^(receive|received|ecd|submission)_time$/.test(k);
 
 export default function WorkUpdate({ refreshDashboard }) {
   const [excelFile, setExcelFile] = useState(null);
@@ -153,7 +145,18 @@ export default function WorkUpdate({ refreshDashboard }) {
               let val = row.getCell(col).value;
 
               if (val instanceof Date) {
-                val = formatExcelDateCell(val);
+                // ExcelJS dates UTC me aati hain, isliye UTC getters (local se din khisak sakta hai)
+                const hh = val.getUTCHours();
+                const mi = val.getUTCMinutes();
+                const timeTxt = timeToAmPm(hh, mi);
+                if (val.getUTCFullYear() < 1950) {
+                  // sirf time wala cell (Receive Time / Submission Time): 1899 ki date nahi dikhani
+                  val = timeTxt;
+                } else {
+                  const mm = String(val.getUTCMonth() + 1).padStart(2, "0");
+                  const dd = String(val.getUTCDate()).padStart(2, "0");
+                  val = `${mm}/${dd}/${val.getUTCFullYear()}${timeTxt ? `, ${timeTxt}` : ""}`;
+                }
               } else if (val && typeof val === "object") {
                 if (Array.isArray(val.richText)) {
                   val = val.richText.map((t) => (t && t.text ? t.text : "")).join("");
@@ -366,7 +369,7 @@ export default function WorkUpdate({ refreshDashboard }) {
           const allKeysSet = new Set();
           rows.forEach((r) => {
             Object.keys(r).forEach((k) => {
-              if (k !== 'id' && k !== 'created_at' && k !== 'updated_at' && k !== 'file_name') {
+              if (k !== 'id' && k !== 'created_at' && k !== 'updated_at' && k !== 'file_name' && !isDateHelperKey(k)) {
                 allKeysSet.add(k);
               }
             });
@@ -409,7 +412,7 @@ export default function WorkUpdate({ refreshDashboard }) {
                   val = val || "";
                 }
               } else if (["receive_date", "ecd_date", "submission_date"].includes(k)) {
-                val = formatDateForView(val);
+                val = formatDateForView(val, row[`${k}_display`]);
               }
 
               tableRows.push(`<td style="padding:6px">${val ?? ""}</td>`);
