@@ -407,9 +407,10 @@ const compressKey = (s) => {
 // Ye UOM me nahi jaane chahiye, ye date ke saath judte hain
 const RECEIVE_TIME_RE = /receiv.*time/;
 const SUBMISSION_TIME_RE = /submi.*time/;
+const ECD_TIME_RE = /ecd.*time/;
 const isTimeColumnKey = (key) => {
   const c = compressKey(key);
-  return RECEIVE_TIME_RE.test(c) || SUBMISSION_TIME_RE.test(c);
+  return RECEIVE_TIME_RE.test(c) || SUBMISSION_TIME_RE.test(c) || ECD_TIME_RE.test(c);
 };
 const findTimeInRow = (row, re) => {
   for (const key of Object.keys(row)) {
@@ -748,7 +749,11 @@ const parseImportRow = (row, sheetName) => {
     findValueInRow(row, ["Receive Date", "receive_date", "receive-date", "received date", "received_date", "Receive Date Time", "Received Date Time"]),
     findTimeInRow(row, RECEIVE_TIME_RE)
   );
-  const ecdDateVal = parseExcelDate(findValueInRow(row, ["ECD Date", "ecd_date", "ecd-date", "ecddate", "ECD"]));
+  // ECD me bhi time ho sakta hai: date ke andar ("11/4/2026, 5.53 PM") ya alag "ECD Time" column me
+  const ecdDateVal = parseDateTime(
+    findValueInRow(row, ["ECD Date", "ecd_date", "ecd-date", "ecddate", "ECD", "ECD Date Time"]),
+    findTimeInRow(row, ECD_TIME_RE)
+  );
   const submissionDateVal = parseDateTime(
     findValueInRow(row, ["Submission Date", "submission_date", "submission-date", "Submission Date Time"]),
     findTimeInRow(row, SUBMISSION_TIME_RE)
@@ -1344,6 +1349,7 @@ const createWork = async (req, res) => {
   const submission_date = pick(b, "submission_date", "submissionDate");
   const receive_time = pick(b, "receive_time", "receiveTime", "received_time", "receivedTime");
   const submission_time = pick(b, "submission_time", "submissionTime");
+  const ecd_time = pick(b, "ecd_time", "ecdTime");
 
   const fixedDomain = normalize(domain);
   const fixedJobType = normalize(job_type);
@@ -1353,7 +1359,7 @@ const createWork = async (req, res) => {
   const formattedAmdocsQc = formatPercentage(amdocs_qc);
 
   const formattedReceiveDate = parseDateTime(receive_date, receive_time);
-  const formattedEcdDate = parseExcelDate(ecd_date);
+  const formattedEcdDate = parseDateTime(ecd_date, ecd_time);
   const formattedSubmissionDate = parseDateTime(submission_date, submission_time);
 
   const parsedMonths = parseMonthsInput(months);
@@ -1499,6 +1505,7 @@ const updateWork = async (req, res) => {
   const submission_date = pick(b, "submission_date", "submissionDate");
   const receive_time = pick(b, "receive_time", "receiveTime", "received_time", "receivedTime");
   const submission_time = pick(b, "submission_time", "submissionTime");
+  const ecd_time = pick(b, "ecd_time", "ecdTime");
 
   const has = (v) => v !== undefined;
 
@@ -1549,7 +1556,7 @@ const updateWork = async (req, res) => {
     if (dateVals.receiveDate === null) clearedDateCols.push("receiveDate");
   }
   if (has(ecd_date)) {
-    dateVals.ecdDate = parseExcelDate(ecd_date);
+    dateVals.ecdDate = parseDateTime(ecd_date, ecd_time);
     setCol("ecd_date", dateVals.ecdDate);
     if (dateVals.ecdDate === null) clearedDateCols.push("ecdDate");
   }
@@ -1674,7 +1681,7 @@ const cleanUomOutput = (uom) => {
 // Purane imports me "Received Time" / "Submission Time" galti se UOM me save ho gayi thi.
 // Yahan wo time wapas date ke saath jod dete hain aur UOM se hata dete hain.
 // (Koi naya field / column nahi banta, sirf receive_date / submission_date me time judta hai)
-const finalizeRow = (r) => {
+const finalizeRowCore = (r) => {
   const raw = r.uom;
   if (raw === null || raw === undefined) return r;
 
@@ -1685,10 +1692,12 @@ const finalizeRow = (r) => {
   const out = {};
   let recvTime = "";
   let subTime = "";
+  let ecdTime = "";
   Object.keys(obj).forEach((k) => {
     const c = compressKey(k);
     if (RECEIVE_TIME_RE.test(c)) recvTime = recvTime || extractTime(obj[k]);
     else if (SUBMISSION_TIME_RE.test(c)) subTime = subTime || extractTime(obj[k]);
+    else if (ECD_TIME_RE.test(c)) ecdTime = ecdTime || extractTime(obj[k]);
     else out[k] = obj[k];
   });
 
@@ -1702,9 +1711,55 @@ const finalizeRow = (r) => {
     ...r,
     uom: wasString ? JSON.stringify(out) : out,
     receive_date: withTime(r.receive_date, recvTime),
+    ecd_date: withTime(r.ecd_date, ecdTime),
     submission_date: withTime(r.submission_date, subTime)
   };
 };
+
+/* ======================================
+   TIME ALAG FIELDS (frontend ko seedha mil jaye)
+   Har row ke saath ye extra fields jaate hain:
+     receive_time / submission_time          -> "17:53" (24h, na ho to "")
+     receive_date_display / submission_date_display -> "11/4/2026, 5.53 PM" (Excel jaisa)
+     ecd_time / ecd_date_display             -> ECD me time ho to "17:53" / "11/4/2026, 5.53 PM", warna sirf date
+   receive_date / submission_date pehle jaise "MM-DD-YYYY HH:mm" hi rehte hain.
+====================================== */
+const splitDateTimeStored = (v) => {
+  const s = cleanText(v === null || v === undefined ? "" : v);
+  const m = s.match(/^(\d{2})-(\d{2})-(\d{4})(?:[ T]+(\d{1,2}):(\d{2}))?/);
+  if (!m) return { date: s, dateText: s, time: "" };
+  const hasTime = m[4] !== undefined && !(Number(m[4]) === 0 && Number(m[5]) === 0);
+  return {
+    date: `${m[1]}-${m[2]}-${m[3]}`,
+    dateText: `${Number(m[1])}/${Number(m[2])}/${m[3]}`,
+    time: hasTime ? `${pad(m[4])}:${m[5]}` : ""
+  };
+};
+
+const timeToAmPm = (t) => {
+  const m = String(t || "").match(/^(\d{1,2}):(\d{2})$/);
+  if (!m) return "";
+  const h = Number(m[1]);
+  return `${h % 12 || 12}.${m[2]} ${h >= 12 ? "PM" : "AM"}`;
+};
+
+const addTimeFields = (r) => {
+  const rec = splitDateTimeStored(r.receive_date);
+  const sub = splitDateTimeStored(r.submission_date);
+  const ecd = splitDateTimeStored(r.ecd_date);
+  const show = (p) => (p.time ? `${p.dateText}, ${timeToAmPm(p.time)}` : p.dateText);
+  return {
+    ...r,
+    receive_time: rec.time,
+    ecd_time: ecd.time,
+    submission_time: sub.time,
+    receive_date_display: show(rec),
+    ecd_date_display: show(ecd),
+    submission_date_display: show(sub)
+  };
+};
+
+const finalizeRow = (r) => addTimeFields(finalizeRowCore(r));
 
 const mapWorkRow = (row) => {
   const { jc_month, jc_receive, jc_ecd, jc_submission, ...work } = row;
