@@ -12,24 +12,53 @@ import {
 } from "lucide-react";
 
 import "../style/workupdate.css";
+const pad2 = (n) => String(n).padStart(2, "0");
+
+// "03-05-2026 10:30" / "2026-03-05 10:30" me se "10:30" nikalta hai. Time na ho (ya 00:00) to "".
+const timeFromString = (s) => {
+  // ISO + Z (timezone wali string) ka time bharosemand nahi
+  if (/^\d{4}-\d{2}-\d{2}T.*Z$/.test(s)) return "";
+  const m = s.match(/[\sT](\d{1,2}):(\d{2})/);
+  if (!m) return "";
+  if (Number(m[1]) === 0 && Number(m[2]) === 0) return "";
+  return `${pad2(m[1])}:${m[2]}`;
+};
+
+// Saved date ko "YYYY-MM-DD HH:mm" me dikhata hai (time ho tab). Time na ho to sirf date.
 const formatDateForView = (val) => {
   if (!val) return "";
   const str = val.toString().trim();
+  const time = timeFromString(str);
+  const withTime = (date) => (time ? `${date} ${time}` : date);
 
   let m = str.match(/^(\d{4})-(\d{2})-(\d{2})/);
-  if (m) return `${m[1]}-${m[2]}-${m[3]}`;
+  if (m) return withTime(`${m[1]}-${m[2]}-${m[3]}`);
 
-  m = str.match(/^(\d{1,2})[-/](\d{1,2})[-/](\d{4})$/);
+  m = str.match(/^(\d{1,2})[-/](\d{1,2})[-/](\d{4})(?:\s|$)/);
   if (m) {
-    const mm = m[1].padStart(2, "0");
-    const dd = m[2].padStart(2, "0");
-    return `${m[3]}-${mm}-${dd}`;
+    return withTime(`${m[3]}-${pad2(m[1])}-${pad2(m[2])}`);
   }
 
   const d = new Date(str);
   if (!isNaN(d.getTime())) return d.toISOString().split("T")[0];
 
   return str;
+};
+
+// Upload preview: Excel ke Date cell ko "MM/DD/YYYY HH:mm" dikhata hai.
+// Sirf time wala cell (Receive Time / Submission Time) "HH:mm" dikhega. 00:00 = time nahi.
+const formatExcelDateCell = (d) => {
+  if (isNaN(d.getTime())) return "";
+  // +30s: Excel float error se 10:59:59.99 -> 10:59 na ban jaye
+  const t = new Date(d.getTime() + 30000);
+  const hasTime = !(t.getUTCHours() === 0 && t.getUTCMinutes() === 0);
+  const hhmm = `${pad2(t.getUTCHours())}:${pad2(t.getUTCMinutes())}`;
+
+  // Excel ka sirf-time cell 1899 ki date ke saath aata hai
+  if (d.getUTCFullYear() < 1950) return hasTime ? hhmm : "";
+
+  const date = `${pad2(d.getUTCMonth() + 1)}/${pad2(d.getUTCDate())}/${d.getUTCFullYear()}`;
+  return hasTime ? `${date} ${hhmm}` : date;
 };
 
 export default function WorkUpdate({ refreshDashboard }) {
@@ -124,9 +153,7 @@ export default function WorkUpdate({ refreshDashboard }) {
               let val = row.getCell(col).value;
 
               if (val instanceof Date) {
-                const mm = String(val.getMonth() + 1).padStart(2, "0");
-                const dd = String(val.getDate()).padStart(2, "0");
-                val = `${mm}/${dd}/${val.getFullYear()}`;
+                val = formatExcelDateCell(val);
               } else if (val && typeof val === "object") {
                 if (Array.isArray(val.richText)) {
                   val = val.richText.map((t) => (t && t.text ? t.text : "")).join("");
