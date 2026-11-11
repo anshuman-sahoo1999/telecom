@@ -2100,61 +2100,26 @@ const ensureDateTimeColumns = async () => {
   const warnings = [];
   for (const { table, columns } of DATETIME_COLUMNS) {
     try {
-      let found;
-      let isPg = false;
-      try {
-        // MySQL
-        found = await query(
-          `SELECT COLUMN_NAME AS name, DATA_TYPE AS type, CHARACTER_MAXIMUM_LENGTH AS len
-           FROM information_schema.COLUMNS
-           WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ? AND COLUMN_NAME IN (${inClause(columns)})`,
-          [table, ...columns]
-        );
-      } catch (mysqlErr) {
-        // PostgreSQL (NeonDB): DATABASE() nahi hota, column naam lowercase me hote hain
-        isPg = true;
-        const lower = columns.map((c) => c.toLowerCase());
-        found = await query(
-          `SELECT column_name AS name, data_type AS type, character_maximum_length AS len
-           FROM information_schema.columns
-           WHERE table_schema = current_schema() AND table_name = ? AND lower(column_name) IN (${inClause(lower)})`,
-          [table.toLowerCase(), ...lower]
-        );
-      }
+      const found = await query(
+        `SELECT COLUMN_NAME AS name, DATA_TYPE AS type, CHARACTER_MAXIMUM_LENGTH AS len
+         FROM information_schema.COLUMNS
+         WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ? AND COLUMN_NAME IN (${inClause(columns)})`,
+        [table, ...columns]
+      );
 
       for (const col of found || []) {
         const type = String(col.type || "").toLowerCase();
-        const colName = col.name || col.column_name;
-        const isChar = type === "varchar" || type === "char" || type === "character varying" || type === "character";
-
-        if (isChar && col.len !== null && col.len !== undefined && Number(col.len) < 30) {
+        if ((type === "varchar" || type === "char") && Number(col.len) < 30) {
           try {
-            await query(
-              isPg
-                ? `ALTER TABLE ${table} ALTER COLUMN ${colName} TYPE VARCHAR(30)`
-                : `ALTER TABLE ${table} MODIFY ${colName} VARCHAR(30) NULL DEFAULT NULL`
-            );
-            console.log(`Column widened: ${table}.${colName} ${type}(${col.len}) -> VARCHAR(30)`);
+            await query(`ALTER TABLE ${table} MODIFY ${col.name} VARCHAR(30) NULL DEFAULT NULL`);
+            console.log(`Column widened: ${table}.${col.name} ${type}(${col.len}) -> VARCHAR(30)`);
           } catch (alterErr) {
-            const msg = `${table}.${colName} chhota hai (${type}(${col.len})) aur widen nahi ho paya: ${alterErr.message}`;
+            const msg = `${table}.${col.name} chhota hai (${type}(${col.len})) aur widen nahi ho paya: ${alterErr.message}`;
             console.error(msg);
             warnings.push(msg);
           }
-        } else if (isPg && (type === "date" || type.startsWith("timestamp"))) {
-          // DATE / TIMESTAMP column me time ya "MM-DD-YYYY" text save nahi hota -> VARCHAR(30) bana do
-          try {
-            const fmt = type === "date" ? "MM-DD-YYYY" : "MM-DD-YYYY HH24:MI";
-            await query(
-              `ALTER TABLE ${table} ALTER COLUMN ${colName} TYPE VARCHAR(30) USING to_char(${colName}, '${fmt}')`
-            );
-            console.log(`Column converted: ${table}.${colName} ${type} -> VARCHAR(30)`);
-          } catch (alterErr) {
-            const msg = `${table}.${colName} ka type ${type} hai aur VARCHAR(30) nahi ho paya: ${alterErr.message}`;
-            console.error(msg);
-            warnings.push(msg);
-          }
-        } else if (!isChar && !["text", "tinytext", "mediumtext", "longtext"].includes(type)) {
-          const msg = `${table}.${colName} ka type ${type} hai, time save nahi hoga. Ise VARCHAR(30) kar do.`;
+        } else if (!["varchar", "char", "text", "tinytext", "mediumtext", "longtext"].includes(type)) {
+          const msg = `${table}.${col.name} ka type ${type} hai, time save nahi hoga. Ise VARCHAR(30) kar do.`;
           console.warn(msg);
           warnings.push(msg);
         }
