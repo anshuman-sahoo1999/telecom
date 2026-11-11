@@ -876,7 +876,10 @@ const JobHistory = () => {
                       <DateTimeCell value={job.receiveDate || job.receive_date} />
                     </td>
 
-                    <td style={cellStyle}>{formatLocalDate(job.ecdDate || job.ecd_date)}</td>
+                    {/* ECD: date ke side me time (agar Excel me tha) */}
+                    <td style={cellStyle}>
+                      <DateTimeCell value={job.ecdDate || job.ecd_date} />
+                    </td>
 
                     {/* Submission Date: date ke side me time */}
                     <td style={cellStyle}>
