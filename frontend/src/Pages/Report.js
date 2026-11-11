@@ -39,10 +39,33 @@ const toTimeKey = (value) => {
   return `${pad2(m[1])}:${m[2]}`;
 };
 
-// Date aur time ko ek text me jodta hai (PDF / Excel ke liye)
-const joinDateTime = (date, time) => {
-  if (!date) return "";
-  return time ? `${date} ${time}` : date;
+/* ---------- Excel jaisa dikhana ----------
+   Excel me:  11/3/2026, 3.32 AM
+   Yahan bhi wahi:  date = M/D/YYYY, time = h.mm AM/PM
+   (andar edit / filter ke liye YYYY-MM-DD aur HH:mm hi rehta hai) */
+
+// "2026-11-03" -> "11/3/2026"
+const formatDisplayDate = (key) => {
+  const m = String(key || "").match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  return m ? `${Number(m[2])}/${Number(m[3])}/${m[1]}` : key || "";
+};
+
+// "17:53" -> "5.53 PM"
+const formatDisplayTime = (t) => {
+  const m = String(t || "").match(/^(\d{1,2}):(\d{2})$/);
+  if (!m) return "";
+  const h24 = Number(m[1]);
+  const ap = h24 >= 12 ? "PM" : "AM";
+  const h12 = h24 % 12 || 12;
+  return `${h12}.${m[2]} ${ap}`;
+};
+
+// date + time -> "11/3/2026, 3.32 AM" (time na ho to sirf "11/3/2026")
+const displayDateTime = (date, time) => {
+  const d = formatDisplayDate(date);
+  if (!d) return "";
+  const t = formatDisplayTime(time);
+  return t ? `${d}, ${t}` : d;
 };
 
 const parseDate = (d) => {
@@ -150,18 +173,6 @@ const otpMissingStyle = {
   textAlign: "center",
 };
 
-const timeChipStyle = {
-  display: "inline-block",
-  marginLeft: 6,
-  padding: "1px 7px",
-  borderRadius: 999,
-  background: "#e0e7ff",
-  color: "#3730a3",
-  fontSize: 11,
-  fontWeight: 600,
-  verticalAlign: "middle",
-};
-
 // Deviation cell: value + uske side me arrow
 const DeviationCell = ({ text, trend }) => {
   if (!trend) return text || "-";
@@ -174,15 +185,11 @@ const DeviationCell = ({ text, trend }) => {
   );
 };
 
-// Table me date ke side me time dikhane ke liye
+// Table me date ke saath time, bilkul Excel jaisa: "11/3/2026, 3.32 AM"
 const DateTimeCell = ({ date, time }) => {
-  if (!date) return "-";
-  return (
-    <>
-      <span>{date}</span>
-      {time ? <span className="time-chip" style={timeChipStyle}>{time}</span> : null}
-    </>
-  );
+  const text = displayDateTime(date, time);
+  if (!text) return "-";
+  return <span style={{ whiteSpace: "nowrap" }}>{text}</span>;
 };
 
 // Table mein dikhne wale placeholder ("-", "N/A") ko edit box mein khaali dikhao,
@@ -762,9 +769,9 @@ export default function Report() {
         r.internal_qc,
         r.amdocs_qc,
         getPdfDeviationText(r),
-        joinDateTime(r.receive_date, r.receive_time) || "-",
-        r.ecd_date || "-",
-        joinDateTime(r.submission_date, r.submission_time) || "-",
+        displayDateTime(r.receive_date, r.receive_time) || "-",
+        formatDisplayDate(r.ecd_date) || "-",
+        displayDateTime(r.submission_date, r.submission_time) || "-",
       ]);
 
       autoTable(pdf, {
@@ -880,9 +887,9 @@ export default function Report() {
         { header: "Internal QC", key: "internal_qc", width: 15 },
         { header: "Amdocs QC", key: "amdocs_qc", width: 15 },
         { header: "Deviation", key: "deviation", width: 15 },
-        { header: "Receive Date", key: "receive_date", width: 20 },
+        { header: "Receive Date", key: "receive_date", width: 22 },
         { header: "ECD Date", key: "ecd_date", width: 15 },
-        { header: "Submission Date", key: "submission_date", width: 20 },
+        { header: "Submission Date", key: "submission_date", width: 22 },
       ];
 
       filteredRows.forEach((r, i) => {
@@ -905,9 +912,9 @@ export default function Report() {
           internal_qc: r.internal_qc,
           amdocs_qc: r.amdocs_qc,
           deviation: getExcelDeviationText(r),
-          receive_date: joinDateTime(r.receive_date, r.receive_time),
-          ecd_date: r.ecd_date || "",
-          submission_date: joinDateTime(r.submission_date, r.submission_time),
+          receive_date: displayDateTime(r.receive_date, r.receive_time),
+          ecd_date: formatDisplayDate(r.ecd_date),
+          submission_date: displayDateTime(r.submission_date, r.submission_time),
         });
 
         // OTP khaali ho to sirf OTP cell ka background red (text normal)
@@ -1659,7 +1666,7 @@ export default function Report() {
                           <DeviationCell text={dev.text} trend={dev.trend} />
                         </td>
 
-                        {/* Receive Date: date ke side me time */}
+                        {/* Receive Date: Excel jaisa "11/3/2026, 3.32 AM" */}
                         <td>
                           {isEditing ? (
                             <div className="datetime-edit">
@@ -1687,11 +1694,11 @@ export default function Report() {
                               onChange={(e) => handleChange("ecd_date", e.target.value)}
                             />
                           ) : (
-                            r.ecd_date || "-"
+                            formatDisplayDate(r.ecd_date) || "-"
                           )}
                         </td>
 
-                        {/* Submission Date: date ke side me time */}
+                        {/* Submission Date: Excel jaisa "11/4/2026, 5.53 PM" */}
                         <td>
                           {isEditing ? (
                             <div className="datetime-edit">
