@@ -1,1823 +1,2154 @@
-import { API_BASE_URL } from "../config";
-import React, { useCallback, useEffect, useRef, useState } from "react";
-import axios from "axios";
-import jsPDF from "jspdf";
-import html2canvas from "html2canvas";
-import autoTable from "jspdf-autotable";
-import ExcelJS from "exceljs";
-import "../style/report.css";
-import { ComposableMap, Geographies, Geography } from "react-simple-maps";
-import geoData from "../us-states.json";
-import { geoCentroid } from "d3-geo";
+const db = require("../config/db");
+const ExcelJS = require("exceljs");
+const fs = require("fs");
+const path = require("path");
 
-const pad2 = (n) => String(n).padStart(2, "0");
+const stateData = require("../stateCodes");
+const countyData = require("../counties.json");
 
-// Date ko "YYYY-MM-DD" banata hai. "MM-DD-YYYY HH:mm" me time ho to bhi date sahi nikalti hai.
-const toDateKey = (value) => {
-  if (!value) return "";
-  if (typeof value === "string") {
-    const v = value.trim();
-    let m = v.match(/^(\d{4})-(\d{2})-(\d{2})/);
-    if (m) return `${m[1]}-${m[2]}-${m[3]}`;
-    m = v.match(/^(\d{1,2})[-/](\d{1,2})[-/](\d{4})(?:[ T].*)?$/);
-    if (m) return `${m[3]}-${pad2(m[1])}-${pad2(m[2])}`;
+const clean = (v) => {
+  if (v === null || v === undefined || v === false) return "";
+  return v.toString().trim();
+};
+
+const normalize = (v) => clean(v).toUpperCase();
+
+const query = (sql, params = []) =>
+  new Promise((resolve, reject) => {
+    db.query(sql, params, (err, result) => (err ? reject(err) : resolve(result)));
+  });
+
+/* ======================================
+   SPEED HELPERS (bulk insert / chunk / limited parallel)
+====================================== */
+const chunkArray = (arr, size) => {
+  const out = [];
+  for (let i = 0; i < arr.length; i += size) out.push(arr.slice(i, i + size));
+  return out;
+};
+
+// list ke items par worker chalata hai, ek saath max `limit` hi
+const runLimited = async (list, limit, worker) => {
+  let idx = 0;
+  const runners = Array.from({ length: Math.min(limit, list.length) }, async () => {
+    while (true) {
+      const i = idx++;
+      if (i >= list.length) return;
+      await worker(list[i], i);
+    }
+  });
+  await Promise.all(runners);
+};
+
+const inClause = (arr) => arr.map(() => "?").join(", ");
+let lastBulkError = "";
+
+const bulkInsert = async (table, columns, rows, size = 200) => {
+  const flags = new Array(rows.length).fill(false);
+  const colList = columns.join(", ");
+  const rowPlaceholder = `(${columns.map(() => "?").join(", ")})`;
+
+  for (let start = 0; start < rows.length; start += size) {
+    const part = rows.slice(start, start + size);
+    try {
+      // har row ke liye (?, ?, ...) likhte hain aur saari values ek flat list me bhejte hain
+      const sql = `INSERT INTO ${table} (${colList}) VALUES ${part.map(() => rowPlaceholder).join(", ")}`;
+      const params = [];
+      part.forEach((r) => r.forEach((v) => params.push(v)));
+      await query(sql, params);
+      for (let i = 0; i < part.length; i++) flags[start + i] = true;
+    } catch (e) {
+      lastBulkError = e.message;
+      console.error(`bulkInsert(${table}) chunk failed, retrying row by row:`, e.message);
+      const singleSql = `INSERT INTO ${table} (${colList}) VALUES ${rowPlaceholder}`;
+      for (let i = 0; i < part.length; i++) {
+        try {
+          await query(singleSql, part[i]);
+          flags[start + i] = true;
+        } catch (e2) {
+          lastBulkError = e2.message;
+          console.error(`bulkInsert(${table}) row failed:`, e2.message);
+        }
+      }
+    }
   }
-  const d = new Date(value);
-  if (isNaN(d.getTime())) return "";
-  return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
+  return flags;
 };
 
-// "03-05-2026 10:30" me se "10:30" nikalta hai. Time na ho (ya 00:00) to "".
-const toTimeKey = (value) => {
-  if (typeof value !== "string") return "";
-  const v = value.trim();
-  // ISO + Z (timezone wali string) ka time bharosemand nahi, isliye ignore
-  if (/^\d{4}-\d{2}-\d{2}T.*Z$/.test(v)) return "";
-  const m = v.match(/(?:^|[\sT])(\d{1,2}):(\d{2})/);
-  if (!m) return "";
-  if (Number(m[1]) === 0 && Number(m[2]) === 0) return "";
-  return `${pad2(m[1])}:${m[2]}`;
+const isRealJobId = (v) => {
+  const s = clean(v);
+  return s !== "" && s !== "-";
 };
 
-/* ---------- Excel jaisa dikhana ----------
-   Excel me:  11/3/2026, 3.32 AM
-   Yahan bhi wahi:  date = M/D/YYYY, time = h.mm AM/PM
-   (andar edit / filter ke liye YYYY-MM-DD aur HH:mm hi rehta hai) */
-
-// "2026-11-03" -> "11/3/2026"
-const formatDisplayDate = (key) => {
-  const m = String(key || "").match(/^(\d{4})-(\d{2})-(\d{2})$/);
-  return m ? `${Number(m[2])}/${Number(m[3])}/${m[1]}` : key || "";
-};
-
-// "17:53" -> "5.53 PM"
-const formatDisplayTime = (t) => {
-  const m = String(t || "").match(/^(\d{1,2}):(\d{2})$/);
-  if (!m) return "";
-  const h24 = Number(m[1]);
-  const ap = h24 >= 12 ? "PM" : "AM";
-  const h12 = h24 % 12 || 12;
-  return `${h12}.${m[2]} ${ap}`;
-};
-
-// date + time -> "11/3/2026, 3.32 AM" (time na ho to sirf "11/3/2026")
-const displayDateTime = (date, time) => {
-  const d = formatDisplayDate(date);
-  if (!d) return "";
-  const t = formatDisplayTime(time);
-  return t ? `${d}, ${t}` : d;
-};
-
-const parseDate = (d) => {
-  if (!d) return null;
-  if (d instanceof Date && !isNaN(d.getTime())) return d;
-
-  try {
-    const parsed = new Date(d);
-    return isNaN(parsed.getTime()) ? null : parsed;
-  } catch {
-    return null;
+const domainKey = (v) => clean(v).toUpperCase();
+const jobKey = (domain, jobId) => `${domainKey(domain)}|${clean(jobId).toLowerCase()}`;
+const jcScope = (jobId, domain) => {
+  const d = domainKey(domain);
+  if (!d) {
+    return { where: "TRIM(jobId) = TRIM(?)", params: [jobId] };
   }
+  return {
+    where:
+      "TRIM(jobId) = TRIM(?) AND (UPPER(TRIM(COALESCE(domain,''))) = ? OR TRIM(COALESCE(domain,'')) = '')",
+    params: [jobId, d]
+  };
 };
 
-const formatDateOnly = (date) => {
-  const d = parseDate(date);
-  if (!d) return "-";
+const safeParseJson = (val, fallback) => {
+  if (val === null || val === undefined) return fallback;
+  if (typeof val === "object") return val;
+  if (typeof val === "string") {
+    try { return JSON.parse(val); } catch { return fallback; }
+  }
+  return fallback;
+};
+const parseMonthsInput = (months) => {
+  let arr = [];
+  if (Array.isArray(months)) {
+    arr = months;
+  } else if (typeof months === "string" && months.trim() !== "") {
+    try {
+      const temp = JSON.parse(months);
+      arr = Array.isArray(temp) ? temp : [months.trim()];
+    } catch {
+      arr = [months.trim()];
+    }
+  }
+  return cleanMonthArray(arr);
+};
 
-  try {
-    return d.toLocaleDateString("en-IN", {
-      timeZone: "Asia/Kolkata",
-      day: "2-digit",
-      month: "short",
-      year: "numeric",
+const removeOrphanJobCreation = async (items) => {
+  const seen = new Set();
+  const pairs = [];
+  (items || []).forEach((it) => {
+    const isObj = it && typeof it === "object";
+    const jobId = clean(isObj ? it.jobId : it);
+    const domain = domainKey(isObj ? it.domain : "");
+    if (!isRealJobId(jobId)) return;
+    const k = jobKey(domain, jobId);
+    if (seen.has(k)) return;
+    seen.add(k);
+    pairs.push({ jobId, domain });
+  });
+  if (pairs.length === 0) return;
+
+  for (const part of chunkArray(pairs, 500)) {
+    const idMap = new Map();
+    part.forEach((p) => {
+      const lk = p.jobId.toLowerCase();
+      if (!idMap.has(lk)) idMap.set(lk, p.jobId);
     });
-  } catch {
-    return "-";
+    const jobIds = Array.from(idMap.values());
+
+    const usedRows = await query(
+      `SELECT job_id, domain FROM work_updates WHERE job_id IN (${inClause(jobIds)})`,
+      jobIds
+    );
+    const usedPair = new Set();
+    const usedAny = new Set();
+    (usedRows || []).forEach((r) => {
+      usedAny.add(clean(r.job_id).toLowerCase());
+      usedPair.add(jobKey(r.domain, r.job_id));
+    });
+
+    const jcRows = await query(
+      `SELECT id, jobId, domain FROM job_creation WHERE jobId IN (${inClause(jobIds)})`,
+      jobIds
+    );
+    const jcByJob = new Map();
+    (jcRows || []).forEach((r) => {
+      const jk = clean(r.jobId).toLowerCase();
+      if (!jcByJob.has(jk)) jcByJob.set(jk, []);
+      jcByJob.get(jk).push({ id: r.id, domain: domainKey(r.domain) });
+    });
+
+    const toDelete = new Set();
+    for (const { jobId, domain } of part) {
+      const jk = jobId.toLowerCase();
+      const rowsForJob = jcByJob.get(jk) || [];
+
+      if (domain) {
+        if (usedPair.has(jobKey(domain, jobId))) continue;
+        rowsForJob.forEach((r) => {
+          if (r.domain === domain) toDelete.add(r.id);
+        });
+        if (!usedAny.has(jk)) {
+          rowsForJob.forEach((r) => {
+            if (r.domain === "") toDelete.add(r.id);
+          });
+        }
+      } else {
+        if (usedAny.has(jk)) continue;
+        rowsForJob.forEach((r) => toDelete.add(r.id));
+      }
+    }
+
+    for (const idPart of chunkArray(Array.from(toDelete), 500)) {
+      await query(`DELETE FROM job_creation WHERE id IN (${inClause(idPart)})`, idPart);
+    }
   }
 };
 
-const formatArrayOrString = (val) => {
-  if (!val) return "-";
-  if (Array.isArray(val)) {
-    return val.length > 0 ? val.join(" | ") : "-";
+const unwrapCell = (val) => {
+  if (val === null || val === undefined) return val;
+  if (val instanceof Date) return val;
+  if (typeof val === "object") {
+    if (Array.isArray(val.richText)) {
+      return val.richText.map((t) => (t && t.text ? t.text : "")).join("");
+    }
+    if (val.text !== undefined) return unwrapCell(val.text);
+    if (val.result !== undefined) return unwrapCell(val.result);
+    if (val.error) return "";
+    return val;
   }
   return val;
 };
 
-// "Received Time" / "Submission Time" jaisi keys UOM nahi hain (purane data me galti se UOM me aa gayi thi)
-const isTimeUomKey = (key) => {
-  const c = (key || "").toString().toLowerCase().replace(/[^a-z0-9]/g, "");
-  return /(receiv|submi).*time/.test(c);
-};
+/* ======================================
+   DATE / TIME HELPERS (FIXED)
+   Ab ye sab formats sahi padhe jaate hain:
+   - "11/3/2026, 3.32 AM"   (comma + nbsp + dot wala time)
+   - "11-04-2026, 5.53 PM"
+   - "01-02--2026"          (double dash)
+   - Time column: "9.00 PM", "12.55 PM", "10-31 PM", Excel time cell
+====================================== */
+const pad = (n) => String(n).padStart(2, "0");
 
-const cleanUom = (uom) => {
-  if (!uom || typeof uom !== "object" || Array.isArray(uom)) return uom || {};
-  const out = {};
-  Object.entries(uom).forEach(([k, v]) => {
-    if (!isTimeUomKey(k)) out[k] = v;
-  });
-  return out;
-};
+// nbsp / zero-width / extra spaces saaf
+const cleanText = (s) =>
+  String(s).replace(/[\u00A0\u200B\uFEFF]/g, " ").replace(/\s+/g, " ").trim();
 
-const formatUOM = (uom) => {
-  if (!uom) return "-";
-  if (typeof uom === "string") {
-    return uom;
+// "11/3/2026", "11-04-2026", "01-02--2026"
+const TEXT_DATE_RE = /(?<!\d)(\d{1,2})\s*[-/.]+\s*(\d{1,2})\s*[-/.]+\s*(\d{4})(?!\d)/;
+// "3.32 AM", "10-31 PM", "9:05 pm", "9 PM"
+const TEXT_TIME_AMPM_RE = /(?<!\d)(\d{1,2})(?:\s*[:.\-]\s*(\d{2}))?(?:\s*[:.\-]\s*\d{2})?\s*([AaPp])\.?\s*[Mm]\.?(?![A-Za-z])/;
+// 24 ghante: "17:53", "17:53:10"
+const TEXT_TIME_24_RE = /(?<!\d)(\d{1,2}):(\d{2})(?::\d{2}(?:\.\d+)?)?(?!\d)/;
+
+const timeFromText = (s) => {
+  const t = cleanText(s);
+  let h, min;
+  let m = t.match(TEXT_TIME_AMPM_RE);
+  if (m) {
+    h = Number(m[1]);
+    min = m[2] !== undefined ? Number(m[2]) : 0;
+    const ap = m[3].toLowerCase(); // "a" ya "p"
+    if (h < 1 || h > 12 || min > 59) return "";
+    if (ap === "p" && h < 12) h += 12;
+    if (ap === "a" && h === 12) h = 0;
+  } else {
+    m = t.match(TEXT_TIME_24_RE);
+    if (!m) return "";
+    h = Number(m[1]);
+    min = Number(m[2]);
+    if (h > 23 || min > 59) return "";
   }
-  if (typeof uom === "object") {
-    const entries = Object.entries(cleanUom(uom));
-    if (entries.length === 0) return "-";
+  return h === 0 && min === 0 ? "" : `${pad(h)}:${pad(min)}`;
+};
 
-    return entries
-      .map(([key, value]) => `${key}: ${value || 0}`)
-      .join(" | ");
+const parseExcelDate = (value) => {
+  if (!value) return null;
+
+  let strVal = cleanText(value instanceof Date ? "" : value.toString());
+  if (/^\d{2}-\d{2}-\d{4}$/.test(strVal)) return strVal;
+  const isoMatch = strVal.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (isoMatch) {
+    const [, year, month, day] = isoMatch;
+    return `${month}-${day}-${year}`;
   }
-  return "-";
+
+  // Text date: "11/3/2026, 3.32 AM", "11-04-2026, 5.53 PM", "01-02--2026", "1/20/2026"
+  if (typeof value === "string") {
+    const tm = strVal.match(TEXT_DATE_RE);
+    if (tm) {
+      let mo = Number(tm[1]);
+      let dy = Number(tm[2]);
+      if (mo > 12 && dy <= 12) [mo, dy] = [dy, mo]; // DD-MM likha ho to ulta
+      if (mo >= 1 && mo <= 12 && dy >= 1 && dy <= 31) {
+        return `${pad(mo)}-${pad(dy)}-${tm[3]}`;
+      }
+    }
+  }
+
+  let d;
+  let useUTC = false;
+
+  if (value instanceof Date) {
+    d = value;
+    useUTC = true;
+  } else if (typeof value === "number" || /^\d{5}(\.\d+)?$/.test(strVal)) {
+    d = new Date(Math.round((Number(value) - 25569) * 86400 * 1000));
+    useUTC = true;
+  } else if (/^\d+(\.\d+)?$/.test(strVal)) {
+    return strVal;
+  } else {
+    d = new Date(strVal);
+  }
+
+  if (!d || isNaN(d.getTime())) return strVal;
+
+  const year = useUTC ? d.getUTCFullYear() : d.getFullYear();
+  let monthNum = (useUTC ? d.getUTCMonth() : d.getMonth()) + 1;
+  let dayNum = useUTC ? d.getUTCDate() : d.getDate();
+
+  // Excel ke asli Date cells (Date object / serial number) me din aur mahina ulta aata hai:
+  // sheet me "01-05-2026" (Jan 5) likha tha, par Excel ne use 1 May padh liya.
+  // Excel wahi cell din-pehle dikhata hai ("01-05-2026"), isliye jo Excel me dikhta hai wahi
+  // chahiye to din ko mahina maanna padega. (Month column se match karne par ~90% rows me yahi sahi nikla.)
+  // Agar din 12 se bada hai to wo asli date hai, use waisa hi rakho.
+  if (useUTC && dayNum <= 12) {
+    [monthNum, dayNum] = [dayNum, monthNum];
+  }
+
+  return `${pad(monthNum)}-${pad(dayNum)}-${year}`;
 };
 
-// "80%", "↑ 80%", "0.8" jaisi value se number nikalta hai (nahi mila to null)
-const parsePercent = (v) => {
-  if (v === null || v === undefined) return null;
-  // Arrow, % aur space hata ke sirf number (digits, dot, minus) rakhta hai
-  const t = v.toString().replace(/[^0-9.-]/g, "");
-  if (t === "" || t === "-") return null;
-  const n = parseFloat(t);
-  return isNaN(n) ? null : n;
+// Kisi bhi value (Date / Excel number / text) me se "HH:mm" (24 ghante) nikalta hai.
+// Time na ho ya 00:00 ho to "" (matlab sirf date).
+const extractTime = (v) => {
+  if (v === null || v === undefined || v === "") return "";
+
+  if (v instanceof Date) {
+    if (isNaN(v.getTime())) return "";
+    // +30s: Excel float error se 10:59:59.99 -> 10:59 na ban jaye
+    const d = new Date(v.getTime() + 30000);
+    const h = d.getUTCHours();
+    const m = d.getUTCMinutes();
+    return h === 0 && m === 0 ? "" : `${pad(h)}:${pad(m)}`;
+  }
+
+  const s = cleanText(v);
+  if (!s) return "";
+
+  // Excel number: poora hissa = din, dashmlav ka hissa = time (0.5 = 12:00)
+  if (typeof v === "number" || /^\d+(\.\d+)?$/.test(s)) {
+    const n = Number(s);
+    if (isNaN(n)) return "";
+    const total = Math.round((n - Math.floor(n)) * 1440);
+    if (total <= 0 || total >= 1440) return "";
+    return `${pad(Math.floor(total / 60))}:${pad(total % 60)}`;
+  }
+
+  // Text: "10:30", "10:30 PM", "9.00 PM", "10-31 PM"
+  return timeFromText(s);
 };
 
-// Deviation = Amdocs QC - Internal QC
-//   Internal 80%, Amdocs 90%  -> 10%  ↑ (green)
-//   Internal 70%, Amdocs 60%  -> 10%  ↓ (red)
-// Dono me se koi khaali ho to "-"
-const getDeviation = (internalQc, amdocsQc) => {
-  const internal = parsePercent(internalQc);
-  const amdocs = parsePercent(amdocsQc);
-  if (internal === null || amdocs === null) return { text: "-", trend: "" };
+// Date + (alag Time column ho to wo) -> "MM-DD-YYYY HH:mm"; time na ho to sirf "MM-DD-YYYY"
+const parseDateTime = (dateVal, timeVal) => {
+  if (dateVal === null || dateVal === undefined || dateVal === "") return null;
 
-  const diff = Math.round((amdocs - internal) * 100) / 100;
-  if (diff === 0) return { text: "0%", trend: "" };
-  return { text: `${Math.abs(diff)}%`, trend: diff > 0 ? "up" : "down" };
+  const datePart = parseExcelDate(dateVal);
+  if (!datePart) return null;
+
+  // pehle date ke andar se time (e.g. "11/3/2026, 3.32 AM"), na mile to alag Time column se
+  const time = extractTime(dateVal) || extractTime(timeVal);
+  return time ? `${datePart} ${time}` : datePart;
 };
 
-const DEVIATION_UP = "#16a34a";
-const DEVIATION_DOWN = "#dc2626";
+const formatDateToMMDDYYYY = (dateVal) => {
+  if (!dateVal) return "";
+  const strVal = cleanText(dateVal.toString());
 
-// Inline style isliye ki css file purani ho tab bhi red / chip dikhe
-// OTP khaali ho to poori row ka background light red (text ka color normal rahega)
-const rowMissingStyle = { background: "#fee2e2" };
+  // "MM-DD-YYYY" ya "MM-DD-YYYY HH:mm" pehle se sahi format me hai to waisa hi rakho (time bhi)
+  const mdyTime = strVal.match(/^(\d{2}-\d{2}-\d{4})(?:[ T]+(\d{1,2}:\d{2}))?$/);
+  if (mdyTime) return mdyTime[2] ? `${mdyTime[1]} ${mdyTime[2]}` : mdyTime[1];
 
-// Us row me OTP wala cell thoda gehra red background (text ka color normal rahega)
-const otpMissingStyle = {
-  background: "#fecaca",
-  fontWeight: 700,
-  textAlign: "center",
+  const isoMatch = strVal.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (isoMatch) {
+    const [, year, month, day] = isoMatch;
+    return `${month}-${day}-${year}`;
+  }
+
+  // purani galat raw text wali rows bhi (date + time) sahi dikhengi
+  return parseDateTime(strVal, "") || strVal;
 };
 
-// Deviation cell: value + uske side me arrow
-const DeviationCell = ({ text, trend }) => {
-  if (!trend) return text || "-";
-  const color = trend === "up" ? DEVIATION_UP : DEVIATION_DOWN;
-  return (
-    <span style={{ display: "inline-flex", alignItems: "center", gap: 4, fontWeight: 700, color }}>
-      <span>{text}</span>
-      <span style={{ fontSize: 16, lineHeight: 1 }}>{trend === "up" ? "↑" : "↓"}</span>
-    </span>
-  );
+const isZeroValue = (v) => {
+  if (v === null || v === undefined || v === false) return false;
+  const s = v.toString().trim().replace(/%$/, "").trim();
+  return s !== "" && !isNaN(Number(s)) && Number(s) === 0;
 };
 
-// Table me date ke saath time, bilkul Excel jaisa: "11/3/2026, 3.32 AM"
-const DateTimeCell = ({ date, time }) => {
-  const text = displayDateTime(date, time);
-  if (!text) return "-";
-  return <span style={{ whiteSpace: "nowrap" }}>{text}</span>;
+const QC_ARROW_RE = /[↑▲⬆↓▼⬇]/g;
+
+const formatPercentage = (value) => {
+  if (value === null || value === undefined || value === "") return "";
+  // Cell me arrow (↑ ↓) likha ho to hata do, sirf value rakho
+  let str = value.toString().replace(QC_ARROW_RE, "").trim();
+  if (str === "") return "";
+  if (isZeroValue(str)) return "";
+  if (str.endsWith("%")) return str;
+
+  const num = Number(str);
+  if (!isNaN(num)) {
+    const abs = Math.abs(num);
+    // 0.95 -> 95%, -0.05 -> -5%, 95 -> 95%
+    if (abs > 0 && abs <= 1) return `${Number((num * 100).toFixed(2))}%`;
+    return `${num}%`;
+  }
+  return str;
 };
 
-// Table mein dikhne wale placeholder ("-", "N/A") ko edit box mein khaali dikhao,
-// warna save karne par "-" / "N/A" database mein chala jata tha
-const fromDisplay = (v) => {
-  if (v === undefined || v === null) return "";
-  if (v === "-" || v === "N/A") return "";
+const cleanOtp = (v) => formatPercentage(v);
+const blankIfZero = (v) => (isZeroValue(v) ? "" : v);
+// SPEED: header ka "compressed" naam baar-baar regex se na banana pade, isliye yaad rakhte hain
+const compressCache = new Map();
+const compressKey = (s) => {
+  const str = String(s);
+  let v = compressCache.get(str);
+  if (v === undefined) {
+    v = str.toLowerCase().replace(/[^a-z0-9]/g, "");
+    compressCache.set(str, v);
+  }
   return v;
 };
 
-// Edit box ka text wapas list mein badalta hai (agar original data list tha)
-const toPayloadList = (text, wasArray) => {
-  const t = (text || "").toString().trim();
-  if (!wasArray) return t;
-  return t.split(/\s*[|,]\s*/).filter(Boolean);
+// Time wale columns: koi bhi header jisme "receive...time" ya "submi...time" ho (Received Time, Receive Time (IST), ...)
+// Ye UOM me nahi jaane chahiye, ye date ke saath judte hain
+const RECEIVE_TIME_RE = /receiv.*time/;
+const SUBMISSION_TIME_RE = /submi.*time/;
+const ECD_TIME_RE = /ecd.*time/;
+const isTimeColumnKey = (key) => {
+  const c = compressKey(key);
+  return RECEIVE_TIME_RE.test(c) || SUBMISSION_TIME_RE.test(c) || ECD_TIME_RE.test(c);
+};
+const findTimeInRow = (row, re) => {
+  for (const key of Object.keys(row)) {
+    if (!re.test(compressKey(key))) continue;
+    const val = unwrapCell(row[key]);
+    if (val !== null && val !== undefined && val !== "") return val;
+  }
+  return "";
 };
 
-const normKey = (s) => (s || "").toString().trim().toLowerCase();
-
-const shortNames = {
-  Alabama: "AL", Alaska: "AK", Arizona: "AZ", Arkansas: "AR",
-  California: "CA", Colorado: "CO", Connecticut: "CT", Delaware: "DE",
-  Florida: "FL", Georgia: "GA", Hawaii: "HI", Idaho: "ID",
-  Illinois: "IL", Indiana: "IN", Iowa: "IA", Kansas: "KS",
-  Kentucky: "KY", Louisiana: "LA", Maine: "ME", Maryland: "MD",
-  Massachusetts: "MA", Michigan: "MI", Minnesota: "MN", Mississippi: "MS",
-  Missouri: "MO", Montana: "MT", Nebraska: "NE", Nevada: "NV",
-  "New Hampshire": "NH", "New Jersey": "NJ", "New Mexico": "NM", "New York": "NY",
-  "North Carolina": "NC", "North Dakota": "ND", Ohio: "OH", Oklahoma: "OK",
-  Oregon: "OR", Pennsylvania: "PA", "Rhode Island": "RI", "South Carolina": "SC",
-  "South Dakota": "SD", Tennessee: "TN", Texas: "TX", Utah: "UT",
-  Vermont: "VT", Virginia: "VA", Washington: "WA", "West Virginia": "WV",
-  Wisconsin: "WI", Wyoming: "WY", "District of Columbia": "DC"
+const getMonthValue = (row) => {
+  for (const key of Object.keys(row)) {
+    const k = compressKey(key);
+    if (k === "month" || k === "monthofservice" || k === "months") {
+      return row[key];
+    }
+  }
+  return null;
 };
 
-const mapColors = [
-  "#738F52", "#9ACD32", "#78BE21", "#32CD32",
-  "#90EE90", "#00FF00", "#66FF00", "#008000", "#006400"
+const monthNames = [
+  "Jan", "Feb", "Mar", "Apr", "May", "Jun",
+  "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"
 ];
+const monthNameToIndex = monthNames.reduce((acc, m, idx) => {
+  acc[m.toLowerCase()] = idx;
+  return acc;
+}, {});
+monthNameToIndex["sept"] = 8; // Excel me "Sept, 2026" likha hai
+const fullMonthNameToIndex = [
+  "january", "february", "march", "april", "may", "june",
+  "july", "august", "september", "october", "november", "december"
+].reduce((acc, m, idx) => {
+  acc[m] = idx;
+  return acc;
+}, {});
 
-const allStates = [...new Set(geoData.features.map((f) => f.properties.name))];
+let monthDefaultYear = new Date().getFullYear();
 
-const getStoredUser = () => {
-  try {
-    return JSON.parse(localStorage.getItem("user")) || {};
-  } catch {
-    return {};
+const formatMonth = (value) => {
+  if (!value) return null;
+
+  if (value instanceof Date) {
+    if (isNaN(value.getTime())) return null;
+    return `${monthNames[value.getUTCMonth()]},${value.getUTCFullYear()}`;
+  }
+
+  if (typeof value === "number" && value > 20000) {
+    const serialDate = new Date(Math.round((value - 25569) * 86400 * 1000));
+    if (!isNaN(serialDate.getTime())) {
+      return `${monthNames[serialDate.getUTCMonth()]},${serialDate.getUTCFullYear()}`;
+    }
+  }
+
+  let strVal = cleanText(String(value));
+  if (!strVal) return null;
+  if (/^[A-Za-z]{3},\d{4}$/.test(strVal)) return strVal;
+  let m = strVal.match(/^(\d{4})-(\d{1,2})(?:-\d{1,2})?$/);
+  if (m) {
+    const year = m[1];
+    const monthIdx = Number(m[2]) - 1;
+    if (monthIdx >= 0 && monthIdx <= 11) {
+      return `${monthNames[monthIdx]},${year}`;
+    }
+  }
+
+  // "MM-YYYY" or "MM/YYYY"
+  m = strVal.match(/^(\d{1,2})[-/](\d{4})$/);
+  if (m) {
+    const monthIdx = Number(m[1]) - 1;
+    if (monthIdx >= 0 && monthIdx <= 11) {
+      return `${monthNames[monthIdx]},${m[2]}`;
+    }
+  }
+
+  m = strVal.match(/^([A-Za-z]+)[\s\-/,]+(\d{4})$/);
+  if (m) {
+    const key = m[1].toLowerCase();
+    const monthIdx = monthNameToIndex[key] !== undefined ? monthNameToIndex[key] : fullMonthNameToIndex[key];
+    if (monthIdx !== undefined) {
+      return `${monthNames[monthIdx]},${m[2]}`;
+    }
+  }
+
+  // sirf month ka naam (bina saal)
+  m = strVal.match(/^([A-Za-z]+)\.?$/);
+  if (m) {
+    const key = m[1].toLowerCase();
+    const monthIdx = monthNameToIndex[key] !== undefined ? monthNameToIndex[key] : fullMonthNameToIndex[key];
+    if (monthIdx !== undefined) {
+      return `${monthNames[monthIdx]},${monthDefaultYear}`;
+    }
+  }
+
+  const d = new Date(strVal);
+  if (!isNaN(d.getTime())) {
+    return `${monthNames[d.getMonth()]},${d.getFullYear()}`;
+  }
+  return strVal;
+};
+
+const cleanMonthArray = (arr) => {
+  if (!Array.isArray(arr)) return [];
+  return arr.map(m => formatMonth(m)).filter(Boolean);
+};
+
+const extractUOM = (row) => {
+  const uom = {};
+
+  const systemColumns = [
+    "sow", "job type", "job_type", "state", "market", "region", "county",
+    "month", "month of service", "months", "otp", "amdocs qc", "amdocs_qc", 
+    "internal qc", "internal_qc", "job id", "job_id", "jobid", 
+    "receive date", "received date", "receive_date", "received_date",
+    "ecd date", "ecd_date", "ecd-date", "ecddate", "ecd", "submission date", "submission_date", 
+    "current status", "current_status", "production engineers", "production_engineers", 
+    "qc engineers", "qc_engineers", "sl no", "sl.no", "sl", "sl.", "sl_no", "slno", 
+    "file name", "file_name", "jobs delivered", "jobs_delivered", "domain", "status"
+  ];
+
+  if (!extractUOM._sysSet) {
+    extractUOM._sysSet = new Set(systemColumns.map((sys) => compressKey(sys)));
+  }
+  const sysSet = extractUOM._sysSet;
+
+  Object.keys(row).forEach((key) => {
+    if (!key) return;
+
+    const compressedKey = compressKey(key);
+
+    const isSystemCol = sysSet.has(compressedKey) || isTimeColumnKey(key);
+
+    if (!isSystemCol) {
+      let value = unwrapCell(row[key]);
+      if (value !== "" && value !== null && value !== undefined && !(value instanceof Date) && typeof value !== "object") {
+        const cleanKeyName = key
+          .toString()
+          .toLowerCase()
+          .replace(/\./g, "")
+          .replace(/:/g, "")
+          .replace(/\(.*\)/g, "")
+          .replace(/\*/g, "")
+          .replace(/[\s_]+/g, " ")
+          .trim();
+        uom[cleanKeyName] = value;
+      }
+    }
+  });
+
+  return uom;
+};
+
+const findValueInRow = (row, possibleKeys) => {
+  for (const key of Object.keys(row)) {
+    const compressedKey = compressKey(key);
+    for (const pk of possibleKeys) {
+      const compressedPk = compressKey(pk);
+      if (compressedKey === compressedPk) {
+        const val = unwrapCell(row[key]);
+        if (val === null || val === undefined) return "";
+        return val;
+      }
+    }
+  }
+  return "";
+};
+
+// SPEED: state code -> state name ka map ek baar banta hai (pehli match jeetti hai, pehle jaisa)
+let stateCodeMap = null;
+const getStateNameFromCode = (code) => {
+  if (!code) return "";
+  const input = code.toString().trim().toUpperCase();
+
+  if (!stateCodeMap) {
+    stateCodeMap = new Map();
+    for (const stateName in stateData) {
+      const c = clean(stateData[stateName] && stateData[stateName].code).toUpperCase();
+      if (c && !stateCodeMap.has(c)) stateCodeMap.set(c, stateName);
+    }
+  }
+
+  return stateCodeMap.get(input) || "";
+};
+
+const getRegionFromState = (state) => {
+  if (!state) return "";
+  const found = stateData[state];
+  return found ? found.region : "";
+};
+
+let countyLookupMap = null;
+const getStateFromCounty = (countyName) => {
+  if (!countyName) return { county: "", state: "" };
+
+  const input = countyName.toString().toLowerCase().replace("county", "").trim();
+
+  // SPEED: county list ka map ek baar banta hai (pehli match jeetti hai, pehle jaisa)
+  if (!countyLookupMap) {
+    countyLookupMap = new Map();
+    for (const item of countyData) {
+      const geo = item.GeographicAreaName;
+      if (!geo) continue;
+
+      const parts = geo.split(",");
+      const countyPart = parts[0]?.replace("County", "").trim().toLowerCase();
+      const statePart = parts[1]?.trim();
+
+      if (countyPart !== undefined && !countyLookupMap.has(countyPart)) {
+        countyLookupMap.set(countyPart, {
+          county: parts[0]?.replace("County", "").trim(),
+          state: statePart
+        });
+      }
+    }
+  }
+
+  const hit = countyLookupMap.get(input);
+  if (hit) {
+    return { county: hit.county, state: hit.state };
+  }
+
+  return { county: countyName, state: "" };
+};
+
+const helperSyncToJobCreation = (data) => {
+  return new Promise((resolve) => {
+    const newJobId = clean(data.cleanJobId);
+    if (!newJobId || newJobId === "-") return resolve();
+    const jcDomain = domainKey(data.domain);
+    const cleanSingleM = formatMonth(data.month);
+    data = {
+      ...data,
+      otp: cleanOtp(data.otp),
+      amdocsQc: blankIfZero(data.amdocsQc),
+      internalQc: blankIfZero(data.internalQc)
+    };
+
+    // FIX: job_creation me bhi (jobId + domain) se match hoga, sirf jobId se nahi
+    let checkSql;
+    let checkParams;
+    if (jcDomain) {
+      checkSql = `
+        SELECT id, jobId FROM job_creation 
+        WHERE TRIM(jobId) = TRIM(?)
+          AND (UPPER(TRIM(COALESCE(domain,''))) = ? OR TRIM(COALESCE(domain,'')) = '')
+        ORDER BY (UPPER(TRIM(COALESCE(domain,''))) = ?) DESC
+        LIMIT 1
+      `;
+      checkParams = [newJobId, jcDomain, jcDomain];
+    } else {
+      checkSql = `
+        SELECT id, jobId FROM job_creation 
+        WHERE TRIM(jobId) = TRIM(?) 
+        LIMIT 1
+      `;
+      checkParams = [newJobId];
+    }
+
+    db.query(checkSql, checkParams, (err, rows) => {
+      if (err) {
+        console.error("Error checking job_creation:", err.message);
+        return resolve();
+      }
+
+      if (rows && rows.length > 0) {
+        const targetId = rows[0].id;
+        const updateSql = `
+          UPDATE job_creation
+          SET domain = COALESCE(NULLIF(?, ''), domain),
+              market = COALESCE(NULLIF(?, ''), market),
+              month = COALESCE(?, month),
+              receiveDate = COALESCE(?, receiveDate),
+              ecdDate = COALESCE(?, ecdDate),
+              submissionDate = COALESCE(?, submissionDate),
+              otp = COALESCE(NULLIF(?, ''), otp),
+              amdocsQc = COALESCE(NULLIF(?, ''), amdocsQc),
+              internalQc = COALESCE(NULLIF(?, ''), internalQc),
+              updated_at = CURRENT_TIMESTAMP
+          WHERE id = ?
+        `;
+        db.query(updateSql, [
+          data.domain,
+          data.market,
+          cleanSingleM,
+          data.receiveDate,
+          data.ecdDate,
+          data.submissionDate,
+          data.otp,
+          data.amdocsQc,
+          data.internalQc,
+          targetId
+        ], (upErr) => {
+          if (upErr) console.error("Error updating job_creation:", upErr.message);
+          resolve();
+        });
+      } else {
+        const insertSql = `
+          INSERT INTO job_creation (domain, market, jobId, month, receiveDate, ecdDate, submissionDate, otp, amdocsQc, internalQc)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `;
+        db.query(insertSql, [
+          data.domain,
+          data.market,
+          newJobId,
+          cleanSingleM,
+          data.receiveDate,
+          data.ecdDate,
+          data.submissionDate,
+          data.otp,
+          data.amdocsQc,
+          data.internalQc
+        ], (inErr) => {
+          if (inErr) console.error("Error inserting job_creation:", inErr.message);
+          resolve();
+        });
+      }
+    });
+  });
+};
+
+const parseImportRow = (row, sheetName) => {
+  const domain = normalize(sheetName);
+  const sow = clean(findValueInRow(row, ["SOW"]));
+  const jobType = normalize(findValueInRow(row, ["Job Type", "job_type", "job-type"]));
+  const jobIdVal = clean(findValueInRow(row, ["Job ID", "job_id", "jobId", "job-id"]));
+
+  const otpVal = cleanOtp(findValueInRow(row, ["OTP"]));
+  const currentStatusVal = clean(findValueInRow(row, ["Current Status", "current_status", "current-status"]));
+  const productionEngineersVal = clean(findValueInRow(row, ["Production Engineers", "production_engineers"]));
+  const qcEngineersVal = clean(findValueInRow(row, ["QC Engineers", "qc_engineers"]));
+
+  const amdocsQcVal = formatPercentage(findValueInRow(row, ["Amdocs QC", "amdocs_qc"]));
+  const internalQcVal = formatPercentage(findValueInRow(row, ["Internal QC", "internal_qc"]));
+
+  const receiveDateVal = parseDateTime(
+    findValueInRow(row, ["Receive Date", "receive_date", "receive-date", "received date", "received_date", "Receive Date Time", "Received Date Time"]),
+    findTimeInRow(row, RECEIVE_TIME_RE)
+  );
+  // ECD me bhi time ho sakta hai: date ke andar ("11/4/2026, 5.53 PM") ya alag "ECD Time" column me
+  const ecdDateVal = parseDateTime(
+    findValueInRow(row, ["ECD Date", "ecd_date", "ecd-date", "ecddate", "ECD", "ECD Date Time"]),
+    findTimeInRow(row, ECD_TIME_RE)
+  );
+  const submissionDateVal = parseDateTime(
+    findValueInRow(row, ["Submission Date", "submission_date", "submission-date", "Submission Date Time"]),
+    findTimeInRow(row, SUBMISSION_TIME_RE)
+  );
+
+  // State -> Market -> Region ke order me pehli non-empty value
+  let rawLocation =
+    clean(findValueInRow(row, ["State"])) ||
+    clean(findValueInRow(row, ["Market"])) ||
+    clean(findValueInRow(row, ["Region"]));
+
+  let state = "";
+  let county = "";
+  let region = "";
+
+  const formattedLocation = rawLocation
+    .toString()
+    .trim()
+    .toLowerCase()
+    .split(" ")
+    .map(w => w.charAt(0).toUpperCase() + w.slice(1))
+    .join(" ");
+
+  const stateFromCode = getStateNameFromCode(formattedLocation);
+
+  if (stateFromCode) {
+    state = stateFromCode;
+    region = getRegionFromState(state);
+  } else {
+    const matchedState = Object.keys(stateData).find(
+      s => s.toLowerCase() === formattedLocation.toLowerCase()
+    );
+
+    if (matchedState) {
+      state = matchedState;
+      region = getRegionFromState(state);
+    }
+  }
+
+  if (!state) {
+    const countyResult = getStateFromCounty(formattedLocation);
+
+    if (countyResult.state) {
+      county = countyResult.county;
+      state = countyResult.state;
+      region = getRegionFromState(state);
+    }
+  }
+
+  // Agar state se region nahi mila to Excel ka Region column use karo
+  if (!region) {
+    const sheetRegion = clean(findValueInRow(row, ["Region"]));
+    if (sheetRegion) region = sheetRegion;
+  }
+
+  const month = formatMonth(getMonthValue(row));
+  const uom = extractUOM(row);
+
+  return {
+    domain,
+    sow,
+    jobType,
+    jobIdVal,
+    otpVal,
+    currentStatusVal,
+    productionEngineersVal,
+    qcEngineersVal,
+    amdocsQcVal,
+    internalQcVal,
+    receiveDateVal,
+    ecdDateVal,
+    submissionDateVal,
+    state,
+    county,
+    region,
+    month,
+    uom,
+    market: state || region
+  };
+};
+
+const hasText = (v) => v !== null && v !== undefined && v !== "";
+const hasValue = (v) => v !== null && v !== undefined;
+
+// Ek hi (domain + Job ID) ki kai rows ko ek me milata hai.
+// Pehle ye kaam DB me ek ke baad ek UPDATE se hota tha; natija same hai:
+//  - sow/job_type/region/state/county = pehli row ke
+//  - months = sab months (duplicate nahi), uom = sab uom merge (baad wala jeetta hai)
+//  - baaki fields = aakhri non-empty value
+const mergeImportRecords = (recs) => {
+  const first = recs[0];
+  const merged = {
+    ...first,
+    months: [],
+    uom: {}
+  };
+
+  recs.forEach((r) => {
+    if (r.month) {
+      const m = String(r.month).trim();
+      if (m && !merged.months.includes(m)) merged.months.push(m);
+    }
+    merged.uom = { ...merged.uom, ...r.uom };
+  });
+
+  recs.forEach((r) => {
+    if (hasText(r.otpVal)) merged.otpVal = r.otpVal;
+    if (hasText(r.currentStatusVal)) merged.currentStatusVal = r.currentStatusVal;
+    if (hasText(r.productionEngineersVal)) merged.productionEngineersVal = r.productionEngineersVal;
+    if (hasText(r.qcEngineersVal)) merged.qcEngineersVal = r.qcEngineersVal;
+    if (hasText(r.amdocsQcVal)) merged.amdocsQcVal = r.amdocsQcVal;
+    if (hasText(r.internalQcVal)) merged.internalQcVal = r.internalQcVal;
+    if (hasValue(r.receiveDateVal)) merged.receiveDateVal = r.receiveDateVal;
+    if (hasValue(r.ecdDateVal)) merged.ecdDateVal = r.ecdDateVal;
+    if (hasValue(r.submissionDateVal)) merged.submissionDateVal = r.submissionDateVal;
+  });
+
+  return merged;
+};
+
+// job_creation ke liye bhi wahi merge (aakhri non-empty value jeetti hai)
+const buildJobCreationData = (recs) => {
+  const out = {
+    domain: recs[0].domain,
+    jobId: recs[0].jobIdVal,
+    market: "",
+    month: null,
+    receiveDate: null,
+    ecdDate: null,
+    submissionDate: null,
+    otp: "",
+    amdocsQc: "",
+    internalQc: ""
+  };
+
+  recs.forEach((r) => {
+    if (hasText(r.market)) out.market = r.market;
+    if (r.month) out.month = r.month;
+    if (hasValue(r.receiveDateVal)) out.receiveDate = r.receiveDateVal;
+    if (hasValue(r.ecdDateVal)) out.ecdDate = r.ecdDateVal;
+    if (hasValue(r.submissionDateVal)) out.submissionDate = r.submissionDateVal;
+    if (hasText(r.otpVal)) out.otp = cleanOtp(r.otpVal);
+    if (hasText(r.amdocsQcVal)) out.amdocsQc = blankIfZero(r.amdocsQcVal);
+    if (hasText(r.internalQcVal)) out.internalQc = blankIfZero(r.internalQcVal);
+  });
+
+  out.month = formatMonth(out.month);
+  return out;
+};
+
+// helperSyncToJobCreation ka bulk version
+const bulkSyncJobCreation = async (list) => {
+  if (!list || list.length === 0) return;
+
+  const idMap = new Map();
+  list.forEach((d) => {
+    const lk = clean(d.jobId).toLowerCase();
+    if (!idMap.has(lk)) idMap.set(lk, clean(d.jobId));
+  });
+  const jobIds = Array.from(idMap.values());
+
+  const jcByJob = new Map();
+  for (const part of chunkArray(jobIds, 500)) {
+    const found = await query(
+      `SELECT id, jobId, domain FROM job_creation WHERE jobId IN (${inClause(part)}) ORDER BY id ASC`,
+      part
+    );
+    (found || []).forEach((r) => {
+      const jk = clean(r.jobId).toLowerCase();
+      if (!jcByJob.has(jk)) jcByJob.set(jk, []);
+      jcByJob.get(jk).push({ id: r.id, domain: domainKey(r.domain) });
+    });
+  }
+
+  const updates = [];
+  const inserts = [];
+
+  for (const d of list) {
+    const jk = clean(d.jobId).toLowerCase();
+    const dk = domainKey(d.domain);
+    const cands = jcByJob.get(jk) || [];
+
+    let target = cands.find((c) => c.domain === dk);
+    if (!target) target = dk ? cands.find((c) => c.domain === "") : cands[0];
+
+    if (target) {
+      // blank-domain row is domain ko mil gayi; dusre domain ke liye nayi row banegi
+      if (dk) target.domain = dk;
+      updates.push({ id: target.id, d });
+    } else {
+      inserts.push(d);
+      if (!jcByJob.has(jk)) jcByJob.set(jk, []);
+      jcByJob.get(jk).push({ id: null, domain: dk });
+    }
+  }
+
+  const updateSql = `
+    UPDATE job_creation
+    SET domain = COALESCE(NULLIF(?, ''), domain),
+        market = COALESCE(NULLIF(?, ''), market),
+        month = COALESCE(?, month),
+        receiveDate = COALESCE(?, receiveDate),
+        ecdDate = COALESCE(?, ecdDate),
+        submissionDate = COALESCE(?, submissionDate),
+        otp = COALESCE(NULLIF(?, ''), otp),
+        amdocsQc = COALESCE(NULLIF(?, ''), amdocsQc),
+        internalQc = COALESCE(NULLIF(?, ''), internalQc),
+        updated_at = CURRENT_TIMESTAMP
+    WHERE id = ?
+  `;
+
+  await runLimited(updates, 6, async ({ id, d }) => {
+    try {
+      await query(updateSql, [
+        d.domain,
+        d.market,
+        d.month,
+        d.receiveDate,
+        d.ecdDate,
+        d.submissionDate,
+        d.otp,
+        d.amdocsQc,
+        d.internalQc,
+        id
+      ]);
+    } catch (e) {
+      console.error("Error updating job_creation:", e.message);
+    }
+  });
+
+  if (inserts.length > 0) {
+    const rows = inserts.map((d) => [
+      d.domain,
+      d.market,
+      clean(d.jobId),
+      d.month,
+      d.receiveDate,
+      d.ecdDate,
+      d.submissionDate,
+      d.otp,
+      d.amdocsQc,
+      d.internalQc
+    ]);
+    await bulkInsert(
+      "job_creation",
+      ["domain", "market", "jobId", "month", "receiveDate", "ecdDate", "submissionDate", "otp", "amdocsQc", "internalQc"],
+      rows
+    );
   }
 };
 
-const toastBaseStyle = {
-  position: "fixed",
-  top: "20px",
-  right: "20px",
-  zIndex: 999999,
-  minWidth: "260px",
-  maxWidth: "420px",
-  padding: "12px 16px",
-  borderRadius: "8px",
-  color: "#ffffff",
-  fontSize: "14px",
-  fontWeight: 600,
-  boxShadow: "0 6px 18px rgba(0,0,0,0.25)",
-  display: "flex",
-  alignItems: "center",
-  justifyContent: "space-between",
-  gap: "12px",
-};
+const WORK_INSERT_COLUMNS = [
+  "file_name", "months", "domain", "sow", "job_type", "region", "state", "county", "uom",
+  "otp", "current_status", "production_engineers", "qc_engineers", "amdocs_qc", "internal_qc",
+  "jobs_delivered", "job_id", "receive_date", "ecd_date", "submission_date"
+];
 
-const toastColors = {
-  success: "#16a34a",
-  error: "#dc2626",
-  warning: "#d97706",
-};
+const importExcel = async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ message: "Excel file required" });
+    }
 
-const toastIcons = {
-  success: "✅",
-  error: "❌",
-  warning: "⚠️",
-};
+    lastBulkError = "";
+    // Import se pehle date columns ko time ke layak chaude kar do (chhote hon to time kat jata hai)
+    const dateColumnWarnings = await ensureDateTimeColumns();
+    const importStartedAt = Date.now();
+    const workbook = new ExcelJS.Workbook();
+    await workbook.xlsx.load(req.file.buffer);
 
-const confirmOverlayStyle = {
-  position: "fixed",
-  inset: 0,
-  background: "rgba(0,0,0,0.45)",
-  zIndex: 999998,
-  display: "flex",
-  alignItems: "center",
-  justifyContent: "center",
-};
+    let success = 0;
+    let failed = 0;
+    let totalRows = 0;
 
-const confirmModalStyle = {
-  background: "#ffffff",
-  borderRadius: "10px",
-  padding: "22px 24px",
-  width: "90%",
-  maxWidth: "380px",
-  boxShadow: "0 10px 30px rgba(0,0,0,0.3)",
-  textAlign: "center",
-  fontFamily: "Arial, sans-serif",
-};
-
-const confirmBtnBase = {
-  border: "none",
-  borderRadius: "6px",
-  padding: "8px 18px",
-  fontSize: "14px",
-  fontWeight: 600,
-  cursor: "pointer",
-  color: "#ffffff",
-};
-
-export default function Report() {
-  const [jumpPage, setJumpPage] = useState("");
-  const [data, setData] = useState([]);
-  const [selectedMonthYear, setSelectedMonthYear] = useState("");
-  const [selectedDomain, setSelectedDomain] = useState("");
-  const [selectedState, setSelectedState] = useState("");
-  const [fromDate, setFromDate] = useState("");
-  const [toDate, setToDate] = useState("");
-  const [currentPage, setCurrentPage] = useState(1);
-  const rowsPerPage = 10;
-  const [openExport, setOpenExport] = useState(false);
-  const exportRef = useRef();
-  const [isGeneratingPDF, setIsGeneratingPDF] = useState(false);
-  const [editingRowId, setEditingRowId] = useState(null);
-  const [editForm, setEditForm] = useState({});
-  const user = getStoredUser();
-
-  // Screen par message + confirm box
-  const [toast, setToast] = useState(null); // { type, text }
-  const [confirmAction, setConfirmAction] = useState(null); // { type: "save" | "delete", id? }
-  const toastTimerRef = useRef(null);
-
-  const showToast = useCallback((type, text) => {
-    if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
-    setToast({ type, text });
-    toastTimerRef.current = setTimeout(() => setToast(null), 3500);
-  }, []);
-
-  useEffect(() => {
-    return () => {
-      if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
+    // har step ka time (ms) naapte hain taaki pata chale der kahan lag rahi hai
+    const timings = {};
+    let lapStart = importStartedAt;
+    const lap = (name) => {
+      const now = Date.now();
+      timings[name] = now - lapStart;
+      lapStart = now;
     };
-  }, []);
+    lap("loadFile");
 
-  /* ---------------- Fetch ---------------- */
+    // har import ki shuruaat me default saal reset
+    monthDefaultYear = new Date().getFullYear();
 
-  const fetchData = useCallback(async () => {
-    try {
-      const res = await axios.get(`${API_BASE_URL}/api/work/all`);
-      // Response array na ho to bhi page crash na kare
-      const list = Array.isArray(res.data) ? res.data : res.data?.data || [];
-      setData(list);
-    } catch (err) {
-      console.error("Error fetching work data:", err);
-      showToast("error", "Work data load nahi ho paya!");
-    }
-  }, [showToast]);
+    /* ---------- STEP 1: poori Excel memory me padho ---------- */
+    const records = [];
 
-  useEffect(() => {
-    fetchData();
+    for (const worksheet of workbook.worksheets) {
+      const sheetName = worksheet.name;
+      const rows = [];
+      const headers = [];
 
-    const handleClickOutside = (e) => {
-      if (exportRef.current && !exportRef.current.contains(e.target)) {
-        setOpenExport(false);
-      }
-    };
+      const headerRow = worksheet.getRow(1);
+      const totalColumns = headerRow.cellCount || worksheet.columnCount;
 
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, [fetchData]);
-
-  useEffect(() => {
-    setCurrentPage(1);
-    // Filters badalne par page reset hota hai, isliye page-jump input bhi saaf kar do
-    // warna wahan purana typed number reh jaata tha jo current page se match nahi karta tha
-    setJumpPage("");
-  }, [selectedMonthYear, selectedDomain, selectedState, fromDate, toDate]);
-
-  /* ---------------- Rows banana ---------------- */
-
-  let rows = [];
-
-  data.forEach((item) => {
-    const dateObj = item.updated_at || item.created_at;
-    const monthRaw = item.months?.[0] || item.month;
-
-    let month = "-";
-    let year = "-";
-
-    if (typeof monthRaw === "string" && monthRaw.trim() !== "") {
-      if (monthRaw.includes(",")) {
-        // Backend (getAllWork) hamesha "Jan,2024" format bhejta hai
-        const parts = monthRaw.split(",");
-        month = parts[0] || "-";
-        year = parts[1] || "-";
-      } else if (monthRaw.includes("-")) {
-        const parts = monthRaw.split("-");
-        month = parts[0] || "-";
-        let rawYear = parts[1] || "-";
-        year = rawYear.length === 2 ? `20${rawYear}` : rawYear;
-      } else if (monthRaw.includes(" ")) {
-        const parts = monthRaw.split(" ");
-        month = parts[0] || "-";
-        year = parts[1] || "-";
-      } else {
-        month = monthRaw;
-      }
-    }
-
-    // Pehle yahan "/" likha tha (division), isliye ye fallback kabhi chalta hi nahi tha
-    if ((year === "-" || !year) && dateObj) {
-      const fallbackDate = parseDate(dateObj);
-      if (fallbackDate) {
-        year = fallbackDate.getFullYear().toString();
-      }
-    }
-
-    const monthYear =
-      `${month !== "-" ? month : ""} ${year !== "-" ? year : ""}`.trim() || "-";
-
-    // OTP khaali ho ("", "-" ya sirf space) to us row / cell ko red karna hai
-    const otpValue = item.otp || item.internalOtp || "";
-    const otpText = String(otpValue).trim();
-    const otpMissing = otpText === "" || otpText === "-";
-
-    // Deviation = Amdocs QC - Internal QC
-    const internalQcValue = item.internal_qc || item.internalQc || "";
-    const amdocsQcValue = item.amdocs_qc || item.amdocsQc || "";
-    const dev = getDeviation(internalQcValue, amdocsQcValue);
-
-    rows.push({
-      id: item.id || item._id,
-      monthYear,
-      month,
-      year,
-      domain: item.domain || "-",
-      sow: formatArrayOrString(item.sow),
-      jobType: formatArrayOrString(item.job_type || item.jobType),
-
-      // Edit ke time original data list tha ya text, ye yaad rakhna zaroori hai
-      sowIsArray: Array.isArray(item.sow),
-      jobTypeIsArray: Array.isArray(item.job_type || item.jobType),
-      prodIsArray: Array.isArray(item.production_engineers),
-      qcIsArray: Array.isArray(item.qc_engineers),
-
-      region:
-        item.region &&
-        item.region !== "Unknown" &&
-        item.region !== "Unknown Region"
-          ? item.region
-          : "N/A",
-
-      state:
-        item.state &&
-        item.state !== "Unknown" &&
-        item.state !== "Unknown State"
-          ? item.state
-          : "N/A",
-
-      county:
-        item.county &&
-        item.county !== "Unknown" &&
-        item.county !== "Unknown County"
-          ? item.county
-          : "",
-
-      job_id: item.job_id || item.jobId || "-",
-      current_status: item.current_status || "-",
-      production_engineers: formatArrayOrString(item.production_engineers),
-      qc_engineers: formatArrayOrString(item.qc_engineers),
-      jobsDelivered: Number(item.jobs_delivered ?? item.jobsDelivered) || 0,
-      uom: cleanUom(item.uom),
-      otp: otpValue || "-",
-      otpMissing,
-      internal_qc: internalQcValue || "-",
-      amdocs_qc: amdocsQcValue || "-",
-      deviation: dev.text,
-      deviationTrend: dev.trend,
-      receive_date: toDateKey(item.receive_date),
-      receive_time: toTimeKey(item.receive_date),
-      ecd_date: toDateKey(item.ecd_date),
-      submission_date: toDateKey(item.submission_date),
-      submission_time: toTimeKey(item.submission_date),
-
-      createdAt: parseDate(item.created_at),
-      lastUpdate: parseDate(dateObj),
-      formattedDate: formatDateOnly(dateObj),
-    });
-  });
-
-  rows.sort((a, b) => {
-    const timeA = a.createdAt ? a.createdAt.getTime() : 0;
-    const timeB = b.createdAt ? b.createdAt.getTime() : 0;
-    return timeA - timeB;
-  });
-
-  const uniqueMonthYear = [
-    ...new Set(rows.map((r) => `${r.month} ${r.year}`)),
-  ].filter((m) => m !== "- -");
-  const uniqueDomains = [...new Set(rows.map((r) => r.domain).filter(Boolean))];
-
-  const isOtherState = (r) =>
-    r.region === "N/A" ||
-    !r.state ||
-    r.state === "Unknown" ||
-    r.state === "Unknown State" ||
-    r.state === "N/A";
-
-  const uniqueStates = [
-    ...new Set(rows.map((r) => (isOtherState(r) ? "Other" : r.state))),
-  ].sort((a, b) => {
-    if (a === "Other") return 1;
-    if (b === "Other") return -1;
-    return a.localeCompare(b);
-  });
-
-  const filteredRows = rows.filter((r) => {
-    if (selectedMonthYear && `${r.month} ${r.year}` !== selectedMonthYear)
-      return false;
-    if (selectedDomain && r.domain !== selectedDomain) return false;
-    if (selectedState) {
-      if (selectedState === "Other") {
-        if (!isOtherState(r)) return false;
-      } else if (r.state !== selectedState) {
-        return false;
-      }
-    }
-
-    if (fromDate || toDate) {
-      if (!r.lastUpdate) return false;
-      const rowTime = r.lastUpdate.getTime();
-
-      if (fromDate) {
-        const from = new Date(fromDate + "T00:00:00").getTime();
-        if (rowTime < from) return false;
+      for (let col = 1; col <= totalColumns; col++) {
+        const cellVal = unwrapCell(headerRow.getCell(col).value);
+        headers[col] = cellVal ? cellVal.toString().trim() : "";
       }
 
-      if (toDate) {
-        const to = new Date(toDate + "T23:59:59").getTime();
-        if (rowTime > to) return false;
-      }
-    }
+      worksheet.eachRow((row, rowNumber) => {
+        if (rowNumber === 1) return;
 
-    return true;
-  });
-
-  const latestUpdated = filteredRows.length
-    ? filteredRows.reduce((latest, row) => {
-        if (!row.lastUpdate) return latest;
-        return !latest || row.lastUpdate > latest ? row.lastUpdate : latest;
-      }, null)
-    : null;
-
-  const formattedLastUpdated = latestUpdated
-    ? `${latestUpdated.toLocaleTimeString("en-IN", {
-        timeZone: "Asia/Kolkata",
-        hour: "2-digit",
-        minute: "2-digit",
-        hour12: true,
-      })}, ${latestUpdated.toLocaleDateString("en-IN", {
-        timeZone: "Asia/Kolkata",
-        day: "2-digit",
-        month: "2-digit",
-        year: "numeric",
-      })}`
-    : "-";
-
-  const totalJobs = filteredRows.reduce((sum, r) => {
-    return sum + Number(r.jobsDelivered || 0);
-  }, 0);
-
-  /* ---------------- Pagination ---------------- */
-
-  const totalPages = Math.max(1, Math.ceil(filteredRows.length / rowsPerPage));
-
-  // Delete ke baad page limit se bahar chala jaye to last page par wapas
-  useEffect(() => {
-    if (currentPage > totalPages) {
-      setCurrentPage(totalPages);
-      // Page number apne aap adjust hua hai, isliye jump-box ka purana typed number
-      // saaf kar do warna wo naye current page se mismatch dikhega
-      setJumpPage("");
-    }
-  }, [currentPage, totalPages]);
-
-  const indexOfLast = currentPage * rowsPerPage;
-  const currentRows = filteredRows.slice(indexOfLast - rowsPerPage, indexOfLast);
-
-  /* ---------------- Map data (ek baar calculate) ---------------- */
-
-  // Pehle har state ke liye poora data dobara loop hota tha (bahut slow).
-  // Ab ek hi baar mein sab state ke totals nikal liye jate hain.
-  const stateTotals = {};
-  const coveredStates = new Set();
-  filteredRows.forEach((r) => {
-    const k = normKey(r.state);
-    if (!k || k === "n/a") return;
-    coveredStates.add(k);
-    stateTotals[k] = (stateTotals[k] || 0) + Number(r.jobsDelivered || 0);
-  });
-  const maxStateJobs = Math.max(1, ...Object.values(stateTotals));
-
-  const hasDataForState = (stateName) => coveredStates.has(normKey(stateName));
-
-  const getStateColor = (stateName) => {
-    const total = stateTotals[normKey(stateName)] || 0;
-    if (total === 0) return "#FFC491";
-
-    const ratio = total / maxStateJobs;
-    const index = Math.min(
-      mapColors.length - 1,
-      Math.floor(ratio * mapColors.length)
-    );
-    return mapColors[index];
-  };
-
-  const getLabelBgColor = (stateName) => {
-    if (hasDataForState(stateName)) return "#14532d";
-    return "#991b1b";
-  };
-
-  const getLabelTextColor = () => "#ffffff";
-
-  const coveredCount = allStates.filter((s) => hasDataForState(s)).length;
-
-  /* ---------------- Export ---------------- */
-
-  const getFileTimestamp = () => {
-    const now = new Date();
-    const date = now.toLocaleDateString("en-CA");
-    const time = now
-      .toLocaleTimeString("en-US", {
-        hour: "2-digit",
-        minute: "2-digit",
-        second: "2-digit",
-        hour12: true,
-      })
-      .replace(/:/g, ".")
-      .replace(/\s/g, "_");
-    return `${date}_at_${time}`;
-  };
-
-  const getMarketText = (r) =>
-    r.state === "N/A"
-      ? "N/A"
-      : r.county && r.county !== "-"
-        ? `${r.state} (${r.county})`
-        : r.state;
-
-  // PDF ka font arrow (↑ ↓) nahi chhap sakta, isliye PDF me "Up" / "Down" likha jata hai
-  const getPdfDeviationText = (r) => {
-    if (r.deviation === "-") return "-";
-    if (r.deviationTrend === "up") return `${r.deviation} Up`;
-    if (r.deviationTrend === "down") return `${r.deviation} Down`;
-    return r.deviation;
-  };
-
-  // Excel me asli arrow chal jata hai
-  const getExcelDeviationText = (r) => {
-    if (r.deviationTrend === "up") return `${r.deviation} ↑`;
-    if (r.deviationTrend === "down") return `${r.deviation} ↓`;
-    return r.deviation;
-  };
-
-  const downloadPDF = async () => {
-    if (isGeneratingPDF) return;
-    setOpenExport(false);
-    setIsGeneratingPDF(true);
-
-    try {
-      // Map screen par render hone ka wait (warna map blank aa sakta tha)
-      await new Promise((resolve) => setTimeout(resolve, 400));
-
-      const pdf = new jsPDF("l", "mm", "a4");
-      const pageWidth = pdf.internal.pageSize.getWidth();
-      const pageHeight = pdf.internal.pageSize.getHeight();
-
-      // Logo load na ho to bhi PDF ban jaye (pehle poora PDF fail ho jata tha)
-      const img = new Image();
-      img.src = "/Image/img1.png";
-      let logoLoaded = false;
-      await new Promise((resolve) => {
-        img.onload = () => {
-          logoLoaded = true;
-          resolve();
-        };
-        img.onerror = resolve;
-      });
-
-      if (logoLoaded) {
-        pdf.addImage(img, "PNG", 10, 8, 28, 28);
-      }
-      pdf.setFontSize(24);
-      pdf.setFont("helvetica", "bold");
-      pdf.setTextColor(0, 38, 77);
-      pdf.text("TELECOM WORK STATUS REPORT", pageWidth / 2, 20, { align: "center" });
-
-      pdf.setFont("helvetica", "normal");
-      pdf.setFontSize(12);
-      pdf.setTextColor(80);
-      pdf.text(`${new Date().toLocaleString("en-IN")}`, pageWidth - 12, 25, { align: "right" });
-
-      pdf.setDrawColor(180);
-      pdf.setLineWidth(0.8);
-      pdf.line(10, 38, pageWidth - 10, 38);
-
-      pdf.setFillColor(248, 250, 252);
-      pdf.roundedRect(10, 48, pageWidth - 20, 42, 3, 3, "FD");
-
-      pdf.setFontSize(15);
-      pdf.setTextColor(17, 24, 39);
-      pdf.text("REPORT SUMMARY", 15, 60);
-
-      pdf.setFontSize(11);
-      pdf.text(`Month / Year : ${selectedMonthYear || "All"}`, 15, 72);
-      pdf.text(`Date of Report : ${new Date().toLocaleDateString("en-IN")}`, 15, 82);
-      pdf.text(`Total Jobs Delivered : ${totalJobs}`, 170, 82);
-
-      const summaryMap = filteredRows.reduce((acc, r) => {
-        const domain = r.domain || "Unknown";
-        const sub = r.jobType || "-";
-        const totalJob = Number(r.jobsDelivered || 0);
-
-        if (!acc[domain]) {
-          acc[domain] = { total: 0, subMap: {} };
-        }
-        acc[domain].total += totalJob;
-
-        if (sub !== "-") {
-          acc[domain].subMap[sub] = (acc[domain].subMap[sub] || 0) + totalJob;
-        }
-        return acc;
-      }, {});
-
-      const summaryData = Object.entries(summaryMap).map(([domain, value]) => {
-        const subText =
-          Object.entries(value.subMap)
-            .map(([k, v]) => `${k}: ${v}`)
-            .join(", ") || "-";
-        return [domain, subText, `${value.total}`];
-      });
-
-      autoTable(pdf, {
-        startY: 92,
-        head: [["Domain", "Sub Domain", "Total job"]],
-        body: summaryData,
-        theme: "grid",
-        styles: { fontSize: 9, cellPadding: 3, halign: "center" },
-        headStyles: { fillColor: [22, 78, 99], textColor: 255, fontStyle: "bold" },
-        alternateRowStyles: { fillColor: [248, 250, 252] },
-        margin: { left: 5, right: 5 },
-      });
-
-      const finalY = pdf.lastAutoTable.finalY + 12;
-      pdf.setFontSize(16);
-      pdf.setTextColor(20);
-      pdf.text("DETAIL OVERVIEW", pageWidth / 2, finalY, { align: "center" });
-
-      const tableData = filteredRows.map((r, i) => [
-        i + 1,
-        r.month,
-        r.year,
-        r.domain,
-        r.sow,
-        r.jobType,
-        r.region,
-        getMarketText(r),
-        r.job_id,
-        r.current_status,
-        r.production_engineers,
-        r.qc_engineers,
-        r.jobsDelivered || 0,
-        formatUOM(r.uom),
-        r.otp,
-        r.internal_qc,
-        r.amdocs_qc,
-        getPdfDeviationText(r),
-        displayDateTime(r.receive_date, r.receive_time) || "-",
-        formatDisplayDate(r.ecd_date) || "-",
-        displayDateTime(r.submission_date, r.submission_time) || "-",
-      ]);
-
-      autoTable(pdf, {
-        startY: finalY + 8,
-        theme: "grid",
-        head: [[
-          "Sl", "Month", "Year", "Domain", "SOW", "Job Type", "Region", "Market",
-          "Job ID", "Status", "Prod Eng", "QC Eng", "Jobs", "UOM", "OTP",
-          "Int QC", "Amdocs QC", "Deviation", "Receive Date", "ECD Date", "Submission Date"
-        ]],
-        body: tableData,
-        styles: { fontSize: 4.5, cellPadding: 1.5, overflow: "linebreak", valign: "middle", halign: "center" },
-        headStyles: { fillColor: [22, 78, 99], textColor: 255, fontStyle: "bold" },
-        alternateRowStyles: { fillColor: [248, 250, 252] },
-        margin: { left: 5, right: 5 },
-        // OTP khaali ho to sirf OTP cell ka background red (text normal);
-        // Deviation up = green, down = red
-        didParseCell: (hook) => {
-          if (hook.section !== "body") return;
-          const r = filteredRows[hook.row.index];
-          if (!r) return;
-
-          if (hook.column.index === 14 && r.otpMissing) {
-            hook.cell.styles.fillColor = [254, 226, 226];
-            hook.cell.styles.fontStyle = "bold";
+        const obj = {};
+        for (let col = 1; col <= totalColumns; col++) {
+          const headerName = headers[col];
+          if (headerName) {
+            obj[headerName] = unwrapCell(row.getCell(col).value);
           }
-
-          if (hook.column.index === 17 && r.deviationTrend) {
-            hook.cell.styles.textColor =
-              r.deviationTrend === "up" ? [22, 163, 74] : [220, 38, 38];
-            hook.cell.styles.fontStyle = "bold";
-          }
-        },
-        didDrawPage: () => {
-          pdf.setFontSize(10);
-          pdf.setTextColor(120);
-          pdf.text(`Page ${pdf.internal.getNumberOfPages()}`, pageWidth / 2, pageHeight - 8, { align: "center" });
         }
-      });
-
-      // Map fail ho jaye to bhi table wala PDF save ho jaye
-      let mapFailed = false;
-      const mapElement = document.querySelector(".pdf-map");
-      if (mapElement) {
-        try {
-          const mapCanvas = await html2canvas(mapElement, { scale: 2, backgroundColor: "#ffffff" });
-          const mapImg = mapCanvas.toDataURL("image/png");
-
-          pdf.addPage();
-          if (logoLoaded) {
-            pdf.addImage(img, "PNG", 10, 8, 28, 28);
-          }
-          pdf.setFontSize(20);
-          pdf.setTextColor(20);
-          pdf.text("STATES COVERAGE MAP", pageWidth / 2, 18, { align: "center" });
-          pdf.setFontSize(10);
-          pdf.setTextColor(80);
-          pdf.text(`Report Date : ${new Date().toLocaleString("en-IN")}`, pageWidth - 12, 25, { align: "right" });
-
-          pdf.setDrawColor(180);
-          pdf.setLineWidth(0.8);
-          pdf.line(10, 38, pageWidth - 10, 38);
-          pdf.addImage(mapImg, "PNG", 15, 45, pageWidth - 30, 145);
-        } catch (mapErr) {
-          console.error("Map capture error:", mapErr);
-          mapFailed = true;
-        }
-      }
-
-      pdf.save(`Work_Report_${getFileTimestamp()}.pdf`);
-
-      if (mapFailed) {
-        showToast("warning", "PDF exported, lekin map add nahi ho paya.");
-      } else {
-        showToast("success", "PDF exported successfully!");
-      }
-    } catch (err) {
-      console.error(err);
-      showToast("error", "Failed to export PDF!");
-    } finally {
-      setIsGeneratingPDF(false);
-    }
-  };
-
-  const downloadExcel = async () => {
-    setOpenExport(false);
-
-    if (!filteredRows.length) {
-      showToast("warning", "No data to export.");
-      return;
-    }
-
-    try {
-      const workbook = new ExcelJS.Workbook();
-      const sheet = workbook.addWorksheet("Work Report");
-
-      sheet.columns = [
-        { header: "Sl.No", key: "sl", width: 8 },
-        { header: "Month", key: "month", width: 10 },
-        { header: "Year", key: "year", width: 10 },
-        { header: "Domain", key: "domain", width: 20 },
-        { header: "SOW", key: "sow", width: 15 },
-        { header: "Job Type", key: "job_type", width: 15 },
-        { header: "Region", key: "region", width: 15 },
-        { header: "Market", key: "market", width: 25 },
-        { header: "Job ID", key: "job_id", width: 15 },
-        { header: "Status", key: "current_status", width: 15 },
-        { header: "Prod Engineers", key: "production_engineers", width: 20 },
-        { header: "QC Engineers", key: "qc_engineers", width: 20 },
-        { header: "Jobs (Total)", key: "jobs", width: 15 },
-        { header: "UOM", key: "uom", width: 25 },
-        { header: "OTP", key: "otp", width: 15 },
-        { header: "Internal QC", key: "internal_qc", width: 15 },
-        { header: "Amdocs QC", key: "amdocs_qc", width: 15 },
-        { header: "Deviation", key: "deviation", width: 15 },
-        { header: "Receive Date", key: "receive_date", width: 22 },
-        { header: "ECD Date", key: "ecd_date", width: 15 },
-        { header: "Submission Date", key: "submission_date", width: 22 },
-      ];
-
-      filteredRows.forEach((r, i) => {
-        const excelRow = sheet.addRow({
-          sl: i + 1,
-          month: r.month,
-          year: r.year,
-          domain: r.domain,
-          sow: r.sow,
-          job_type: r.jobType,
-          region: r.region,
-          market: getMarketText(r),
-          job_id: r.job_id,
-          current_status: r.current_status,
-          production_engineers: r.production_engineers,
-          qc_engineers: r.qc_engineers,
-          jobs: r.jobsDelivered || 0,
-          uom: formatUOM(r.uom),
-          otp: r.otp,
-          internal_qc: r.internal_qc,
-          amdocs_qc: r.amdocs_qc,
-          deviation: getExcelDeviationText(r),
-          receive_date: displayDateTime(r.receive_date, r.receive_time),
-          ecd_date: formatDisplayDate(r.ecd_date),
-          submission_date: displayDateTime(r.submission_date, r.submission_time),
+        const hasAnyValue = Object.values(obj).some((v) => {
+          if (v === null || v === undefined) return false;
+          return v.toString().trim() !== "";
         });
 
-        // OTP khaali ho to sirf OTP cell ka background red (text normal)
-        if (r.otpMissing) {
-          const otpCell = excelRow.getCell("otp");
-          otpCell.fill = {
-            type: "pattern",
-            pattern: "solid",
-            fgColor: { argb: "FFFEE2E2" },
-          };
-          otpCell.font = { bold: true };
-        }
-
-        // Deviation: up = green, down = red
-        if (r.deviationTrend) {
-          excelRow.getCell("deviation").font = {
-            bold: true,
-            color: { argb: r.deviationTrend === "up" ? "FF16A34A" : "FFDC2626" },
-          };
+        if (hasAnyValue) {
+          rows.push(obj);
         }
       });
 
-      sheet.addRow({ domain: "TOTAL", jobs: totalJobs });
+      totalRows += rows.length;
 
-      sheet.getRow(1).eachCell((cell) => {
-        cell.font = { bold: true };
-        cell.alignment = { vertical: "middle", horizontal: "center" };
-      });
+      // Month column me saal mile to use default bana lo (sirf "Feb"/"May" wali rows ke liye)
+      const yearHit = rows
+        .map((r) => {
+          const v = getMonthValue(r);
+          if (v instanceof Date) return v.getUTCFullYear();
+          const mm = String(v === null || v === undefined ? "" : v).match(/(\d{4})/);
+          return mm ? Number(mm[1]) : null;
+        })
+        .find(Boolean);
+      if (yearHit) monthDefaultYear = yearHit;
 
-      const buffer = await workbook.xlsx.writeBuffer();
-      const blob = new Blob([buffer], {
-        type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-      });
-      const url = window.URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = `Work_Report_Detail.xlsx`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      window.URL.revokeObjectURL(url);
-
-      showToast("success", "Excel exported successfully!");
-    } catch (err) {
-      console.error(err);
-      showToast("error", "Failed to export Excel!");
-    }
-  };
-
-  /* ---------------- Edit / Save / Delete ---------------- */
-
-  const handleEdit = (row) => {
-    setEditingRowId(row.id);
-    setEditForm({
-      id: row.id,
-      domain: fromDisplay(row.domain),
-      // "-" ya "a | b" jaise display text ko edit box ke liye clean karte hain
-      jobType: fromDisplay(row.jobType),
-      jobsDelivered: row.jobsDelivered ?? 0,
-      state: fromDisplay(row.state),
-      county: row.county || "",
-      region: fromDisplay(row.region),
-      sow: fromDisplay(row.sow),
-      uom: { ...cleanUom(row.uom) },
-      job_id: fromDisplay(row.job_id),
-      current_status: fromDisplay(row.current_status),
-      production_engineers: fromDisplay(row.production_engineers),
-      qc_engineers: fromDisplay(row.qc_engineers),
-      otp: fromDisplay(row.otp),
-      internal_qc: fromDisplay(row.internal_qc),
-      amdocs_qc: fromDisplay(row.amdocs_qc),
-      // Date "YYYY-MM-DD" me, time "HH:mm" me (alag alag box)
-      receive_date: row.receive_date || "",
-      receive_time: row.receive_time || "",
-      ecd_date: row.ecd_date || "",
-      submission_date: row.submission_date || "",
-      submission_time: row.submission_time || "",
-      month: fromDisplay(row.month),
-      year: fromDisplay(row.year),
-      listTypes: {
-        sow: row.sowIsArray,
-        jobType: row.jobTypeIsArray,
-        production_engineers: row.prodIsArray,
-        qc_engineers: row.qcIsArray,
-      },
-    });
-  };
-
-  // Number mein turant convert nahi karte, warna box khaali karna (backspace) mushkil ho jata tha.
-  // Save ke time Number mein badal diya jata hai.
-  const handleChange = (field, value) => {
-    setEditForm((prev) => ({
-      ...prev,
-      [field]: value,
-    }));
-  };
-
-  const handleUOMChange = (key, value) => {
-    setEditForm((prev) => ({
-      ...prev,
-      uom: {
-        ...prev.uom,
-        [key]: value,
-      },
-    }));
-  };
-
-  const requestSave = () => {
-    setConfirmAction({ type: "save" });
-  };
-
-  const requestDelete = (id) => {
-    if (id === undefined || id === null) {
-      showToast("error", "Record ID nahi mili, delete nahi ho sakta!");
-      return;
-    }
-    setConfirmAction({ type: "delete", id });
-  };
-
-  const performSave = async () => {
-    try {
-      const parsedUOM = {};
-      Object.entries(editForm.uom || {}).forEach(([k, v]) => {
-        parsedUOM[k] = Number(v || 0);
-      });
-
-      const yearText = String(editForm.year || "");
-      // Poora 4-digit year use karo (comma format, jo backend ka standard format hai),
-      // warna 2-digit year truncate hone se save ke baad month/year galat ho jaata tha
-      const currentMonthVal =
-        editForm.month && yearText
-          ? `${editForm.month},${yearText}`
-          : null;
-
-      const listTypes = editForm.listTypes || {};
-
-      const payload = {
-        months: currentMonthVal ? [currentMonthVal] : undefined,
-        month: editForm.month,
-        domain: editForm.domain,
-        // Jo data pehle list (array) tha wo list hi rahega, "a | b" text nahi banega
-        sow: toPayloadList(editForm.sow, listTypes.sow),
-        job_type: toPayloadList(editForm.jobType, listTypes.jobType),
-        region: editForm.region,
-        state: editForm.state,
-        county: editForm.county,
-        uom: parsedUOM,
-        job_id: editForm.job_id,
-        jobId: editForm.job_id,
-        current_status: editForm.current_status,
-        production_engineers: toPayloadList(
-          editForm.production_engineers,
-          listTypes.production_engineers
-        ),
-        qc_engineers: toPayloadList(editForm.qc_engineers, listTypes.qc_engineers),
-        otp: editForm.otp,
-        internal_qc: editForm.internal_qc,
-        amdocs_qc: editForm.amdocs_qc,
-        internalQc: editForm.internal_qc,
-        amdocsQc: editForm.amdocs_qc,
-        internalOtp: editForm.otp,
-        jobs_delivered: Number(editForm.jobsDelivered || 0),
-        // Date aur time alag bhejte hain, backend inhe "MM-DD-YYYY HH:mm" me jod deta hai
-        receive_date: editForm.receive_date || null,
-        receive_time: editForm.receive_time || "",
-        ecd_date: editForm.ecd_date || null,
-        submission_date: editForm.submission_date || null,
-        submission_time: editForm.submission_time || "",
-      };
-
-      await axios.put(`${API_BASE_URL}/api/work/update/${editForm.id}`, payload);
-
-      showToast("success", "Record updated successfully!");
-      setEditingRowId(null);
-      await fetchData();
-    } catch (err) {
-      console.log(err);
-      showToast("error", err.response?.data?.message || "Update failed!");
-    }
-  };
-
-  const performDelete = async (id) => {
-    try {
-      await axios.delete(`${API_BASE_URL}/api/work/delete/${id}`);
-
-      showToast("success", "Record deleted successfully!");
-      if (editingRowId === id) {
-        setEditingRowId(null);
+      for (let i = 0; i < rows.length; i++) {
+        try {
+          records.push(parseImportRow(rows[i], sheetName));
+        } catch (e) {
+          failed++;
+        }
       }
-      await fetchData();
-    } catch (err) {
-      console.error(err);
-      showToast("error", err.response?.data?.message || "Delete failed!");
     }
+
+    const hasClock = (v) => /\d{1,2}:\d{2}/.test(String(v || ""));
+    const timeRowsParsed = records.filter(
+      (r) => hasClock(r.receiveDateVal) || hasClock(r.submissionDateVal)
+    ).length;
+
+    lap("readExcelRows");
+
+    /* ---------- STEP 2: rows ko group karo (same domain + Job ID = ek job) ---------- */
+    const order = []; // Excel ka order yahin bacha rehta hai
+    const groups = new Map();
+
+    records.forEach((rec) => {
+      if (!isRealJobId(rec.jobIdVal)) {
+        order.push({ key: null, recs: [rec] });
+        return;
+      }
+      const key = jobKey(rec.domain, rec.jobIdVal);
+      let g = groups.get(key);
+      if (!g) {
+        g = { key, recs: [] };
+        groups.set(key, g);
+        order.push(g);
+      }
+      g.recs.push(rec);
+    });
+
+    /* ---------- STEP 3: DB me jo job ids pehle se hain unhe ek saath laao ---------- */
+    const existingMap = new Map();
+    const realIdMap = new Map();
+    groups.forEach((g) => {
+      const lk = clean(g.recs[0].jobIdVal).toLowerCase();
+      if (!realIdMap.has(lk)) realIdMap.set(lk, clean(g.recs[0].jobIdVal));
+    });
+
+    for (const part of chunkArray(Array.from(realIdMap.values()), 500)) {
+      const found = await query(
+        `SELECT id, job_id, domain, months, uom FROM work_updates WHERE job_id IN (${inClause(part)}) ORDER BY id ASC`,
+        part
+      );
+      (found || []).forEach((r) => {
+        const k = jobKey(r.domain, r.job_id);
+        if (!existingMap.has(k)) existingMap.set(k, r);
+      });
+    }
+
+    lap("loadExistingJobs");
+
+    /* ---------- STEP 4: insert aur update ki list banao ---------- */
+    const inserts = []; // { recs, merged }
+    const updates = []; // { recs, merged, existing }
+
+    order.forEach((g) => {
+      if (g.key === null) {
+        inserts.push({ recs: g.recs, merged: g.recs[0], plain: true });
+        return;
+      }
+      const merged = mergeImportRecords(g.recs);
+      const existing = existingMap.get(g.key);
+      if (existing) {
+        updates.push({ recs: g.recs, merged, existing });
+      } else {
+        inserts.push({ recs: g.recs, merged, plain: false });
+      }
+    });
+
+    const syncList = [];
+
+    /* ---------- STEP 5: nayi rows bulk insert ---------- */
+    if (inserts.length > 0) {
+      const insertRows = inserts.map(({ merged, plain }) => {
+        const monthsArr = plain
+          ? (merged.month ? [merged.month] : [])
+          : merged.months;
+        return [
+          req.file.originalname,
+          JSON.stringify(monthsArr),
+          merged.domain,
+          merged.sow,
+          merged.jobType,
+          merged.region,
+          merged.state,
+          merged.county,
+          JSON.stringify(merged.uom),
+          merged.otpVal,
+          merged.currentStatusVal,
+          merged.productionEngineersVal,
+          merged.qcEngineersVal,
+          merged.amdocsQcVal,
+          merged.internalQcVal,
+          1,
+          merged.jobIdVal || null,
+          merged.receiveDateVal,
+          merged.ecdDateVal,
+          merged.submissionDateVal
+        ];
+      });
+
+      const flags = await bulkInsert("work_updates", WORK_INSERT_COLUMNS, insertRows);
+
+      inserts.forEach((item, idx) => {
+        if (!flags[idx]) {
+          failed += item.recs.length;
+          return;
+        }
+        success += item.recs.length;
+        if (!item.plain) syncList.push(buildJobCreationData(item.recs));
+      });
+    }
+
+    lap("bulkInsertWork");
+
+    /* ---------- STEP 6: purani rows limited-parallel update ---------- */
+    if (updates.length > 0) {
+      const updateSql = `
+        UPDATE work_updates
+        SET months = ?, uom = ?, otp = COALESCE(NULLIF(?, ''), otp), current_status = COALESCE(NULLIF(?, ''), current_status), production_engineers = COALESCE(NULLIF(?, ''), production_engineers), qc_engineers = COALESCE(NULLIF(?, ''), qc_engineers), amdocs_qc = COALESCE(NULLIF(?, ''), amdocs_qc), internal_qc = COALESCE(NULLIF(?, ''), internal_qc), jobs_delivered = ?, receive_date = COALESCE(?, receive_date), ecd_date = COALESCE(?, ecd_date), submission_date = COALESCE(?, submission_date), updated_at = CURRENT_TIMESTAMP
+        WHERE id = ?
+      `;
+
+      await runLimited(updates, 6, async ({ recs, merged, existing }) => {
+        try {
+          let existingMonths = safeParseJson(existing.months, []);
+          let existingUOM = safeParseJson(existing.uom, {});
+          if (!Array.isArray(existingMonths)) existingMonths = existingMonths ? [existingMonths] : [];
+          if (!existingUOM || typeof existingUOM !== "object" || Array.isArray(existingUOM)) existingUOM = {};
+
+          const monthsArr = [...existingMonths];
+          merged.months.forEach((m) => {
+            if (!monthsArr.includes(m)) monthsArr.push(m);
+          });
+
+          const mergedUOM = { ...cleanUomOutput(existingUOM), ...merged.uom };
+
+          await query(updateSql, [
+            JSON.stringify(monthsArr),
+            JSON.stringify(mergedUOM),
+            merged.otpVal,
+            merged.currentStatusVal,
+            merged.productionEngineersVal,
+            merged.qcEngineersVal,
+            merged.amdocsQcVal,
+            merged.internalQcVal,
+            1, // Ek row = hamesha 1 job delivered
+            merged.receiveDateVal,
+            merged.ecdDateVal,
+            merged.submissionDateVal,
+            existing.id
+          ]);
+
+          success += recs.length;
+          syncList.push(buildJobCreationData(recs));
+        } catch (e) {
+          console.error("work_updates update failed:", e.message);
+          failed += recs.length;
+        }
+      });
+    }
+
+    lap("updateOldWork");
+
+    /* ---------- STEP 7: job_creation bulk sync ---------- */
+    try {
+      await bulkSyncJobCreation(syncList);
+    } catch (e) {
+      console.error("job_creation bulk sync failed:", e.message);
+    }
+    lap("syncJobCreation");
+
+    // Check: DB me kitni rows ke date me time (HH:mm) save hua
+    let timeRowsInDb = null;
+    try {
+      const chk = await query(
+        "SELECT COUNT(*) AS c FROM work_updates WHERE receive_date LIKE '%:%' OR submission_date LIKE '%:%'"
+      );
+      timeRowsInDb = chk && chk[0] ? Number(chk[0].c) : null;
+    } catch (e) {
+      console.error("time check failed:", e.message);
+    }
+
+    timings.total = Date.now() - importStartedAt;
+    console.log(
+      `Import timings (ms) for "${req.file.originalname}": rows=${totalRows}, inserts=${inserts.length}, updates=${updates.length}`,
+      JSON.stringify(timings)
+    );
+
+    if (totalRows > 0 && success === 0) {
+      return res.status(500).json({
+        message: `Import failed: no rows were saved${lastBulkError ? " (" + lastBulkError + ")" : ""}`,
+        totalRows,
+        failed,
+        timings,
+        error: lastBulkError
+      });
+    }
+
+    return res.json({
+      message: "Excel imported successfully in proper order",
+      totalRows,
+      insertedOrUpdated: success,
+      failed,
+      timings,
+      timeRowsParsed,
+      timeRowsInDb,
+      dateColumnWarnings,
+      lastError: failed > 0 ? lastBulkError : ""
+    });
+
+  } catch (err) {
+    console.error("importExcel error:", err);
+    return res.status(500).json({
+      message: `Import failed: ${err.message}`,
+      error: err.message
+    });
+  }
+};
+
+const pick = (obj, ...keys) => {
+  for (const k of keys) {
+    if (obj && obj[k] !== undefined) return obj[k];
+  }
+  return undefined;
+};
+
+const isBlank = (v) =>
+  v === null || v === undefined || (typeof v === "string" && v.trim() === "");
+
+const flatText = (v) => (Array.isArray(v) ? v.join(", ") : v);
+
+const createWork = async (req, res) => {
+  const b = req.body || {};
+  const months = pick(b, "months", "month");
+  const domain = pick(b, "domain");
+  const sow = pick(b, "sow");
+  const job_type = pick(b, "job_type", "jobType");
+  const region = pick(b, "region");
+  const state = pick(b, "state", "market");
+  const county = pick(b, "county");
+  const uom = pick(b, "uom");
+  const otp = pick(b, "otp", "internalOtp");
+  const current_status = pick(b, "current_status", "currentStatus");
+  const production_engineers = pick(b, "production_engineers");
+  const qc_engineers = pick(b, "qc_engineers");
+  const internal_qc = pick(b, "internal_qc", "internalQc");
+  const amdocs_qc = pick(b, "amdocs_qc", "amdocsQc");
+  const job_id = pick(b, "job_id", "jobId");
+  const receive_date = pick(b, "receive_date", "receiveDate", "receivedDate");
+  const ecd_date = pick(b, "ecd_date", "ecdDate");
+  const submission_date = pick(b, "submission_date", "submissionDate");
+  const receive_time = pick(b, "receive_time", "receiveTime", "received_time", "receivedTime");
+  const submission_time = pick(b, "submission_time", "submissionTime");
+  const ecd_time = pick(b, "ecd_time", "ecdTime");
+
+  const fixedDomain = normalize(domain);
+  const fixedJobType = normalize(job_type);
+  const cleanJobId = clean(job_id);
+
+  const formattedInternalQc = formatPercentage(internal_qc);
+  const formattedAmdocsQc = formatPercentage(amdocs_qc);
+
+  const formattedReceiveDate = parseDateTime(receive_date, receive_time);
+  const formattedEcdDate = parseDateTime(ecd_date, ecd_time);
+  const formattedSubmissionDate = parseDateTime(submission_date, submission_time);
+
+  const parsedMonths = parseMonthsInput(months);
+  const firstMonth = parsedMonths.length > 0 ? parsedMonths[0] : null;
+
+  const uomObj = uom && typeof uom === "object" ? uom : safeParseJson(uom, null);
+  const hasUom = uomObj && typeof uomObj === "object" && Object.keys(uomObj).length > 0;
+
+  try {
+    let existingId = null;
+    if (isRealJobId(cleanJobId)) {
+      // FIX: same Job ID alag domain me ho to alag row; sirf same domain me hi merge hoga
+      const rows = fixedDomain
+        ? await query(
+            "SELECT id FROM work_updates WHERE TRIM(job_id) = TRIM(?) AND UPPER(TRIM(domain)) = ? LIMIT 1",
+            [cleanJobId, fixedDomain]
+          )
+        : await query(
+            "SELECT id FROM work_updates WHERE TRIM(job_id) = TRIM(?) LIMIT 1",
+            [cleanJobId]
+          );
+      if (rows && rows.length > 0) existingId = rows[0].id;
+    }
+
+    let workId = existingId;
+
+    if (existingId) {
+      await query(
+        `UPDATE work_updates
+         SET months = COALESCE(?, months),
+             domain = COALESCE(NULLIF(?, ''), domain),
+             sow = COALESCE(NULLIF(?, ''), sow),
+             job_type = COALESCE(NULLIF(?, ''), job_type),
+             region = COALESCE(NULLIF(?, ''), region),
+             state = COALESCE(NULLIF(?, ''), state),
+             county = COALESCE(NULLIF(?, ''), county),
+             uom = COALESCE(?, uom),
+             otp = COALESCE(NULLIF(?, ''), otp),
+             current_status = COALESCE(NULLIF(?, ''), current_status),
+             production_engineers = COALESCE(NULLIF(?, ''), production_engineers),
+             qc_engineers = COALESCE(NULLIF(?, ''), qc_engineers),
+             internal_qc = COALESCE(NULLIF(?, ''), internal_qc),
+             amdocs_qc = COALESCE(NULLIF(?, ''), amdocs_qc),
+             jobs_delivered = 1,
+             receive_date = COALESCE(?, receive_date),
+             ecd_date = COALESCE(?, ecd_date),
+             submission_date = COALESCE(?, submission_date),
+             updated_at = CURRENT_TIMESTAMP
+         WHERE id = ?`,
+        [
+          parsedMonths.length > 0 ? JSON.stringify(parsedMonths) : null,
+          fixedDomain,
+          clean(flatText(sow)),
+          fixedJobType,
+          clean(region),
+          clean(state),
+          clean(county),
+          hasUom ? JSON.stringify(uomObj) : null,
+          cleanOtp(otp),
+          clean(current_status),
+          clean(flatText(production_engineers)),
+          clean(flatText(qc_engineers)),
+          formattedInternalQc,
+          formattedAmdocsQc,
+          formattedReceiveDate,
+          formattedEcdDate,
+          formattedSubmissionDate,
+          existingId
+        ]
+      );
+    } else {
+      const result = await query(
+        `INSERT INTO work_updates
+         (months, domain, sow, job_type, region, state, county, uom, otp, current_status, production_engineers, qc_engineers, internal_qc, amdocs_qc, jobs_delivered, job_id, receive_date, ecd_date, submission_date)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?)`,
+        [
+          JSON.stringify(parsedMonths),
+          fixedDomain,
+          clean(flatText(sow)),
+          fixedJobType,
+          clean(region),
+          clean(state),
+          clean(county),
+          JSON.stringify(hasUom ? uomObj : {}),
+          cleanOtp(otp),
+          clean(current_status),
+          clean(flatText(production_engineers)),
+          clean(flatText(qc_engineers)),
+          formattedInternalQc,
+          formattedAmdocsQc,
+          cleanJobId,
+          formattedReceiveDate,
+          formattedEcdDate,
+          formattedSubmissionDate
+        ]
+      );
+      workId = result.insertId;
+    }
+
+    await helperSyncToJobCreation({
+      domain: fixedDomain,
+      market: clean(state) || clean(region),
+      cleanJobId,
+      month: firstMonth,
+      receiveDate: formattedReceiveDate,
+      ecdDate: formattedEcdDate,
+      submissionDate: formattedSubmissionDate,
+      otp: cleanOtp(otp),
+      amdocsQc: formattedAmdocsQc,
+      internalQc: formattedInternalQc
+    });
+
+    return res.json({
+      message: "Work added and synced successfully",
+      id: workId
+    });
+  } catch (err) {
+    console.error("createWork error:", err.message);
+    return res.status(500).json({ message: "Save failed", error: err.message });
+  }
+};
+
+const updateWork = async (req, res) => {
+  const { id } = req.params;
+  const b = req.body || {};
+  const monthsRaw = pick(b, "months", "month");
+  const domain = pick(b, "domain");
+  const sow = pick(b, "sow");
+  const job_type = pick(b, "job_type", "jobType");
+  const region = pick(b, "region");
+  const state = pick(b, "state", "market");
+  const county = pick(b, "county");
+  const uom = pick(b, "uom");
+  const job_id = pick(b, "job_id", "jobId");
+  const current_status = pick(b, "current_status", "currentStatus");
+  const production_engineers = pick(b, "production_engineers");
+  const qc_engineers = pick(b, "qc_engineers");
+  const otp = pick(b, "otp", "internalOtp");
+  const internal_qc = pick(b, "internal_qc", "internalQc");
+  const amdocs_qc = pick(b, "amdocs_qc", "amdocsQc");
+  const receive_date = pick(b, "receive_date", "receiveDate", "receivedDate");
+  const ecd_date = pick(b, "ecd_date", "ecdDate");
+  const submission_date = pick(b, "submission_date", "submissionDate");
+  const receive_time = pick(b, "receive_time", "receiveTime", "received_time", "receivedTime");
+  const submission_time = pick(b, "submission_time", "submissionTime");
+  const ecd_time = pick(b, "ecd_time", "ecdTime");
+
+  const has = (v) => v !== undefined;
+
+  const sets = [];
+  const vals = [];
+  const setCol = (col, val) => {
+    sets.push(`${col} = ?`);
+    vals.push(val);
   };
 
-  const handleConfirmYes = async () => {
-    const action = confirmAction;
-    setConfirmAction(null);
-    if (!action) return;
+  let parsedMonths = [];
+  if (has(monthsRaw)) {
+    parsedMonths = parseMonthsInput(monthsRaw);
+    if (parsedMonths.length > 0) setCol("months", JSON.stringify(parsedMonths));
+  }
+  const latestMonth = parsedMonths.length > 0 ? parsedMonths[parsedMonths.length - 1] : null;
 
-    if (action.type === "save") {
-      await performSave();
-    } else if (action.type === "delete") {
-      await performDelete(action.id);
+  if (has(domain)) setCol("domain", normalize(domain));
+  if (has(sow)) setCol("sow", flatText(sow));
+  if (has(job_type)) setCol("job_type", normalize(job_type));
+  if (has(region)) setCol("region", region);
+  if (has(state)) setCol("state", state);
+  if (has(county)) setCol("county", county);
+  if (has(uom)) setCol("uom", JSON.stringify(uom || {}));
+  // Ek row = hamesha 1 job delivered (frontend jo bhi bheje, hamesha 1 save hoga)
+  setCol("jobs_delivered", 1);
+  if (has(current_status)) setCol("current_status", clean(current_status));
+  if (has(production_engineers)) setCol("production_engineers", clean(production_engineers));
+  if (has(qc_engineers)) setCol("qc_engineers", clean(qc_engineers));
+  if (has(otp)) setCol("otp", cleanOtp(otp));
+
+  const formattedInternalQc = has(internal_qc) ? formatPercentage(internal_qc) : "";
+  const formattedAmdocsQc = has(amdocs_qc) ? formatPercentage(amdocs_qc) : "";
+  if (has(internal_qc)) setCol("internal_qc", formattedInternalQc);
+  if (has(amdocs_qc)) setCol("amdocs_qc", formattedAmdocsQc);
+
+  const clearedTextCols = [];
+  if (has(otp) && cleanOtp(otp) === "") clearedTextCols.push("otp");
+  if (has(amdocs_qc) && formattedAmdocsQc === "") clearedTextCols.push("amdocsQc");
+  if (has(internal_qc) && formattedInternalQc === "") clearedTextCols.push("internalQc");
+
+  const clearedDateCols = []; 
+  const dateVals = { receiveDate: null, ecdDate: null, submissionDate: null };
+
+  if (has(receive_date)) {
+    dateVals.receiveDate = parseDateTime(receive_date, receive_time);
+    setCol("receive_date", dateVals.receiveDate);
+    if (dateVals.receiveDate === null) clearedDateCols.push("receiveDate");
+  }
+  if (has(ecd_date)) {
+    dateVals.ecdDate = parseDateTime(ecd_date, ecd_time);
+    setCol("ecd_date", dateVals.ecdDate);
+    if (dateVals.ecdDate === null) clearedDateCols.push("ecdDate");
+  }
+  if (has(submission_date)) {
+    dateVals.submissionDate = parseDateTime(submission_date, submission_time);
+    setCol("submission_date", dateVals.submissionDate);
+    if (dateVals.submissionDate === null) clearedDateCols.push("submissionDate");
+  }
+
+  try {
+    const oldRows = await query("SELECT job_id, domain, state, region FROM work_updates WHERE id = ?", [id]);
+    if (!oldRows || oldRows.length === 0) {
+      return res.status(404).json({ message: "Record not found", error: "No work row with this id" });
     }
+    const oldJobId = clean(oldRows[0].job_id);
+    const oldDomain = domainKey(oldRows[0].domain);
+    const newJobId = has(job_id) ? clean(job_id) : oldJobId;
+    // FIX: domain body me na aaye to purani row ka domain use hoga (job_creation sahi domain me sync ho)
+    const jcDomain = has(domain) ? normalize(domain) : oldDomain;
+    if (has(job_id)) setCol("job_id", newJobId);
+
+    sets.push("updated_at = CURRENT_TIMESTAMP");
+    const result = await query(
+      `UPDATE work_updates SET ${sets.join(", ")} WHERE id = ?`,
+      [...vals, id]
+    );
+    const jobIdChanged =
+      isRealJobId(oldJobId) && oldJobId.toLowerCase() !== newJobId.toLowerCase();
+
+    if (jobIdChanged) {
+      const oldScope = jcScope(oldJobId, oldDomain);
+      if (isRealJobId(newJobId)) {
+        const newScope = jcScope(newJobId, jcDomain);
+        const newExists = await query(
+          `SELECT id FROM job_creation WHERE ${newScope.where} LIMIT 1`,
+          newScope.params
+        );
+        if (newExists && newExists.length > 0) {
+          await query(`DELETE FROM job_creation WHERE ${oldScope.where}`, oldScope.params);
+        } else {
+          await query(
+            `UPDATE job_creation SET jobId = ?, updated_at = CURRENT_TIMESTAMP WHERE ${oldScope.where}`,
+            [newJobId, ...oldScope.params]
+          );
+        }
+      } else {
+        await query(`DELETE FROM job_creation WHERE ${oldScope.where}`, oldScope.params);
+      }
+    }
+
+    if (isRealJobId(newJobId)) {
+      const curScope = jcScope(newJobId, jcDomain);
+
+      for (const col of clearedDateCols) {
+        await query(
+          `UPDATE job_creation SET ${col} = NULL WHERE ${curScope.where}`,
+          curScope.params
+        );
+      }
+
+      for (const col of clearedTextCols) {
+        await query(
+          `UPDATE job_creation SET ${col} = '' WHERE ${curScope.where}`,
+          curScope.params
+        );
+      }
+
+      await helperSyncToJobCreation({
+        domain: jcDomain,
+        market: clean(state) || clean(region),
+        cleanJobId: newJobId,
+        month: latestMonth,
+        receiveDate: dateVals.receiveDate,
+        ecdDate: dateVals.ecdDate,
+        submissionDate: dateVals.submissionDate,
+        otp: has(otp) ? cleanOtp(otp) : "",
+        amdocsQc: formattedAmdocsQc,
+        internalQc: formattedInternalQc
+      });
+    }
+
+    return res.json({
+      message: "Updated successfully and synced to Job Creation",
+      result
+    });
+  } catch (err) {
+    console.error("updateWork error:", err.message);
+    return res.status(500).json({
+      message: "Update failed",
+      error: err.message
+    });
+  }
+};
+
+const regionForState = (state) => {
+  const raw = clean(state).toUpperCase();
+  if (!raw) return "";
+  for (const name of Object.keys(stateData)) {
+    const info = stateData[name] || {};
+    if (name.toUpperCase() === raw || clean(info.code).toUpperCase() === raw) {
+      return info.region || "";
+    }
+  }
+  return "";
+};
+
+const displayOtp = (v) => cleanOtp(v);
+
+// UOM se time wale keys hata do (re-import par purani UOM me bachi time keys saaf ho jaye)
+const cleanUomOutput = (uom) => {
+  if (uom === null || uom === undefined) return uom;
+  const wasString = typeof uom === "string";
+  const obj = wasString ? safeParseJson(uom, null) : uom;
+  if (!obj || typeof obj !== "object" || Array.isArray(obj)) return uom;
+  const out = {};
+  Object.keys(obj).forEach((k) => {
+    if (!isTimeColumnKey(k)) out[k] = obj[k];
+  });
+  return wasString ? JSON.stringify(out) : out;
+};
+
+// Purane imports me "Received Time" / "Submission Time" galti se UOM me save ho gayi thi.
+// Yahan wo time wapas date ke saath jod dete hain aur UOM se hata dete hain.
+// (Koi naya field / column nahi banta, sirf receive_date / submission_date me time judta hai)
+const finalizeRowCore = (r) => {
+  const raw = r.uom;
+  if (raw === null || raw === undefined) return r;
+
+  const wasString = typeof raw === "string";
+  const obj = wasString ? safeParseJson(raw, null) : raw;
+  if (!obj || typeof obj !== "object" || Array.isArray(obj)) return r;
+
+  const out = {};
+  let recvTime = "";
+  let subTime = "";
+  let ecdTime = "";
+  Object.keys(obj).forEach((k) => {
+    const c = compressKey(k);
+    if (RECEIVE_TIME_RE.test(c)) recvTime = recvTime || extractTime(obj[k]);
+    else if (SUBMISSION_TIME_RE.test(c)) subTime = subTime || extractTime(obj[k]);
+    else if (ECD_TIME_RE.test(c)) ecdTime = ecdTime || extractTime(obj[k]);
+    else out[k] = obj[k];
+  });
+
+  const withTime = (dateStr, t) => {
+    if (!dateStr || !t) return dateStr;
+    if (/\d{1,2}:\d{2}/.test(String(dateStr))) return dateStr; // time pehle se hai
+    return `${dateStr} ${t}`;
   };
 
-  const confirmTitle = confirmAction?.type === "delete" ? "Delete Record?" : "Save Changes?";
-  const confirmText =
-    confirmAction?.type === "delete"
-      ? "Are you sure you want to delete this record?"
-      : "Are you sure you want to save changes?";
-  const confirmYesLabel = confirmAction?.type === "delete" ? "Yes, Delete" : "Yes, Save";
-  const confirmYesColor = confirmAction?.type === "delete" ? "#dc2626" : "#16a34a";
+  return {
+    ...r,
+    uom: wasString ? JSON.stringify(out) : out,
+    receive_date: withTime(r.receive_date, recvTime),
+    ecd_date: withTime(r.ecd_date, ecdTime),
+    submission_date: withTime(r.submission_date, subTime)
+  };
+};
 
-  return (
-    <div className="report-wrapper">
-      {/* ---------- Screen par success / error message ---------- */}
-      {toast && (
-        <div
-          role="status"
-          style={{
-            ...toastBaseStyle,
-            background: toastColors[toast.type] || toastColors.success,
-          }}
-        >
-          <span>
-            {toastIcons[toast.type]} {toast.text}
-          </span>
-          <button
-            type="button"
-            onClick={() => setToast(null)}
-            title="Close"
-            style={{
-              background: "transparent",
-              border: "none",
-              color: "#ffffff",
-              fontSize: "16px",
-              cursor: "pointer",
-              lineHeight: 1,
-            }}
-          >
-            ✕
-          </button>
-        </div>
-      )}
+/* ======================================
+   TIME ALAG FIELDS (frontend ko seedha mil jaye)
+   Har row ke saath ye extra fields jaate hain:
+     receive_time / submission_time          -> "17:53" (24h, na ho to "")
+     receive_date_display / submission_date_display -> "11/4/2026, 5.53 PM" (Excel jaisa)
+     ecd_time / ecd_date_display             -> ECD me time ho to "17:53" / "11/4/2026, 5.53 PM", warna sirf date
+   receive_date / submission_date pehle jaise "MM-DD-YYYY HH:mm" hi rehte hain.
+====================================== */
+const splitDateTimeStored = (v) => {
+  const s = cleanText(v === null || v === undefined ? "" : v);
+  const m = s.match(/^(\d{2})-(\d{2})-(\d{4})(?:[ T]+(\d{1,2}):(\d{2}))?/);
+  if (!m) return { date: s, dateText: s, time: "" };
+  const hasTime = m[4] !== undefined && !(Number(m[4]) === 0 && Number(m[5]) === 0);
+  return {
+    date: `${m[1]}-${m[2]}-${m[3]}`,
+    dateText: `${Number(m[1])}/${Number(m[2])}/${m[3]}`,
+    time: hasTime ? `${pad(m[4])}:${m[5]}` : ""
+  };
+};
 
-      {/* ---------- Save / Delete confirm (screen par) ---------- */}
-      {confirmAction && (
-        <div style={confirmOverlayStyle} onClick={() => setConfirmAction(null)}>
-          <div style={confirmModalStyle} onClick={(e) => e.stopPropagation()}>
-            <div
-              style={{
-                fontSize: "16px",
-                fontWeight: 700,
-                marginBottom: "8px",
-                color: "#111827",
-              }}
-            >
-              {confirmTitle}
-            </div>
-            <div style={{ fontSize: "14px", color: "#4b5563", marginBottom: "18px" }}>
-              {confirmText}
-            </div>
-            <div style={{ display: "flex", justifyContent: "center", gap: "12px" }}>
-              <button
-                type="button"
-                style={{ ...confirmBtnBase, background: confirmYesColor }}
-                onClick={handleConfirmYes}
-              >
-                {confirmYesLabel}
-              </button>
-              <button
-                type="button"
-                style={{ ...confirmBtnBase, background: "#6b7280" }}
-                onClick={() => setConfirmAction(null)}
-              >
-                Cancel
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+const timeToAmPm = (t) => {
+  const m = String(t || "").match(/^(\d{1,2}):(\d{2})$/);
+  if (!m) return "";
+  const h = Number(m[1]);
+  return `${h % 12 || 12}.${m[2]} ${h >= 12 ? "PM" : "AM"}`;
+};
 
-      {!isGeneratingPDF && (
-        <div className="report-header">
-          <h2 className="title">Work Report</h2>
-          <div className="export-box" ref={exportRef}>
-            <button
-              type="button"
-              className="export-btn"
-              onClick={() => setOpenExport(!openExport)}
-            >
-              Export ⬇
-            </button>
+const addTimeFields = (r) => {
+  const rec = splitDateTimeStored(r.receive_date);
+  const sub = splitDateTimeStored(r.submission_date);
+  const ecd = splitDateTimeStored(r.ecd_date);
+  const show = (p) => (p.time ? `${p.dateText}, ${timeToAmPm(p.time)}` : p.dateText);
+  return {
+    ...r,
+    receive_time: rec.time,
+    ecd_time: ecd.time,
+    submission_time: sub.time,
+    receive_date_display: show(rec),
+    ecd_date_display: show(ecd),
+    submission_date_display: show(sub)
+  };
+};
 
-            {openExport && (
-              <div className="export-dropdown">
-                <button type="button" onClick={downloadPDF}>Export as PDF</button>
-                <button type="button" onClick={downloadExcel}>Export as Excel</button>
-              </div>
-            )}
-          </div>
-        </div>
-      )}
+const finalizeRow = (r) => addTimeFields(finalizeRowCore(r));
 
-      <div
-        id="pdf-export-area"
-        className={`pdf-export-area ${!isGeneratingPDF ? "pdf-hidden" : ""}`}
-      >
-        <div className="pdf-map">
-          <h3 style={{ textAlign: "center", marginBottom: "15px", color: "#1f2937" }}>
-            States Coverage Map
-          </h3>
-          <ComposableMap projection="geoAlbersUsa" width={1000} height={550}>
-            <Geographies geography={geoData}>
-              {({ geographies, projection }) => (
-                <>
-                  {geographies.map((geo) => (
-                    <Geography
-                      key={geo.rsmKey}
-                      geography={geo}
-                      fill={getStateColor(geo.properties.name)}
-                      stroke="#2B2727"
-                      strokeWidth={0.8}
-                    />
-                  ))}
-                  {geographies.map((geo) => {
-                    const centroid = geoCentroid(geo);
-                    const coords = projection(centroid);
-                    if (!coords) return null;
+const mapWorkRow = (row) => {
+  const { jc_month, jc_receive, jc_ecd, jc_submission, ...work } = row;
+  if (isBlank(work.region)) {
+    const derived = regionForState(work.state);
+    if (derived) work.region = derived;
+  }
 
-                    const [x, y] = coords;
-                    const name = geo.properties.name;
-                    const label = shortNames[name] || "";
+  let monthsArr = safeParseJson(work.months, []);
+  if (!Array.isArray(monthsArr)) monthsArr = monthsArr ? [monthsArr] : [];
+  monthsArr = cleanMonthArray(monthsArr);
+  if (monthsArr.length === 0 && !isBlank(jc_month)) {
+    monthsArr = cleanMonthArray([jc_month]);
+  }
 
-                    return (
-                      <g key={`${geo.rsmKey}-label`}>
-                        <rect
-                          x={x - 12}
-                          y={y - 10}
-                          width={24}
-                          height={16}
-                          rx={4}
-                          fill={getLabelBgColor(name)}
-                          style={{ filter: "drop-shadow(0 2px 5px rgba(0,0,0,0.25))" }}
-                        />
-                        <text
-                          x={x}
-                          y={y}
-                          textAnchor="middle"
-                          dominantBaseline="middle"
-                          style={{
-                            fontSize: "10px",
-                            fontWeight: "700",
-                            fill: getLabelTextColor(name),
-                            pointerEvents: "none",
-                          }}
-                        >
-                          {label}
-                        </text>
-                      </g>
-                    );
-                  })}
-                </>
-              )}
-            </Geographies>
-          </ComposableMap>
-          <div className="map-legend">
-            <div className="legend-item">
-              <span className="legend-selecteddot"></span>
-              <span>Covered-{coveredCount}</span>
-            </div>
-            <div className="legend-item">
-              <span className="legend-not-selecteddot"></span>
-              <span>NotCovered-{allStates.length - coveredCount}</span>
-            </div>
-          </div>
-        </div>
-      </div>
+  const displayMonth = monthsArr.length > 0 ? monthsArr[monthsArr.length - 1] : "";
+  const dateOf = (own, fallback) => (isBlank(own) ? fallback : own);
 
-      {!isGeneratingPDF && (
-        <>
-          <div className="filters">
-            <div className="left-filters">
-              <div className="filter-group">
-                <label>Month & Year</label>
-                <select
-                  value={selectedMonthYear}
-                  onChange={(e) => setSelectedMonthYear(e.target.value)}
-                >
-                  <option value="">All</option>
-                  {uniqueMonthYear.map((m) => (
-                    <option key={m} value={m}>
-                      {m}
-                    </option>
-                  ))}
-                </select>
-              </div>
+  return finalizeRow({
+    ...work,
+    month: displayMonth,
+    months: monthsArr,
+    uom: safeParseJson(work.uom, {}),
+    jobs_delivered: 1, // FIX: ek row = hamesha 1 job delivered
+    otp: displayOtp(work.otp),
+    amdocs_qc: blankIfZero(work.amdocs_qc),
+    internal_qc: blankIfZero(work.internal_qc),
+    receive_date: formatDateToMMDDYYYY(dateOf(work.receive_date, jc_receive)),
+    ecd_date: formatDateToMMDDYYYY(dateOf(work.ecd_date, jc_ecd)),
+    submission_date: formatDateToMMDDYYYY(dateOf(work.submission_date, jc_submission)),
+    lastUpdate: work.updated_at ? work.updated_at : work.created_at
+  });
+};
 
-              <div className="filter-group">
-                <label>Domain</label>
-                <select
-                  value={selectedDomain}
-                  onChange={(e) => setSelectedDomain(e.target.value)}
-                >
-                  <option value="">All</option>
-                  {uniqueDomains.map((d) => (
-                    <option key={d} value={d}>
-                      {d}
-                    </option>
-                  ))}
-                </select>
-              </div>
+const getAllWork = async (req, res) => {
+  try {
+    if (req.query && (req.query.files === "1" || req.query.files === "true")) {
+      const fileRows = await query(
+        "SELECT file_name, MIN(id) AS first_id FROM work_updates WHERE file_name IS NOT NULL AND TRIM(file_name) <> '' GROUP BY file_name ORDER BY first_id ASC"
+      );
+      const manualRows = await query(
+        "SELECT *, updated_at FROM work_updates WHERE file_name IS NULL OR TRIM(file_name) = '' ORDER BY id ASC"
+      );
 
-              <div className="filter-group">
-                <label>Markets</label>
-                <select
-                  value={selectedState}
-                  onChange={(e) => setSelectedState(e.target.value)}
-                >
-                  <option value="">All</option>
-                  {uniqueStates.map((s) => (
-                    <option
-                      key={s}
-                      value={s}
-                      style={
-                        s === "Other"
-                          ? { fontWeight: "700", background: "#fff3cd", color: "#b45309" }
-                          : {}
-                      }
-                    >
-                      {s}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            </div>
+      const liteJcMap = new Map();
+      if (manualRows && manualRows.length > 0) {
+        try {
+          const jcRowsLite = await query(
+            "SELECT jobId, domain, month, receiveDate, ecdDate, submissionDate FROM job_creation"
+          );
+          (jcRowsLite || []).forEach((r) => {
+            if (!isRealJobId(r.jobId)) return;
+            const k = jobKey(r.domain, r.jobId);
+            const prev = liteJcMap.get(k) || {};
+            liteJcMap.set(k, {
+              jc_month: !isBlank(prev.jc_month) ? prev.jc_month : r.month,
+              jc_receive: !isBlank(prev.jc_receive) ? prev.jc_receive : r.receiveDate,
+              jc_ecd: !isBlank(prev.jc_ecd) ? prev.jc_ecd : r.ecdDate,
+              jc_submission: !isBlank(prev.jc_submission) ? prev.jc_submission : r.submissionDate
+            });
+          });
+        } catch (e) {
+          console.error("getAllWork lite: job_creation fallback load failed:", e.message);
+        }
+      }
 
-            <div className="right-filters">
-              <div className="filter-group">
-                <label>From Date</label>
-                <input
-                  type="date"
-                  value={fromDate}
-                  onChange={(e) => setFromDate(e.target.value)}
-                />
-              </div>
+      const manualMapped = (manualRows || []).map((row) => {
+        const fb =
+          liteJcMap.get(jobKey(row.domain, row.job_id)) ||
+          liteJcMap.get(jobKey("", row.job_id)) ||
+          {};
+        return mapWorkRow({ ...row, ...fb });
+      });
 
-              <div className="filter-group">
-                <label>To Date</label>
-                <input
-                  type="date"
-                  value={toDate}
-                  onChange={(e) => setToDate(e.target.value)}
-                />
-              </div>
-            </div>
-          </div>
+      const fileList = (fileRows || []).map((r) => ({ file_name: r.file_name }));
+      return res.json([...fileList, ...manualMapped]);
+    }
 
-          <div className="table-update-info">
-            <p>
-              <span className="star-icon">* </span>{" "}
-              This table was last updated by{" "}
-              <strong>
-                {user?.role || "Admin"}
-                {user?.domain ? `-${user.domain}` : ""}
-              </strong>{" "}
-              (<strong>{user?.name || "Unknown User"}</strong>){" "}
-              at <strong>{formattedLastUpdated}</strong>
-            </p>
-          </div>
+    const workRows = await query("SELECT *, updated_at FROM work_updates ORDER BY id ASC");
+    const jcMap = new Map();
+    try {
+      const jcRows = await query(
+        "SELECT jobId, domain, month, receiveDate, ecdDate, submissionDate FROM job_creation"
+      );
+      (jcRows || []).forEach((r) => {
+        if (!isRealJobId(r.jobId)) return;
+        // FIX: fallback bhi (domain + jobId) se, taaki dusre domain ki date/month na aaye
+        const k = jobKey(r.domain, r.jobId);
+        const prev = jcMap.get(k) || {};
+        jcMap.set(k, {
+          jc_month: !isBlank(prev.jc_month) ? prev.jc_month : r.month,
+          jc_receive: !isBlank(prev.jc_receive) ? prev.jc_receive : r.receiveDate,
+          jc_ecd: !isBlank(prev.jc_ecd) ? prev.jc_ecd : r.ecdDate,
+          jc_submission: !isBlank(prev.jc_submission) ? prev.jc_submission : r.submissionDate
+        });
+      });
+    } catch (jcErr) {
+      console.error("getAllWork: job_creation fallback load failed:", jcErr.message);
+    }
 
-          <div className="table-responsive-container">
-            <table id="report-table" className="table">
-              <thead>
-                <tr>
-                  <th>Sl.No</th>
-                  <th>Month & Year</th>
-                  <th>Domain</th>
-                  <th>SOW</th>
-                  <th>Job Type</th>
-                  <th>Region</th>
-                  <th>Market Name</th>
-                  <th>Job ID</th>
-                  <th>Current Status</th>
-                  <th>Production Engineers</th>
-                  <th>QC Engineers</th>
-                  <th>Jobs Delivered</th>
-                  <th>UOM</th>
-                  <th>OTP</th>
-                  <th>Internal QC</th>
-                  <th>Amdocs QC</th>
-                  <th>Deviation</th>
-                  <th>Receive Date</th>
-                  <th>ECD Date</th>
-                  <th>Submission Date</th>
-                  <th>Action</th>
-                </tr>
-              </thead>
-              <tbody>
-                {currentRows.length > 0 ? (
-                  currentRows.map((r, i) => {
-                    // r.id undefined ho to sab rows ek saath edit mode mein na jayein
-                    const isEditing = r.id !== undefined && editingRowId === r.id;
-                    // Edit karte waqt deviation live badalta hai
-                    const dev = isEditing
-                      ? getDeviation(editForm.internal_qc, editForm.amdocs_qc)
-                      : { text: r.deviation, trend: r.deviationTrend };
+    const data = (workRows || []).map((row) => {
+      const fb =
+        jcMap.get(jobKey(row.domain, row.job_id)) ||
+        jcMap.get(jobKey("", row.job_id)) || // purani blank-domain rows
+        {};
+      return mapWorkRow({ ...row, ...fb });
+    });
 
-                    return (
-                      <tr
-                        key={r.id ?? `row-${i}`}
-                        className={r.otpMissing ? "row-missing-otp" : ""}
-                        style={r.otpMissing ? rowMissingStyle : undefined}
-                      >
-                        <td>{(currentPage - 1) * rowsPerPage + i + 1}</td>
+    return res.json(data);
+  } catch (err) {
+    return res.status(500).json(err);
+  }
+};
 
-                        <td>
-                          {isEditing ? (
-                            <div style={{ display: "flex", gap: "4px" }}>
-                              <input
-                                value={editForm.month || ""}
-                                placeholder="Month"
-                                onChange={(e) => handleChange("month", e.target.value)}
-                                style={{ width: "50px" }}
-                              />
-                              <input
-                                value={editForm.year || ""}
-                                placeholder="Year"
-                                maxLength={4}
-                                onChange={(e) =>
-                                  handleChange("year", e.target.value.replace(/[^0-9]/g, ""))
-                                }
-                                style={{ width: "55px" }}
-                              />
-                            </div>
-                          ) : (
-                            r.monthYear
-                          )}
-                        </td>
+const getFileData = (req, res) => {
+  const fileName = req.params.fileName;
+  const sql = `SELECT * FROM work_updates WHERE file_name = ? ORDER BY id ASC`;
 
-                        <td>
-                          {isEditing ? (
-                            <input
-                              value={editForm.domain || ""}
-                              onChange={(e) => handleChange("domain", e.target.value)}
-                            />
-                          ) : (
-                            r.domain
-                          )}
-                        </td>
+  db.query(sql, [fileName], (err, rows) => {
+    if (err) return res.status(500).json(err);
+    if (!rows.length) return res.status(404).json({ message: "No data found for this file" });
 
-                        <td>
-                          {isEditing ? (
-                            <input
-                              value={editForm.sow || ""}
-                              onChange={(e) => handleChange("sow", e.target.value)}
-                            />
-                          ) : (
-                            r.sow
-                          )}
-                        </td>
+    const cleaned = rows.map((row) => {
+      const { created_at, updated_at, file_name, id, ...rest } = row;
+      return finalizeRow({
+        ...rest,
+        jobs_delivered: 1, // FIX: ek row = hamesha 1 job delivered
+        otp: displayOtp(rest.otp),
+        amdocs_qc: blankIfZero(rest.amdocs_qc),
+        internal_qc: blankIfZero(rest.internal_qc),
+        receive_date: formatDateToMMDDYYYY(rest.receive_date),
+        ecd_date: formatDateToMMDDYYYY(rest.ecd_date),
+        submission_date: formatDateToMMDDYYYY(rest.submission_date)
+      });
+    });
 
-                        <td>
-                          {isEditing ? (
-                            <input
-                              value={editForm.jobType || ""}
-                              onChange={(e) => handleChange("jobType", e.target.value)}
-                            />
-                          ) : (
-                            r.jobType
-                          )}
-                        </td>
+    res.json(cleaned);
+  });
+};
 
-                        <td>
-                          {isEditing ? (
-                            <input
-                              value={editForm.region || ""}
-                              onChange={(e) => handleChange("region", e.target.value)}
-                            />
-                          ) : (
-                            r.region || "N/A"
-                          )}
-                        </td>
-
-                        <td>
-                          {isEditing ? (
-                            <div style={{ display: "flex", flexDirection: "column", gap: "5px" }}>
-                              <input
-                                value={editForm.state || ""}
-                                onChange={(e) => handleChange("state", e.target.value)}
-                                placeholder="State"
-                              />
-                              <input
-                                value={editForm.county || ""}
-                                onChange={(e) => handleChange("county", e.target.value)}
-                                placeholder="County"
-                              />
-                            </div>
-                          ) : (
-                            <>
-                              {r.state === "N/A"
-                                ? "N/A"
-                                : r.county &&
-                                    r.county !== "-" &&
-                                    r.county !== "Unknown" &&
-                                    r.county !== "Unknown County"
-                                  ? `${r.state} (${r.county})`
-                                  : r.state}
-                            </>
-                          )}
-                        </td>
-
-                        <td>
-                          {isEditing ? (
-                            <input
-                              value={editForm.job_id || ""}
-                              onChange={(e) => handleChange("job_id", e.target.value)}
-                            />
-                          ) : (
-                            r.job_id
-                          )}
-                        </td>
-
-                        <td>
-                          {isEditing ? (
-                            <input
-                              value={editForm.current_status || ""}
-                              onChange={(e) => handleChange("current_status", e.target.value)}
-                            />
-                          ) : (
-                            r.current_status
-                          )}
-                        </td>
-
-                        <td>
-                          {isEditing ? (
-                            <input
-                              value={editForm.production_engineers || ""}
-                              onChange={(e) => handleChange("production_engineers", e.target.value)}
-                            />
-                          ) : (
-                            r.production_engineers
-                          )}
-                        </td>
-
-                        <td>
-                          {isEditing ? (
-                            <input
-                              value={editForm.qc_engineers || ""}
-                              onChange={(e) => handleChange("qc_engineers", e.target.value)}
-                            />
-                          ) : (
-                            r.qc_engineers
-                          )}
-                        </td>
-
-                        <td className="job-cell">
-                          {isEditing ? (
-                            <input
-                              type="number"
-                              value={editForm.jobsDelivered ?? ""}
-                              onChange={(e) => handleChange("jobsDelivered", e.target.value)}
-                              style={{ width: "60px" }}
-                            />
-                          ) : (
-                            <div className="job-main">{r.jobsDelivered || 0}</div>
-                          )}
-                        </td>
-
-                        <td>
-                          {isEditing ? (
-                            <div
-                              style={{
-                                display: "flex",
-                                flexDirection: "column",
-                                gap: "5px",
-                                minWidth: "140px",
-                              }}
-                            >
-                              {Object.entries(editForm.uom || {}).map(([key, value]) => (
-                                <div
-                                  key={key}
-                                  style={{
-                                    display: "flex",
-                                    justifyContent: "space-between",
-                                    gap: "5px",
-                                  }}
-                                >
-                                  <span style={{ fontSize: "11px" }}>{key}:</span>
-                                  <input
-                                    type="number"
-                                    value={value ?? ""}
-                                    onChange={(e) => handleUOMChange(key, e.target.value)}
-                                    style={{ width: "50px" }}
-                                  />
-                                </div>
-                              ))}
-                            </div>
-                          ) : (
-                            formatUOM(r.uom)
-                          )}
-                        </td>
-
-                        {/* OTP khaali ho to ye cell thoda gehra red background hota hai */}
-                        <td
-                          className={r.otpMissing ? "cell-missing" : ""}
-                          style={r.otpMissing ? otpMissingStyle : undefined}
-                        >
-                          {isEditing ? (
-                            <input
-                              value={editForm.otp || ""}
-                              onChange={(e) => handleChange("otp", e.target.value)}
-                              style={{ width: "60px" }}
-                            />
-                          ) : (
-                            r.otp
-                          )}
-                        </td>
-
-                        <td>
-                          {isEditing ? (
-                            <input
-                              value={editForm.internal_qc || ""}
-                              onChange={(e) => handleChange("internal_qc", e.target.value)}
-                              style={{ width: "60px" }}
-                            />
-                          ) : (
-                            r.internal_qc
-                          )}
-                        </td>
-
-                        <td>
-                          {isEditing ? (
-                            <input
-                              value={editForm.amdocs_qc || ""}
-                              onChange={(e) => handleChange("amdocs_qc", e.target.value)}
-                              style={{ width: "60px" }}
-                            />
-                          ) : (
-                            r.amdocs_qc
-                          )}
-                        </td>
-
-                        {/* Deviation = Amdocs QC - Internal QC (value ke side me ↑ green / ↓ red) */}
-                        <td>
-                          <DeviationCell text={dev.text} trend={dev.trend} />
-                        </td>
-
-                        {/* Receive Date: Excel jaisa "11/3/2026, 3.32 AM" */}
-                        <td>
-                          {isEditing ? (
-                            <div className="datetime-edit">
-                              <input
-                                type="date"
-                                value={editForm.receive_date || ""}
-                                onChange={(e) => handleChange("receive_date", e.target.value)}
-                              />
-                              <input
-                                type="time"
-                                value={editForm.receive_time || ""}
-                                onChange={(e) => handleChange("receive_time", e.target.value)}
-                              />
-                            </div>
-                          ) : (
-                            <DateTimeCell date={r.receive_date} time={r.receive_time} />
-                          )}
-                        </td>
-
-                        <td>
-                          {isEditing ? (
-                            <input
-                              type="date"
-                              value={editForm.ecd_date || ""}
-                              onChange={(e) => handleChange("ecd_date", e.target.value)}
-                            />
-                          ) : (
-                            formatDisplayDate(r.ecd_date) || "-"
-                          )}
-                        </td>
-
-                        {/* Submission Date: Excel jaisa "11/4/2026, 5.53 PM" */}
-                        <td>
-                          {isEditing ? (
-                            <div className="datetime-edit">
-                              <input
-                                type="date"
-                                value={editForm.submission_date || ""}
-                                onChange={(e) => handleChange("submission_date", e.target.value)}
-                              />
-                              <input
-                                type="time"
-                                value={editForm.submission_time || ""}
-                                onChange={(e) => handleChange("submission_time", e.target.value)}
-                              />
-                            </div>
-                          ) : (
-                            <DateTimeCell date={r.submission_date} time={r.submission_time} />
-                          )}
-                        </td>
-
-                        <td>
-                          {isEditing ? (
-                            <div className="action-buttons">
-                              <button
-                                type="button"
-                                className="cancel-btn"
-                                onClick={() => setEditingRowId(null)}
-                              >
-                                ❌
-                              </button>
-                              <button type="button" className="save-btn" onClick={requestSave}>
-                                ✔️
-                              </button>
-                            </div>
-                          ) : (
-                            <div className="action-buttons">
-                              <button
-                                type="button"
-                                className="edit-btn"
-                                onClick={() => handleEdit(r)}
-                              >
-                                ✏️
-                              </button>
-                              <button
-                                type="button"
-                                className="delete-btn"
-                                onClick={() => requestDelete(r.id)}
-                              >
-                                🗑️
-                              </button>
-                            </div>
-                          )}
-                        </td>
-                      </tr>
-                    );
-                  })
-                ) : (
-                  <tr>
-                    <td colSpan="21" className="no-data">
-                      ❌ No data found
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
-
-          <div className="report-footer">
-            <div className="last-update">
-              <strong>Total Records:</strong> {filteredRows.length}
-            </div>
-
-            <div className="pagination">
-              <button
-                type="button"
-                disabled={currentPage === 1}
-                onClick={() => {
-                  setCurrentPage(currentPage - 1);
-                  // Prev par jaate hi jump-box saaf kar do, warna wo purana number dikhata rehta
-                  setJumpPage("");
-                }}
-              >
-                Prev
-              </button>
-
-              <span>
-                Page {currentPage} / {totalPages}
-              </span>
-
-              <input
-                type="number"
-                value={jumpPage}
-                placeholder="Page"
-                onChange={(e) => {
-                  let val = e.target.value;
-                  setJumpPage(val);
-                  let page = Number(val);
-                  if (!page) return;
-                  if (page < 1) page = 1;
-                  if (page > totalPages) page = totalPages;
-                  setCurrentPage(page);
-                }}
-                className="page-input"
-              />
-
-              <button
-                type="button"
-                disabled={currentPage === totalPages}
-                onClick={() => {
-                  setCurrentPage(currentPage + 1);
-                  // Next par jaate hi jump-box saaf kar do, warna wo purana number dikhata rehta
-                  setJumpPage("");
-                }}
-              >
-                Next
-              </button>
-            </div>
-          </div>
-        </>
-      )}
-    </div>
+// FIX: SUM(jobs_delivered) ki jagah COUNT(*) -> har row = 1 job
+const getDomainStats = (req, res) => {
+  db.query(
+    `SELECT domain, COUNT(*) AS jobs_delivered FROM work_updates GROUP BY domain`,
+    (err, rows) => {
+      if (err) return res.status(500).json(err);
+      res.json(rows);
+    }
   );
-}
+};
+
+const getJobTypeStats = (req, res) => {
+  db.query(
+    `SELECT job_type AS job_type, COUNT(*) AS jobs_delivered FROM work_updates GROUP BY job_type ORDER BY jobs_delivered DESC`,
+    (err, rows) => {
+      if (err) return res.status(500).json(err);
+      res.json(rows);
+    }
+  );
+};
+
+const getMonthWiseReport = (req, res) => {
+  db.query("SELECT * FROM work_updates ORDER BY id ASC", (err, rows) => {
+    if (err) return res.status(500).json([]);
+    const formatted = rows.map(r => finalizeRow({
+      ...r,
+      jobs_delivered: 1, // FIX: ek row = hamesha 1 job delivered
+      otp: displayOtp(r.otp),
+      amdocs_qc: blankIfZero(r.amdocs_qc),
+      internal_qc: blankIfZero(r.internal_qc),
+      receive_date: formatDateToMMDDYYYY(r.receive_date),
+      ecd_date: formatDateToMMDDYYYY(r.ecd_date),
+      submission_date: formatDateToMMDDYYYY(r.submission_date)
+    }));
+    res.json(formatted);
+  });
+};
+
+const getStateWiseJobs = (req, res) => {
+  db.query(
+    `SELECT state, domain, COUNT(*) AS jobs_delivered FROM work_updates GROUP BY state, domain`,
+    (err, rows) => {
+      if (err) return res.status(500).json(err);
+
+      const result = {};
+      rows.forEach((row) => {
+        if (!result[row.state]) result[row.state] = {};
+        result[row.state][row.domain] = row.jobs_delivered;
+      });
+
+      res.json(result);
+    }
+  );
+};
+
+const getDomainLastUpdate = (req, res) => {
+  const sql = `SELECT domain, MAX(updated_at) AS lastUpdate FROM work_updates GROUP BY domain`;
+
+  db.query(sql, (err, rows) => {
+    if (err) return res.status(500).json({ message: "Failed to fetch last update" });
+    res.json(rows);
+  });
+};
+
+/* ======================================
+   DELETE FUNCTIONS
+====================================== */
+const deleteWork = async (req, res) => {
+  const workId = req.params.id;
+
+  try {
+    const rows = await query("SELECT job_id, domain FROM work_updates WHERE id = ?", [workId]);
+    const jobId = rows && rows.length > 0 ? clean(rows[0].job_id) : "";
+    const domain = rows && rows.length > 0 ? domainKey(rows[0].domain) : "";
+
+    await query("DELETE FROM work_updates WHERE id = ?", [workId]);
+    await removeOrphanJobCreation([{ jobId, domain }]);
+
+    return res.json({ message: "Deleted from both Work Controller and Job Creation successfully" });
+  } catch (err) {
+    console.error("deleteWork error:", err.message);
+    return res.status(500).json({ message: "Delete failed", error: err.message });
+  }
+};
+
+const DELETE_CHUNK = 2000;
+const DELETE_TIME_BUDGET_MS = 6000;
+
+const deleteFile = async (req, res) => {
+  const fileName = req.params.fileName;
+  const lite = !!(req.query && (req.query.lite === "1" || req.query.lite === "true"));
+  const started = Date.now();
+
+  let deletedCount = 0;
+  let done = false;
+
+  try {
+    while (true) {
+      const rows = await query(
+        `SELECT id, job_id, domain FROM work_updates WHERE file_name = ? ORDER BY id ASC LIMIT ${Number(DELETE_CHUNK)}`,
+        [fileName]
+      );
+
+      if (!rows || rows.length === 0) {
+        done = true;
+        break;
+      }
+
+      const ids = rows.map((r) => r.id);
+      await query(`DELETE FROM work_updates WHERE id IN (${inClause(ids)})`, ids);
+      deletedCount += ids.length;
+
+      const items = rows
+        .map((r) => ({ jobId: clean(r.job_id), domain: domainKey(r.domain) }))
+        .filter((r) => isRealJobId(r.jobId));
+      await removeOrphanJobCreation(items);
+
+      if (rows.length < DELETE_CHUNK) {
+        done = true;
+        break;
+      }
+
+      if (lite && Date.now() - started > DELETE_TIME_BUDGET_MS) {
+        break; // baaki agli call me
+      }
+    }
+
+    return res.json({
+      message: "File and related jobs deleted successfully from both places",
+      deletedCount,
+      done
+    });
+  } catch (err) {
+    console.error("deleteFile error:", err.message);
+    return res.status(500).json({ message: "Delete failed", error: err.message });
+  }
+};
+
+const clearWork = async (req, res) => {
+  try {
+    await query("DELETE FROM work_updates");
+    await query("DELETE FROM job_creation");
+
+    return res.json({ message: "All data cleared from both places" });
+  } catch (err) {
+    console.error("clearWork error:", err.message);
+    return res.status(500).json({ message: "Clear failed", error: err.message });
+  }
+};
+
+const fixOldJobsDelivered = async () => {
+  try {
+    const result = await query(
+      "UPDATE work_updates SET jobs_delivered = 1 WHERE jobs_delivered IS NULL OR jobs_delivered <> 1"
+    );
+    console.log(
+      `jobs_delivered auto-fix done. Rows fixed: ${result && result.affectedRows !== undefined ? result.affectedRows : 0}`
+    );
+  } catch (err) {
+    console.error("jobs_delivered auto-fix failed:", err.message);
+  }
+};
+fixOldJobsDelivered();
+
+const ensureIndex = async (table, indexName, column) => {
+  try {
+    const found = await query(`SHOW INDEX FROM ${table} WHERE Key_name = ?`, [indexName]);
+    if (found && found.length > 0) return;
+
+    try {
+      await query(`CREATE INDEX ${indexName} ON ${table} (${column})`);
+    } catch (e) {
+      if (e && e.code === "ER_DUP_KEYNAME") return;
+      // TEXT/BLOB column: prefix length ke saath dobara try
+      await query(`CREATE INDEX ${indexName} ON ${table} (${column}(191))`);
+    }
+    console.log(`Index created: ${indexName} on ${table}(${column})`);
+  } catch (err) {
+    console.error(`Index ${indexName} skipped:`, err.message);
+  }
+};
+
+const ensureIndexes = async () => {
+  await ensureIndex("work_updates", "idx_work_file_name", "file_name");
+  await ensureIndex("work_updates", "idx_work_job_id", "job_id");
+  await ensureIndex("job_creation", "idx_jc_job_id", "jobId");
+};
+ensureIndexes();
+
+// "03-05-2026 10:30" = 16 akshar. Date columns VARCHAR(10) jaise chhote hon to MySQL time ko
+// chup-chaap kaat deta hai (isi wajah se date ke saath time nahi dikhta). Server start par chaude kar dete hain.
+const DATETIME_COLUMNS = [
+  { table: "work_updates", columns: ["receive_date", "ecd_date", "submission_date"] },
+  { table: "job_creation", columns: ["receiveDate", "ecdDate", "submissionDate"] }
+];
+
+const ensureDateTimeColumns = async () => {
+  const warnings = [];
+  for (const { table, columns } of DATETIME_COLUMNS) {
+    try {
+      const found = await query(
+        `SELECT COLUMN_NAME AS name, DATA_TYPE AS type, CHARACTER_MAXIMUM_LENGTH AS len
+         FROM information_schema.COLUMNS
+         WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ? AND COLUMN_NAME IN (${inClause(columns)})`,
+        [table, ...columns]
+      );
+
+      for (const col of found || []) {
+        const type = String(col.type || "").toLowerCase();
+        if ((type === "varchar" || type === "char") && Number(col.len) < 30) {
+          try {
+            await query(`ALTER TABLE ${table} MODIFY ${col.name} VARCHAR(30) NULL DEFAULT NULL`);
+            console.log(`Column widened: ${table}.${col.name} ${type}(${col.len}) -> VARCHAR(30)`);
+          } catch (alterErr) {
+            const msg = `${table}.${col.name} chhota hai (${type}(${col.len})) aur widen nahi ho paya: ${alterErr.message}`;
+            console.error(msg);
+            warnings.push(msg);
+          }
+        } else if (!["varchar", "char", "text", "tinytext", "mediumtext", "longtext"].includes(type)) {
+          const msg = `${table}.${col.name} ka type ${type} hai, time save nahi hoga. Ise VARCHAR(30) kar do.`;
+          console.warn(msg);
+          warnings.push(msg);
+        }
+      }
+    } catch (err) {
+      console.error(`ensureDateTimeColumns(${table}) skipped:`, err.message);
+      warnings.push(`${table}: ${err.message}`);
+    }
+  }
+  return warnings;
+};
+ensureDateTimeColumns();
+
+/* ======================================
+   MODULE EXPORTS
+====================================== */
+module.exports = {
+  importExcel,
+  createWork,
+  getAllWork,
+  getFileData,
+  getDomainStats,
+  getJobTypeStats,
+  getMonthWiseReport,
+  getStateWiseJobs,
+  getDomainLastUpdate,
+  updateWork,
+  updateJob: updateWork,
+  deleteWork,
+  deleteFile,
+  clearWork
+};
