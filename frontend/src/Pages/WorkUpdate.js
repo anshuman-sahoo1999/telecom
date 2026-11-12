@@ -12,46 +12,83 @@ import {
 } from "lucide-react";
 
 import "../style/workupdate.css";
-// "17:53" -> "5.53 PM" (Excel jaisa). 00:00 ya galat value ho to "" (matlab sirf date)
-const timeToAmPm = (hh, mm) => {
-  const h = Number(hh);
-  const m = Number(mm);
-  if (isNaN(h) || isNaN(m) || h > 23 || m > 59) return "";
-  if (h === 0 && m === 0) return "";
-  return `${h % 12 || 12}.${String(m).padStart(2, "0")} ${h >= 12 ? "PM" : "AM"}`;
+const pad2 = (n) => String(n).padStart(2, "0");
+
+// "17:53" ko date ke saath jodne ke liye (00:00 ya time na ho to "")
+const timeSuffix = (h, mi) => {
+  if (h === undefined || h === null || h === "") return "";
+  const hh = Number(h);
+  const mm = Number(mi);
+  if (isNaN(hh) || isNaN(mm) || (hh === 0 && mm === 0)) return "";
+  return ` ${pad2(hh)}:${pad2(mm)}`;
 };
 
-// Date + time dono dikhata hai: "11/4/2026, 5.53 PM". Time na ho to sirf "11/4/2026".
-// `display` backend se aata hai (receive_date_display, ...), wahi sabse pehle use hota hai.
-// Fallback me "MM-DD-YYYY HH:mm" aur "YYYY-MM-DD[ T]HH:mm" ko string se hi todte hain
-// (new Date()/toISOString() nahi, kyunki usse time kat jata hai aur timezone se date khisak jaati hai).
-const formatDateForView = (val, display) => {
-  if (display && String(display).trim()) return String(display).trim();
+// Import ke baad View me date ke SAATH time bhi dikhta hai.
+// DB se "MM-DD-YYYY" ya "MM-DD-YYYY HH:mm" aata hai (ISO bhi chalega).
+// Date ka format pehle jaisa (YYYY-MM-DD) hi hai, bas time uske side me judta hai.
+const formatDateForView = (val) => {
   if (!val) return "";
   const str = val.toString().trim();
 
-  // "MM-DD-YYYY" ya "MM-DD-YYYY HH:mm" (backend ka stored format)
-  let m = str.match(/^(\d{1,2})[-/](\d{1,2})[-/](\d{4})(?:[ T,]+(\d{1,2}):(\d{2}))?/);
+  // "2026-11-04" / "2026-11-04 17:53" / "2026-11-04T17:53:00" (Z wali ISO ka time bharosemand nahi, use alag chhodte hain)
+  let m = str.match(/^(\d{4})-(\d{2})-(\d{2})(?:[ T]+(\d{1,2}):(\d{2})(?::\d{2}(?:\.\d+)?)?)?$/);
+  if (m) return `${m[1]}-${m[2]}-${m[3]}${timeSuffix(m[4], m[5])}`;
+
+  // "11-04-2026" / "11-04-2026 17:53" / "11/4/2026, 17:53"
+  m = str.match(/^(\d{1,2})[-/](\d{1,2})[-/](\d{4})(?:[ T,]+(\d{1,2}):(\d{2}))?$/);
   if (m) {
-    const t = m[4] !== undefined ? timeToAmPm(m[4], m[5]) : "";
-    const d = `${Number(m[1])}/${Number(m[2])}/${m[3]}`;
-    return t ? `${d}, ${t}` : d;
+    return `${m[3]}-${pad2(m[1])}-${pad2(m[2])}${timeSuffix(m[4], m[5])}`;
   }
 
-  // "YYYY-MM-DD" ya "YYYY-MM-DD HH:mm" / "YYYY-MM-DDTHH:mm"
-  m = str.match(/^(\d{4})-(\d{2})-(\d{2})(?:[ T]+(\d{1,2}):(\d{2}))?/);
-  if (m) {
-    const t = m[4] !== undefined ? timeToAmPm(m[4], m[5]) : "";
-    const d = `${Number(m[2])}/${Number(m[3])}/${m[1]}`;
-    return t ? `${d}, ${t}` : d;
+  m = str.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (m) return `${m[1]}-${m[2]}-${m[3]}`;
+
+  const d = new Date(str);
+  if (!isNaN(d.getTime())) {
+    return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
   }
 
   return str;
 };
 
-// Table me ye alag columns nahi banne chahiye; inka data date ke saath hi dikhta hai
-const isDateHelperKey = (k) =>
-  /_date_display$/.test(k) || /^(receive|received|ecd|submission)_time$/.test(k);
+/* ======================================
+   UPLOAD PREVIEW: Excel ke Date / Time cells
+   Date columns (Receive / ECD / Submission) me date ke side me time dikhta hai.
+   Time columns (Receive Time / Submission Time) me sahi time dikhta hai (12/30/1899 nahi).
+   Logic backend ke import jaisi hai, taaki jo preview me dikhe wahi save ho.
+====================================== */
+const headerKey = (h) => String(h === null || h === undefined ? "" : h).toLowerCase().replace(/[^a-z0-9]/g, "");
+const isTimeHeader = (h) => /(receiv|submi|ecd).*time/.test(headerKey(h));
+const isDateHeader = (h) => !isTimeHeader(h) && /receiv|^ecd|submi/.test(headerKey(h));
+
+// ExcelJS Date cells UTC me hote hain; +30s taaki 10:59:59.99 jaisa float error 10:59 na ban jaye
+const utcParts = (d) => {
+  const t = new Date(d.getTime() + 30000);
+  return {
+    y: t.getUTCFullYear(),
+    mo: t.getUTCMonth() + 1,
+    dy: t.getUTCDate(),
+    h: t.getUTCHours(),
+    mi: t.getUTCMinutes(),
+  };
+};
+
+const previewDateTime = (d) => {
+  let { y, mo, dy, h, mi } = utcParts(d);
+  // Backend jaisa: Excel ke asli Date cell me din/mahina ulta aata hai, din <= 12 ho to ulta karo
+  if (dy <= 12) [mo, dy] = [dy, mo];
+  return `${pad2(mo)}-${pad2(dy)}-${y}${timeSuffix(h, mi)}`;
+};
+
+const previewTimeOnly = (d) => {
+  const { h, mi } = utcParts(d);
+  return timeSuffix(h, mi).trim();
+};
+
+const previewPlainDate = (d) => {
+  const { y, mo, dy } = utcParts(d);
+  return `${pad2(mo)}/${pad2(dy)}/${y}`;
+};
 
 export default function WorkUpdate({ refreshDashboard }) {
   const [excelFile, setExcelFile] = useState(null);
@@ -135,9 +172,22 @@ export default function WorkUpdate({ refreshDashboard }) {
 
           let tableRows = ["<table border='1' style='border-collapse:collapse;width:100%'>"];
 
+          // header ke naam se pata chalta hai kaun si column Date hai aur kaun si Time
+          const headerRow = ws.getRow(1);
+          const colKind = [];
+          for (let col = 1; col <= colCount; col++) {
+            let h = headerRow.getCell(col).value;
+            if (h && typeof h === "object") {
+              h = Array.isArray(h.richText)
+                ? h.richText.map((t) => (t && t.text ? t.text : "")).join("")
+                : h.text !== undefined ? h.text : h.result !== undefined ? h.result : "";
+            }
+            colKind[col] = isTimeHeader(h) ? "time" : isDateHeader(h) ? "date" : "";
+          }
+
           for (let rowNumber = 1; rowNumber <= rowCount; rowNumber++) {
             const row = ws.getRow(rowNumber);
-            
+
             if (!row.values || row.values.length === 0) continue;
 
             tableRows.push("<tr>");
@@ -145,17 +195,12 @@ export default function WorkUpdate({ refreshDashboard }) {
               let val = row.getCell(col).value;
 
               if (val instanceof Date) {
-                // ExcelJS dates UTC me aati hain, isliye UTC getters (local se din khisak sakta hai)
-                const hh = val.getUTCHours();
-                const mi = val.getUTCMinutes();
-                const timeTxt = timeToAmPm(hh, mi);
-                if (val.getUTCFullYear() < 1950) {
-                  // sirf time wala cell (Receive Time / Submission Time): 1899 ki date nahi dikhani
-                  val = timeTxt;
+                if (rowNumber > 1 && colKind[col] === "time") {
+                  val = previewTimeOnly(val);
+                } else if (rowNumber > 1 && colKind[col] === "date") {
+                  val = previewDateTime(val);
                 } else {
-                  const mm = String(val.getUTCMonth() + 1).padStart(2, "0");
-                  const dd = String(val.getUTCDate()).padStart(2, "0");
-                  val = `${mm}/${dd}/${val.getUTCFullYear()}${timeTxt ? `, ${timeTxt}` : ""}`;
+                  val = previewPlainDate(val);
                 }
               } else if (val && typeof val === "object") {
                 if (Array.isArray(val.richText)) {
@@ -369,7 +414,9 @@ export default function WorkUpdate({ refreshDashboard }) {
           const allKeysSet = new Set();
           rows.forEach((r) => {
             Object.keys(r).forEach((k) => {
-              if (k !== 'id' && k !== 'created_at' && k !== 'updated_at' && k !== 'file_name' && !isDateHelperKey(k)) {
+              // receive_time / ecd_time / *_date_display alag column nahi dikhane: time date ke side me hi dikhta hai
+              if (k !== 'id' && k !== 'created_at' && k !== 'updated_at' && k !== 'file_name' &&
+                  !/^(receive|ecd|submission)_(time|date_display)$/.test(k)) {
                 allKeysSet.add(k);
               }
             });
@@ -412,7 +459,7 @@ export default function WorkUpdate({ refreshDashboard }) {
                   val = val || "";
                 }
               } else if (["receive_date", "ecd_date", "submission_date"].includes(k)) {
-                val = formatDateForView(val, row[`${k}_display`]);
+                val = formatDateForView(val);
               }
 
               tableRows.push(`<td style="padding:6px">${val ?? ""}</td>`);
