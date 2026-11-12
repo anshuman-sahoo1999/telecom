@@ -2098,20 +2098,36 @@ const DATETIME_COLUMNS = [
 
 const ensureDateTimeColumns = async () => {
   const warnings = [];
+  // NeonDB (Postgres) ho ya MySQL, dono me kaam karta hai
+  const isPg = !!db.isPostgres;
   for (const { table, columns } of DATETIME_COLUMNS) {
     try {
-      const found = await query(
-        `SELECT COLUMN_NAME AS name, DATA_TYPE AS type, CHARACTER_MAXIMUM_LENGTH AS len
-         FROM information_schema.COLUMNS
-         WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ? AND COLUMN_NAME IN (${inClause(columns)})`,
-        [table, ...columns]
-      );
+      const found = isPg
+        ? await query(
+            `SELECT column_name AS name, data_type AS type, character_maximum_length AS len
+             FROM information_schema.columns
+             WHERE table_schema = current_schema() AND LOWER(table_name) = LOWER(?)
+               AND LOWER(column_name) IN (${inClause(columns)})`,
+            [table, ...columns.map((c) => c.toLowerCase())]
+          )
+        : await query(
+            `SELECT COLUMN_NAME AS name, DATA_TYPE AS type, CHARACTER_MAXIMUM_LENGTH AS len
+             FROM information_schema.COLUMNS
+             WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ? AND COLUMN_NAME IN (${inClause(columns)})`,
+            [table, ...columns]
+          );
 
       for (const col of found || []) {
-        const type = String(col.type || "").toLowerCase();
+        let type = String(col.type || "").toLowerCase();
+        if (type === "character varying") type = "varchar"; // Postgres ka naam
+        if (type === "character") type = "char";
         if ((type === "varchar" || type === "char") && Number(col.len) < 30) {
           try {
-            await query(`ALTER TABLE ${table} MODIFY ${col.name} VARCHAR(30) NULL DEFAULT NULL`);
+            await query(
+              isPg
+                ? `ALTER TABLE ${table} ALTER COLUMN "${col.name}" TYPE VARCHAR(30)`
+                : `ALTER TABLE ${table} MODIFY ${col.name} VARCHAR(30) NULL DEFAULT NULL`
+            );
             console.log(`Column widened: ${table}.${col.name} ${type}(${col.len}) -> VARCHAR(30)`);
           } catch (alterErr) {
             const msg = `${table}.${col.name} chhota hai (${type}(${col.len})) aur widen nahi ho paya: ${alterErr.message}`;
