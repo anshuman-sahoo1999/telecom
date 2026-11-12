@@ -876,6 +876,7 @@ const JobHistory = () => {
                       <DateTimeCell value={job.receiveDate || job.receive_date} />
                     </td>
 
+                    {/* ECD Date: date ke side me time (Excel me ho to) */}
                     <td style={cellStyle}>
                       <DateTimeCell value={job.ecdDate || job.ecd_date} />
                     </td>
