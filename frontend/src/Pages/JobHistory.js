@@ -140,12 +140,21 @@ const timeChipStyle = {
   fontSize: 11,
   fontWeight: 600,
   verticalAlign: "middle",
+  whiteSpace: "nowrap",
+};
+
+// "17:53" -> "5:53 PM" (Excel me jaisa AM/PM dikhta hai)
+const to12Hour = (hhmm) => {
+  const m = String(hhmm || "").match(/^(\d{1,2}):(\d{2})$/);
+  if (!m) return "";
+  const h = Number(m[1]);
+  return `${h % 12 || 12}:${m[2]} ${h >= 12 ? "PM" : "AM"}`;
 };
 
 const DateTimeCell = ({ value }) => {
   const date = formatLocalDate(value);
   if (date === "-") return "-";
-  const time = toTimeKey(typeof value === "string" ? value : "");
+  const time = to12Hour(toTimeKey(typeof value === "string" ? value : ""));
   return (
     <>
       <span>{date}</span>
@@ -876,10 +885,7 @@ const JobHistory = () => {
                       <DateTimeCell value={job.receiveDate || job.receive_date} />
                     </td>
 
-                    {/* ECD Date: date ke side me time (Excel me ho to) */}
-                    <td style={cellStyle}>
-                      <DateTimeCell value={job.ecdDate || job.ecd_date} />
-                    </td>
+                    <td style={cellStyle}>{formatLocalDate(job.ecdDate || job.ecd_date)}</td>
 
                     {/* Submission Date: date ke side me time */}
                     <td style={cellStyle}>
