@@ -30,7 +30,8 @@ const toDateKey = (value) => {
   return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
 };
 
-// "03-05-2026 10:30" me se "10:30" nikalta hai. Time na ho (ya 00:00 ho) to "".
+// "03-05-2026 10:30" me se "10:30" nikalta hai. Time na ho to "".
+// 00:00 (12.00 AM) tabhi time maana jata hai jab "MM-DD-YYYY HH:mm" format me ho (import me Time column se aaya).
 const toTimeKey = (value) => {
   if (typeof value !== "string") return "";
   const v = value.trim();
@@ -38,8 +39,16 @@ const toTimeKey = (value) => {
   if (/^\d{4}-\d{2}-\d{2}T.*Z$/.test(v)) return "";
   const m = v.match(/(?:^|[\sT])(\d{1,2}):(\d{2})/);
   if (!m) return "";
-  if (Number(m[1]) === 0 && Number(m[2]) === 0) return "";
+  if (Number(m[1]) === 0 && Number(m[2]) === 0 && !/^\d{1,2}-\d{1,2}-\d{4} \d{2}:\d{2}$/.test(v)) return "";
   return `${pad2(m[1])}:${m[2]}`;
+};
+
+// "17:53" -> "5.53 PM" (Excel jaisa 12 ghante ka time)
+const timeTo12h = (t) => {
+  const m = String(t || "").match(/^(\d{1,2}):(\d{2})$/);
+  if (!m) return "";
+  const h = Number(m[1]);
+  return `${h % 12 || 12}.${m[2]} ${h >= 12 ? "PM" : "AM"}`;
 };
 
 // UI ke liye MM-DD-YYYY
@@ -140,25 +149,16 @@ const timeChipStyle = {
   fontSize: 11,
   fontWeight: 600,
   verticalAlign: "middle",
-  whiteSpace: "nowrap",
-};
-
-// "17:53" -> "5:53 PM" (Excel me jaisa AM/PM dikhta hai)
-const to12Hour = (hhmm) => {
-  const m = String(hhmm || "").match(/^(\d{1,2}):(\d{2})$/);
-  if (!m) return "";
-  const h = Number(m[1]);
-  return `${h % 12 || 12}:${m[2]} ${h >= 12 ? "PM" : "AM"}`;
 };
 
 const DateTimeCell = ({ value }) => {
   const date = formatLocalDate(value);
   if (date === "-") return "-";
-  const time = to12Hour(toTimeKey(typeof value === "string" ? value : ""));
+  const time = toTimeKey(typeof value === "string" ? value : "");
   return (
     <>
       <span>{date}</span>
-      {time ? <span style={timeChipStyle}>{time}</span> : null}
+      {time ? <span style={timeChipStyle}>{timeTo12h(time)}</span> : null}
     </>
   );
 };
@@ -885,7 +885,10 @@ const JobHistory = () => {
                       <DateTimeCell value={job.receiveDate || job.receive_date} />
                     </td>
 
-                    <td style={cellStyle}>{formatLocalDate(job.ecdDate || job.ecd_date)}</td>
+                    {/* ECD: Excel me date ke andar time ho to wo bhi dikhega */}
+                    <td style={cellStyle}>
+                      <DateTimeCell value={job.ecdDate || job.ecd_date} />
+                    </td>
 
                     {/* Submission Date: date ke side me time */}
                     <td style={cellStyle}>
