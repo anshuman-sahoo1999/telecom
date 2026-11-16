@@ -12,82 +12,52 @@ import {
 } from "lucide-react";
 
 import "../style/workupdate.css";
-/* ======================================
-   DATE + TIME DIKHANE KE HELPERS
-   Server date "MM-DD-YYYY" ya "MM-DD-YYYY HH:mm" (24 ghante) bhejta hai.
-   Pehle yahan time kat jata tha (sirf date bachti thi). Ab date ke side me time dikhta hai.
-====================================== */
 const pad2 = (n) => String(n).padStart(2, "0");
 
-// 24 ghante (17, 53) -> "5:53 PM"
-const to12Hour = (h, m) => {
-  const hh = Number(h);
-  return `${hh % 12 || 12}:${pad2(m)} ${hh >= 12 ? "PM" : "AM"}`;
+// 24 ghante -> Excel jaisa "9.00 PM" / "12.55 PM" / "1.21 AM"
+const to12h = (h, m) => `${Number(h) % 12 || 12}.${pad2(m)} ${Number(h) >= 12 ? "PM" : "AM"}`;
+
+const timeTag = (h, m) =>
+  `<span style="display:inline-block;margin-left:6px;padding:1px 6px;border-radius:10px;background:#e0f2fe;color:#0369a1;font-size:11px;font-weight:600;white-space:nowrap;">${to12h(h, m)}</span>`;
+
+const formatExcelDateCell = (d) => {
+  if (isNaN(d.getTime())) return "";
+  const t = new Date(d.getTime() + 30000); // Excel float error se 10:59:59.99 -> 10:59 na ban jaye
+  const y = t.getUTCFullYear();
+  const h = t.getUTCHours();
+  const mi = t.getUTCMinutes();
+  if (y < 1950) return to12h(h, mi); // 1899-12-30 = Excel ka sirf-time cell
+  const date = `${pad2(t.getUTCMonth() + 1)}/${pad2(t.getUTCDate())}/${y}`;
+  return h === 0 && mi === 0 ? date : `${date} ${to12h(h, mi)}`;
 };
 
-const TIME_CHIP_STYLE =
-  "display:inline-block;margin-left:8px;padding:1px 8px;border-radius:999px;" +
-  "background:#e0e7ff;color:#3730a3;font-size:12px;font-weight:600;white-space:nowrap";
-
-const dateWithTimeHtml = (dateText, time12) =>
-  time12
-    ? `${dateText}<span style="${TIME_CHIP_STYLE}">${time12}</span>`
-    : dateText;
-
+// Upload ke baad file view: date ke side me time ("2026-11-04 [5.53 PM]").
+// Backend se "MM-DD-YYYY HH:mm" aata hai; time na ho to sirf date dikhti hai.
 const formatDateForView = (val) => {
   if (!val) return "";
-  const str = val.toString().replace(/ /g, " ").trim();
+  const str = val.toString().trim();
 
-  // Server ka format: "MM-DD-YYYY" ya "MM-DD-YYYY HH:mm"
-  let m = str.match(/^(\d{1,2})[-/](\d{1,2})[-/](\d{4})(?:[ T]+(\d{1,2}):(\d{2}))?/);
+  // ISO + Z (timezone wali string) ka time bharosemand nahi, isliye sirf date
+  const isoZ = /^\d{4}-\d{2}-\d{2}T.*Z$/.test(str);
+
+  // "2026-03-05" ya "2026-03-05 17:53"
+  let m = str.match(/^(\d{4})-(\d{2})-(\d{2})(?:[ T]+(\d{1,2}):(\d{2}))?/);
   if (m) {
-    const dateText = `${m[3]}-${pad2(m[1])}-${pad2(m[2])}`;
-    // 00:00 ka matlab "time diya hi nahi gaya"
-    const hasTime = m[4] !== undefined && !(Number(m[4]) === 0 && Number(m[5]) === 0);
-    return dateWithTimeHtml(dateText, hasTime ? to12Hour(m[4], m[5]) : "");
+    const date = `${m[1]}-${m[2]}-${m[3]}`;
+    return m[4] !== undefined && !isoZ ? `${date}${timeTag(m[4], m[5])}` : date;
   }
 
-  // Purani rows: "YYYY-MM-DD" ya "YYYY-MM-DD HH:mm" (ISO + Z wali string ka time bharosemand nahi, use ignore)
-  m = str.match(/^(\d{4})-(\d{2})-(\d{2})(?:[ ]+(\d{1,2}):(\d{2}))?/);
+  // "03-05-2026" ya "03-05-2026 17:53" (MM-DD-YYYY)
+  m = str.match(/^(\d{1,2})[-/](\d{1,2})[-/](\d{4})(?:[ ,]+(\d{1,2}):(\d{2}))?$/);
   if (m) {
-    const hasTime = m[4] !== undefined && !(Number(m[4]) === 0 && Number(m[5]) === 0);
-    return dateWithTimeHtml(`${m[1]}-${m[2]}-${m[3]}`, hasTime ? to12Hour(m[4], m[5]) : "");
+    const date = `${m[3]}-${pad2(m[1])}-${pad2(m[2])}`;
+    return m[4] !== undefined ? `${date}${timeTag(m[4], m[5])}` : date;
   }
 
   const d = new Date(str);
   if (!isNaN(d.getTime())) return d.toISOString().split("T")[0];
 
   return str;
-};
-
-// Server har row ke saath ye extra fields bhi bhejta hai. Inka time already date ke saath judd chuka hai,
-// isliye inhe alag column ki tarah nahi dikhana.
-const VIEW_HIDDEN_KEYS = new Set([
-  "receive_time",
-  "ecd_time",
-  "submission_time",
-  "receive_date_display",
-  "ecd_date_display",
-  "submission_date_display",
-]);
-
-// Upload se pehle wale preview me Excel ki date/time cell ko Excel jaisa dikhata hai.
-// ExcelJS dates ko UTC me deta hai, isliye UTC getters (local timezone se din nahi khisakta).
-//  - sirf time wali cell (Excel me 1899 ki date banti hai)  -> "9:00 PM"
-//  - date + time                                             -> "11/03/2026 3:32 AM"
-//  - sirf date                                               -> "11/03/2026"
-const formatExcelDateCell = (d) => {
-  if (isNaN(d.getTime())) return "";
-  // Excel ke float error se 10:59:59.99 jaisa na bane, isliye nazdeeki minute tak round
-  const t = new Date(Math.round(d.getTime() / 60000) * 60000);
-  const h = t.getUTCHours();
-  const mi = t.getUTCMinutes();
-  const time12 = `${h % 12 || 12}:${pad2(mi)} ${h >= 12 ? "PM" : "AM"}`;
-
-  if (t.getUTCFullYear() < 1950) return time12;
-
-  const dateText = `${pad2(t.getUTCMonth() + 1)}/${pad2(t.getUTCDate())}/${t.getUTCFullYear()}`;
-  return h === 0 && mi === 0 ? dateText : `${dateText} ${time12}`;
 };
 
 export default function WorkUpdate({ refreshDashboard }) {
@@ -395,10 +365,9 @@ export default function WorkUpdate({ refreshDashboard }) {
           const allKeysSet = new Set();
           rows.forEach((r) => {
             Object.keys(r).forEach((k) => {
-              if (
-                k !== 'id' && k !== 'created_at' && k !== 'updated_at' && k !== 'file_name' &&
-                !VIEW_HIDDEN_KEYS.has(k)
-              ) {
+              // receive_time / *_display wale helper fields alag column nahi dikhane, time date ke saath dikhta hai
+              if (k !== 'id' && k !== 'created_at' && k !== 'updated_at' && k !== 'file_name' &&
+                  !/_time$/.test(k) && !/_display$/.test(k)) {
                 allKeysSet.add(k);
               }
             });
