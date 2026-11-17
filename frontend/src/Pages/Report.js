@@ -9,9 +9,7 @@ import "../style/report.css";
 import { ComposableMap, Geographies, Geography } from "react-simple-maps";
 import geoData from "../us-states.json";
 import { geoCentroid } from "d3-geo";
-       
-// ---------- DEVIATION (Amdocs QC - Internal QC) ----------
-// "80%", "↑ 80%", "0.8" jaisi value se number nikalta hai (nahi mila to null)
+
 const parsePercentValue = (v) => {
   if (v === null || v === undefined) return null;
   const t = v.toString().replace(/[^0-9.-]/g, "");
@@ -20,9 +18,6 @@ const parsePercentValue = (v) => {
   return isNaN(n) ? null : n;
 };
 
-// Internal 80%, Amdocs 90%  -> 10%  ↑ (green)
-// Internal 70%, Amdocs 60%  -> 10%  ↓ (red)
-// Dono me se koi khaali ho to "-"
 const getDeviation = (internalQc, amdocsQc) => {
   const internal = parsePercentValue(internalQc);
   const amdocs = parsePercentValue(amdocsQc);
@@ -33,12 +28,11 @@ const getDeviation = (internalQc, amdocsQc) => {
   const abs = `${Math.abs(diff)}%`;
   return {
     text: abs,
-    signed: `${diff > 0 ? "+" : "-"}${abs}`, // PDF / Excel ke liye
+    signed: `${diff > 0 ? "+" : "-"}${abs}`, 
     trend: diff > 0 ? "up" : "down",
   };
 };
 
-// Deviation cell: value + uske side me arrow (↑ green / ↓ red)
 const DeviationCell = ({ internalQc, amdocsQc }) => {
   const dev = getDeviation(internalQc, amdocsQc);
   if (!dev.trend) return dev.text;
@@ -50,9 +44,6 @@ const DeviationCell = ({ internalQc, amdocsQc }) => {
   );
 };
 
-// ---------- MONTH & YEAR (ek hi format: "Jan" + "2026") ----------
-// DB me "Jan,2026" aata hai, purane data me "Jan-26", "Jan 2026", "January 2026", "2026-01" bhi ho sakta hai.
-// Sab ko ek jaisa banate hain taaki dropdown me ek hi month do baar na dikhe.
 const MONTH_SHORT = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
 const monthIndexOf = (name) => MONTH_SHORT.findIndex((m) => m.toLowerCase() === String(name).slice(0, 3).toLowerCase());
@@ -63,19 +54,16 @@ const parseMonthYear = (raw) => {
   const str = String(raw ?? "").trim();
   if (!str) return { month: "-", year: "-" };
 
-  // "Jan,2026" / "Jan-26" / "Jan 2026" / "January, 2026" / "Jan"
   let m = str.match(/^([A-Za-z]{3,9})\.?[\s,\-/]*(\d{2}|\d{4})?$/);
   if (m && monthIndexOf(m[1]) >= 0) {
     return { month: MONTH_SHORT[monthIndexOf(m[1])], year: m[2] ? fullYear(m[2]) : "-" };
   }
 
-  // "2026-01" / "2026-01-15"
   m = str.match(/^(\d{4})-(\d{1,2})(?:-\d{1,2})?$/);
   if (m && Number(m[2]) >= 1 && Number(m[2]) <= 12) {
     return { month: MONTH_SHORT[Number(m[2]) - 1], year: m[1] };
   }
 
-  // "01-2026" / "01/2026"
   m = str.match(/^(\d{1,2})[-/](\d{4})$/);
   if (m && Number(m[1]) >= 1 && Number(m[1]) <= 12) {
     return { month: MONTH_SHORT[Number(m[1]) - 1], year: m[2] };
