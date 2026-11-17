@@ -2,10 +2,11 @@ import { API_BASE_URL } from "../config";
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import axios from "axios";
 import ExcelJS from "exceljs";
-import { FileSpreadsheet, UploadCloud, Trash2, X } from "lucide-react";
+import { FileSpreadsheet, UploadCloud, Trash2, X, Eye } from "lucide-react";
 import "../style/rawdata.css";
 
 const PREVIEW_ROWS = 100;
+const VIEW_PAGE_SIZES = [25, 50, 100, 500, "All"];
 const pad = (n) => String(n).padStart(2, "0");
 
 const cellToText = (v) => {
@@ -37,6 +38,14 @@ export default function RawDataUpload() {
   const [confirmSave, setConfirmSave] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [deleting, setDeleting] = useState(null);
+
+  // View (inline preview of an already imported file)
+  const [viewFile, setViewFile] = useState(null); // file_name currently open
+  const [viewLoading, setViewLoading] = useState(false);
+  const [viewCols, setViewCols] = useState([]);
+  const [viewRows, setViewRows] = useState([]);
+  const [viewPage, setViewPage] = useState(1);
+  const [viewSize, setViewSize] = useState(50);
 
   const [toast, setToast] = useState(null);
   const timer = useRef(null);
@@ -137,6 +146,34 @@ export default function RawDataUpload() {
     }
   };
 
+  /* ---- view imported file (toggle) ---- */
+  const handleView = async (file) => {
+    const name = file.file_name;
+    if (viewFile === name) {
+      setViewFile(null);
+      return;
+    }
+    setViewFile(name);
+    setViewLoading(true);
+    setViewCols([]);
+    setViewRows([]);
+    setViewPage(1);
+    try {
+      const res = await axios.get(`${API_BASE_URL}/api/rawdata/file/${encodeURIComponent(name)}`);
+      setViewCols(res.data?.columns || []);
+      setViewRows(res.data?.data || []);
+    } catch (err) {
+      setViewFile(null);
+      showToast(err.response?.data?.message || "Could not open the file preview.");
+    } finally {
+      setViewLoading(false);
+    }
+  };
+
+  const viewPages = viewSize === "All" ? 1 : Math.max(1, Math.ceil(viewRows.length / viewSize));
+  const viewSlice =
+    viewSize === "All" ? viewRows : viewRows.slice((viewPage - 1) * viewSize, viewPage * viewSize);
+
   /* ---- delete ---- */
   const handleDelete = async () => {
     const name = deleteTarget.file_name;
@@ -145,6 +182,7 @@ export default function RawDataUpload() {
     try {
       const res = await axios.delete(`${API_BASE_URL}/api/rawdata/file/${encodeURIComponent(name)}`);
       setFiles((p) => p.filter((f) => f.file_name !== name));
+      setViewFile((v) => (v === name ? null : v));
       showToast(`"${name}" deleted successfully (${res.data?.deletedCount ?? 0} rows removed).`, "ok");
     } catch (err) {
       showToast(err.response?.data?.message || "Could not delete the file.");
@@ -187,25 +225,115 @@ export default function RawDataUpload() {
             <div className="rd-empty">No Excel file has been imported yet</div>
           ) : (
             files.map((f) => (
-              <div className="rd-file" key={f.file_name}>
-                <div className="l">
-                  <FileSpreadsheet size={18} />
-                  <span>
-                    {f.file_name}
-                    <small>
-                      {f.total_rows} rows
-                      {f.uploaded_at ? ` • ${new Date(f.uploaded_at).toLocaleString()}` : ""}
-                    </small>
-                  </span>
+              <React.Fragment key={f.file_name}>
+                <div className="rd-file">
+                  <div className="l">
+                    <FileSpreadsheet size={18} />
+                    <span>
+                      {f.file_name}
+                      <small>
+                        {f.total_rows} rows
+                        {f.uploaded_at ? ` • ${new Date(f.uploaded_at).toLocaleString()}` : ""}
+                      </small>
+                    </span>
+                  </div>
+                  <div className="rd-file-actions">
+                    <button
+                      className="rd-btn sm"
+                      disabled={deleting === f.file_name}
+                      onClick={() => handleView(f)}
+                    >
+                      <Eye size={14} /> {viewFile === f.file_name ? "Hide" : "View"}
+                    </button>
+                    <button
+                      className="rd-btn red sm"
+                      disabled={deleting === f.file_name}
+                      onClick={() => setDeleteTarget(f)}
+                    >
+                      <Trash2 size={14} /> {deleting === f.file_name ? "Deleting..." : "Delete"}
+                    </button>
+                  </div>
                 </div>
-                <button
-                  className="rd-btn red sm"
-                  disabled={deleting === f.file_name}
-                  onClick={() => setDeleteTarget(f)}
-                >
-                  <Trash2 size={14} /> {deleting === f.file_name ? "Deleting..." : "Delete"}
-                </button>
-              </div>
+
+                {viewFile === f.file_name && (
+                  <div className="rd-view">
+                    <div className="rd-view-h">
+                      <h3>File Preview</h3>
+                      <button onClick={() => setViewFile(null)} aria-label="Close preview">
+                        <X size={18} />
+                      </button>
+                    </div>
+
+                    {viewLoading ? (
+                      <div className="rd-state">Loading...</div>
+                    ) : viewRows.length === 0 ? (
+                      <div className="rd-state">No data found in this file.</div>
+                    ) : (
+                      <>
+                        <div className="rd-count">Total records: {viewRows.length}</div>
+                        <div className="rd-tablewrap">
+                          <table className="rd-table">
+                            <thead>
+                              <tr>
+                                {viewCols.map((c) => (
+                                  <th key={c.key}>{c.header}</th>
+                                ))}
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {viewSlice.map((r, i) => (
+                                <tr key={i}>
+                                  {viewCols.map((c) => (
+                                    <td key={c.key}>{r[c.key] === null || r[c.key] === undefined ? "" : String(r[c.key])}</td>
+                                  ))}
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                        <div className="rd-pager">
+                          <div className="c">
+                            Rows per page
+                            <select
+                              value={viewSize}
+                              onChange={(e) => {
+                                const v = e.target.value;
+                                setViewSize(v === "All" ? "All" : Number(v));
+                                setViewPage(1);
+                              }}
+                            >
+                              {VIEW_PAGE_SIZES.map((n) => (
+                                <option key={n} value={n}>
+                                  {n}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+                          <div className="c">
+                            <button
+                              className="rd-btn gray sm"
+                              disabled={viewPage <= 1}
+                              onClick={() => setViewPage((p) => p - 1)}
+                            >
+                              Prev
+                            </button>
+                            <span>
+                              Page {viewPage} / {viewPages}
+                            </span>
+                            <button
+                              className="rd-btn gray sm"
+                              disabled={viewPage >= viewPages}
+                              onClick={() => setViewPage((p) => p + 1)}
+                            >
+                              Next
+                            </button>
+                          </div>
+                        </div>
+                      </>
+                    )}
+                  </div>
+                )}
+              </React.Fragment>
             ))
           )}
         </div>
