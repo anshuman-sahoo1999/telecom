@@ -225,7 +225,8 @@ const TEXT_TIME_AMPM_RE = /(?<!\d)(\d{1,2})(?:\s*[:.\-]\s*(\d{2}))?(?:\s*[:.\-]\
 // 24 ghante: "17:53", "17:53:10"
 const TEXT_TIME_24_RE = /(?<!\d)(\d{1,2}):(\d{2})(?::\d{2}(?:\.\d+)?)?(?!\d)/;
 
-const timeFromText = (s) => {
+// keepMidnight=true: alag "Time" column ka 12:00 AM asli time hai, usse "" na banao
+const timeFromText = (s, keepMidnight = false) => {
   const t = cleanText(s);
   let h, min;
   let m = t.match(TEXT_TIME_AMPM_RE);
@@ -243,7 +244,7 @@ const timeFromText = (s) => {
     min = Number(m[2]);
     if (h > 23 || min > 59) return "";
   }
-  return h === 0 && min === 0 ? "" : `${pad(h)}:${pad(min)}`;
+  return h === 0 && min === 0 && !keepMidnight ? "" : `${pad(h)}:${pad(min)}`;
 };
 
 const parseExcelDate = (value) => {
@@ -305,7 +306,10 @@ const parseExcelDate = (value) => {
 
 // Kisi bhi value (Date / Excel number / text) me se "HH:mm" (24 ghante) nikalta hai.
 // Time na ho ya 00:00 ho to "" (matlab sirf date).
-const extractTime = (v) => {
+// explicit=true: ye value alag "Receive Time / Submission Time" column se aayi hai.
+//   Wahan 12:00 AM (00:00) asli time hai, isliye "00:00" wapas aata hai
+//   (par agar us column me asli date padi ho, jaise 12-Jan-2026 00:00, to wo time nahi hai -> "").
+const extractTime = (v, explicit = false) => {
   if (v === null || v === undefined || v === "") return "";
 
   if (v instanceof Date) {
@@ -314,7 +318,12 @@ const extractTime = (v) => {
     const d = new Date(v.getTime() + 30000);
     const h = d.getUTCHours();
     const m = d.getUTCMinutes();
-    return h === 0 && m === 0 ? "" : `${pad(h)}:${pad(m)}`;
+    if (h === 0 && m === 0) {
+      // Excel ka sirf-time cell 1899-12-30 ki date ke saath aata hai
+      const timeOnlyCell = d.getUTCFullYear() < 1950;
+      return explicit && timeOnlyCell ? "00:00" : "";
+    }
+    return `${pad(h)}:${pad(m)}`;
   }
 
   const s = cleanText(v);
@@ -330,7 +339,7 @@ const extractTime = (v) => {
   }
 
   // Text: "10:30", "10:30 PM", "9.00 PM", "10-31 PM"
-  return timeFromText(s);
+  return timeFromText(s, explicit);
 };
 
 // Date + (alag Time column ho to wo) -> "MM-DD-YYYY HH:mm"; time na ho to sirf "MM-DD-YYYY"
@@ -341,7 +350,7 @@ const parseDateTime = (dateVal, timeVal) => {
   if (!datePart) return null;
 
   // pehle date ke andar se time (e.g. "11/3/2026, 3.32 AM"), na mile to alag Time column se
-  const time = extractTime(dateVal) || extractTime(timeVal);
+  const time = extractTime(dateVal) || extractTime(timeVal, true);
   return time ? `${datePart} ${time}` : datePart;
 };
 
@@ -1695,9 +1704,9 @@ const finalizeRowCore = (r) => {
   let ecdTime = "";
   Object.keys(obj).forEach((k) => {
     const c = compressKey(k);
-    if (RECEIVE_TIME_RE.test(c)) recvTime = recvTime || extractTime(obj[k]);
-    else if (SUBMISSION_TIME_RE.test(c)) subTime = subTime || extractTime(obj[k]);
-    else if (ECD_TIME_RE.test(c)) ecdTime = ecdTime || extractTime(obj[k]);
+    if (RECEIVE_TIME_RE.test(c)) recvTime = recvTime || extractTime(obj[k], true);
+    else if (SUBMISSION_TIME_RE.test(c)) subTime = subTime || extractTime(obj[k], true);
+    else if (ECD_TIME_RE.test(c)) ecdTime = ecdTime || extractTime(obj[k], true);
     else out[k] = obj[k];
   });
 
@@ -1728,7 +1737,8 @@ const splitDateTimeStored = (v) => {
   const s = cleanText(v === null || v === undefined ? "" : v);
   const m = s.match(/^(\d{2})-(\d{2})-(\d{4})(?:[ T]+(\d{1,2}):(\d{2}))?/);
   if (!m) return { date: s, dateText: s, time: "" };
-  const hasTime = m[4] !== undefined && !(Number(m[4]) === 0 && Number(m[5]) === 0);
+  // 00:00 bhi asli time hai (12.00 AM) - import me wo tabhi save hota hai jab Time column me likha ho
+  const hasTime = m[4] !== undefined;
   return {
     date: `${m[1]}-${m[2]}-${m[3]}`,
     dateText: `${Number(m[1])}/${Number(m[2])}/${m[3]}`,
@@ -2098,36 +2108,20 @@ const DATETIME_COLUMNS = [
 
 const ensureDateTimeColumns = async () => {
   const warnings = [];
-  // NeonDB (Postgres) ho ya MySQL, dono me kaam karta hai
-  const isPg = !!db.isPostgres;
   for (const { table, columns } of DATETIME_COLUMNS) {
     try {
-      const found = isPg
-        ? await query(
-            `SELECT column_name AS name, data_type AS type, character_maximum_length AS len
-             FROM information_schema.columns
-             WHERE table_schema = current_schema() AND LOWER(table_name) = LOWER(?)
-               AND LOWER(column_name) IN (${inClause(columns)})`,
-            [table, ...columns.map((c) => c.toLowerCase())]
-          )
-        : await query(
-            `SELECT COLUMN_NAME AS name, DATA_TYPE AS type, CHARACTER_MAXIMUM_LENGTH AS len
-             FROM information_schema.COLUMNS
-             WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ? AND COLUMN_NAME IN (${inClause(columns)})`,
-            [table, ...columns]
-          );
+      const found = await query(
+        `SELECT COLUMN_NAME AS name, DATA_TYPE AS type, CHARACTER_MAXIMUM_LENGTH AS len
+         FROM information_schema.COLUMNS
+         WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ? AND COLUMN_NAME IN (${inClause(columns)})`,
+        [table, ...columns]
+      );
 
       for (const col of found || []) {
-        let type = String(col.type || "").toLowerCase();
-        if (type === "character varying") type = "varchar"; // Postgres ka naam
-        if (type === "character") type = "char";
+        const type = String(col.type || "").toLowerCase();
         if ((type === "varchar" || type === "char") && Number(col.len) < 30) {
           try {
-            await query(
-              isPg
-                ? `ALTER TABLE ${table} ALTER COLUMN "${col.name}" TYPE VARCHAR(30)`
-                : `ALTER TABLE ${table} MODIFY ${col.name} VARCHAR(30) NULL DEFAULT NULL`
-            );
+            await query(`ALTER TABLE ${table} MODIFY ${col.name} VARCHAR(30) NULL DEFAULT NULL`);
             console.log(`Column widened: ${table}.${col.name} ${type}(${col.len}) -> VARCHAR(30)`);
           } catch (alterErr) {
             const msg = `${table}.${col.name} chhota hai (${type}(${col.len})) aur widen nahi ho paya: ${alterErr.message}`;
