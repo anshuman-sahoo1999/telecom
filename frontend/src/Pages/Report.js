@@ -45,7 +45,7 @@ const DeviationCell = ({ internalQc, amdocsQc }) => {
   return (
     <span className={`qc-trend ${dev.trend}`}>
       <span className="qc-value">{dev.text}</span>
-      <span className="qc-arrow">{dev.trend === "up" ? "↑" : "↓"}</span>
+      <span className="qc-arrow">{dev.trend === "up" ? "⮝" : "⮟"}</span>
     </span>
   );
 };
