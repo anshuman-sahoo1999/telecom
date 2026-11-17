@@ -10,6 +10,54 @@ import { ComposableMap, Geographies, Geography } from "react-simple-maps";
 import geoData from "../us-states.json";
 import { geoCentroid } from "d3-geo";
        
+// ---------- DEVIATION (Amdocs QC - Internal QC) ----------
+// "80%", "↑ 80%", "0.8" jaisi value se number nikalta hai (nahi mila to null)
+const parsePercentValue = (v) => {
+  if (v === null || v === undefined) return null;
+  const t = v.toString().replace(/[^0-9.-]/g, "");
+  if (t === "" || t === "-") return null;
+  const n = parseFloat(t);
+  return isNaN(n) ? null : n;
+};
+
+// Internal 80%, Amdocs 90%  -> 10%  ↑ (green)
+// Internal 70%, Amdocs 60%  -> 10%  ↓ (red)
+// Dono me se koi khaali ho to "-"
+const getDeviation = (internalQc, amdocsQc) => {
+  const internal = parsePercentValue(internalQc);
+  const amdocs = parsePercentValue(amdocsQc);
+  if (internal === null || amdocs === null) return { text: "-", signed: "-", trend: "" };
+
+  const diff = Math.round((amdocs - internal) * 100) / 100;
+  if (diff === 0) return { text: "0%", signed: "0%", trend: "" };
+  const abs = `${Math.abs(diff)}%`;
+  return {
+    text: abs,
+    signed: `${diff > 0 ? "+" : "-"}${abs}`, // PDF / Excel ke liye
+    trend: diff > 0 ? "up" : "down",
+  };
+};
+
+// Deviation cell: value + uske side me arrow (↑ green / ↓ red)
+const DeviationCell = ({ internalQc, amdocsQc }) => {
+  const dev = getDeviation(internalQc, amdocsQc);
+  if (!dev.trend) return dev.text;
+  return (
+    <span className={`qc-trend ${dev.trend}`}>
+      <span className="qc-value">{dev.text}</span>
+      <span className="qc-arrow">{dev.trend === "up" ? "↑" : "↓"}</span>
+    </span>
+  );
+};
+
+// OTP khaali ("", "-" ya sirf space) ho to row red
+const isOtpMissing = (otp) => {
+  const t = String(otp ?? "").trim();
+  return t === "" || t === "-";
+};
+const ROW_MISSING_STYLE = { background: "#fee2e2" };
+const OTP_CELL_MISSING_STYLE = { background: "#fecaca", fontWeight: 700 };
+
 export default function Report() {
   const [jumpPage, setJumpPage] = useState("");
   const [data, setData] = useState([]);
@@ -543,6 +591,7 @@ const handleSave = async () => {
         r.otp,
         r.internal_qc,
         r.amdocs_qc,
+        getDeviation(r.internal_qc, r.amdocs_qc).signed,
         dateWithTime(r.receive_date, r.receive_time) || "-",
         dateWithTime(r.ecd_date, r.ecd_time) || "-",
         dateWithTime(r.submission_date, r.submission_time) || "-",
@@ -551,7 +600,7 @@ const handleSave = async () => {
       autoTable(pdf, {
         startY: finalY + 8,
         theme: "grid",
-        head: [["Sl", "Month", "Year", "Domain", "SOW", "Job Type", "Region", "Market", "Job ID", "Status", "Prod Eng", "QC Eng", "Jobs", "UOM", "OTP", "Int QC", "QC", "Receive Date", "ECD Date", "Submission Date"]],
+        head: [["Sl", "Month", "Year", "Domain", "SOW", "Job Type", "Region", "Market", "Job ID", "Status", "Prod Eng", "QC Eng", "Jobs", "UOM", "OTP", "Int QC", "QC", "Deviation", "Receive Date", "ECD Date", "Submission Date"]],
         body: tableData,
         styles: { fontSize: 4.5, cellPadding: 1.5, overflow: "linebreak", valign: "middle", halign: "center" },
         headStyles: { fillColor: [22, 78, 99], textColor: 255, fontStyle: "bold" },
@@ -618,6 +667,7 @@ const handleSave = async () => {
       { header: "OTP", key: "otp", width: 15 },
       { header: "Internal QC", key: "internal_qc", width: 15 },
       { header: "Amdocs QC", key: "amdocs_qc", width: 15 },
+      { header: "Deviation", key: "deviation", width: 12 },
       { header: "Receive Date", key: "receive_date", width: 22 },
       { header: "ECD Date", key: "ecd_date", width: 22 },
       { header: "Submission Date", key: "submission_date", width: 22 },
@@ -642,6 +692,7 @@ const handleSave = async () => {
         otp: r.otp,
         internal_qc: r.internal_qc,
         amdocs_qc: r.amdocs_qc,
+        deviation: getDeviation(r.internal_qc, r.amdocs_qc).signed,
         receive_date: dateWithTime(r.receive_date, r.receive_time),
         ecd_date: dateWithTime(r.ecd_date, r.ecd_time),
         submission_date: dateWithTime(r.submission_date, r.submission_time),
@@ -973,6 +1024,7 @@ const handleSave = async () => {
                   <th>OTP</th>
                   <th>Internal QC</th>
                   <th>Amdocs QC</th>
+                  <th>Deviation</th>
                   <th>Receive Date</th>
                   <th>ECD Date</th>
                   <th>Submission Date</th>
@@ -982,9 +1034,16 @@ const handleSave = async () => {
               <tbody>
                 {currentRows.length > 0 ? (
                   currentRows.map((r, i) => {
-                    const isMissingOtpOrAmdocs = !r.otp || r.otp === "-" || !r.amdocs_qc || r.amdocs_qc === "-";
+                    const otpMissing = isOtpMissing(r.otp);
+                    const amdocsMissing = !r.amdocs_qc || r.amdocs_qc === "-";
+                    // OTP khaali ho to poori row red (Job History jaisa), sirf Amdocs khaali ho to purani light-orange class
+                    const rowClass = otpMissing ? "row-missing-otp" : amdocsMissing ? "light-orange-row" : "";
                     return (
-                      <tr key={r.id} className={isMissingOtpOrAmdocs ? "light-orange-row" : ""}>
+                      <tr
+                        key={r.id}
+                        className={rowClass}
+                        style={otpMissing ? ROW_MISSING_STYLE : undefined}
+                      >
                         <td>{(currentPage - 1) * rowsPerPage + i + 1}</td>
 
                         <td>
@@ -1150,7 +1209,10 @@ const handleSave = async () => {
                           )}
                         </td>
 
-                        <td>
+                        <td
+                          className={otpMissing ? "cell-missing" : ""}
+                          style={otpMissing ? OTP_CELL_MISSING_STYLE : undefined}
+                        >
                           {editingRowId === r.id ? (
                             <input
                               value={editForm.otp || ""}
@@ -1184,6 +1246,13 @@ const handleSave = async () => {
                           ) : (
                             r.amdocs_qc
                           )}
+                        </td>
+
+                        <td>
+                          <DeviationCell
+                            internalQc={editingRowId === r.id ? editForm.internal_qc : r.internal_qc}
+                            amdocsQc={editingRowId === r.id ? editForm.amdocs_qc : r.amdocs_qc}
+                          />
                         </td>
 
                         <td>
@@ -1278,7 +1347,7 @@ const handleSave = async () => {
                   })
                 ) : (
                   <tr>
-                    <td colSpan="21" className="no-data">
+                    <td colSpan="22" className="no-data">
                       ❌ No data found
                     </td>
                   </tr>
