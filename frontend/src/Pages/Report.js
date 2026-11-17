@@ -50,6 +50,40 @@ const DeviationCell = ({ internalQc, amdocsQc }) => {
   );
 };
 
+// ---------- MONTH & YEAR (ek hi format: "Jan" + "2026") ----------
+// DB me "Jan,2026" aata hai, purane data me "Jan-26", "Jan 2026", "January 2026", "2026-01" bhi ho sakta hai.
+// Sab ko ek jaisa banate hain taaki dropdown me ek hi month do baar na dikhe.
+const MONTH_SHORT = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+
+const monthIndexOf = (name) => MONTH_SHORT.findIndex((m) => m.toLowerCase() === String(name).slice(0, 3).toLowerCase());
+
+const fullYear = (y) => (String(y).length === 2 ? `20${y}` : String(y));
+
+const parseMonthYear = (raw) => {
+  const str = String(raw ?? "").trim();
+  if (!str) return { month: "-", year: "-" };
+
+  // "Jan,2026" / "Jan-26" / "Jan 2026" / "January, 2026" / "Jan"
+  let m = str.match(/^([A-Za-z]{3,9})\.?[\s,\-/]*(\d{2}|\d{4})?$/);
+  if (m && monthIndexOf(m[1]) >= 0) {
+    return { month: MONTH_SHORT[monthIndexOf(m[1])], year: m[2] ? fullYear(m[2]) : "-" };
+  }
+
+  // "2026-01" / "2026-01-15"
+  m = str.match(/^(\d{4})-(\d{1,2})(?:-\d{1,2})?$/);
+  if (m && Number(m[2]) >= 1 && Number(m[2]) <= 12) {
+    return { month: MONTH_SHORT[Number(m[2]) - 1], year: m[1] };
+  }
+
+  // "01-2026" / "01/2026"
+  m = str.match(/^(\d{1,2})[-/](\d{4})$/);
+  if (m && Number(m[1]) >= 1 && Number(m[1]) <= 12) {
+    return { month: MONTH_SHORT[Number(m[1]) - 1], year: m[2] };
+  }
+
+  return { month: str, year: "-" };
+};
+
 // OTP khaali ("", "-" ya sirf space) ho to row red
 const isOtpMissing = (otp) => {
   const t = String(otp ?? "").trim();
@@ -88,7 +122,10 @@ const handleSave = async () => {
     try {
       const parsedUOM = editForm.uom || {};
 
-      const currentMonthVal = editForm.month ? `${editForm.month}-${String(editForm.year).slice(-2)}` : null;
+      // Backend ka format "Jan,2026" hai ("Jan-26" bhejne par saal galat ban sakta hai)
+      const editMonth = parseMonthYear(`${editForm.month || ""} ${editForm.year || ""}`);
+      const currentMonthVal =
+        editMonth.month !== "-" && editMonth.year !== "-" ? `${editMonth.month},${editMonth.year}` : null;
 
       const payload = {
         months: currentMonthVal ? [currentMonthVal] : undefined,
@@ -298,25 +335,12 @@ const handleSave = async () => {
 
   data.forEach((item) => {
     const dateObj = item.updated_at || item.created_at;
-    const monthRaw = item.months?.[0] || item.month;
+    // months array me aakhri month sabse latest hota hai (Work Update/Job History bhi wahi dikhate hain)
+    const monthsList = Array.isArray(item.months) ? item.months : [];
+    const monthRaw = monthsList.length ? monthsList[monthsList.length - 1] : item.month;
 
-    let month = "-";
-    let year = "-";
-
-    if (typeof monthRaw === "string" && monthRaw.trim() !== "") {
-      if (monthRaw.includes("-")) {
-        const parts = monthRaw.split("-");
-        month = parts[0] || "-";
-        let rawYear = parts[1] || "-";
-        year = rawYear.length === 2 ? `20${rawYear}` : rawYear;
-      } else if (monthRaw.includes(" ")) {
-        const parts = monthRaw.split(" ");
-        month = parts[0] || "-";
-        year = parts[1] || "-";
-      } else {
-        month = monthRaw;
-      }
-    }
+    // Month / Year ko ek hi format me laate hain ("Jan" + "2026")
+    let { month, year } = parseMonthYear(monthRaw);
 
     if ((year === "-" || !year) && dateObj) {
       const fallbackDate = parseDate(dateObj);
@@ -385,7 +409,20 @@ const handleSave = async () => {
     return timeA - timeB;
   });
 
-  const uniqueMonthYear = [...new Set(rows.map((r) => `${r.month} ${r.year}`))];
+  const uniqueMonthYear = [
+    ...new Map(
+      rows
+        .filter((r) => r.month !== "-")
+        .map((r) => [`${r.month} ${r.year}`, r])
+    ).values(),
+  ]
+    .sort((a, b) => {
+      const ya = Number(a.year) || 0;
+      const yb = Number(b.year) || 0;
+      if (ya !== yb) return ya - yb;
+      return monthIndexOf(a.month) - monthIndexOf(b.month);
+    })
+    .map((r) => `${r.month} ${r.year}`);
   const uniqueDomains = [...new Set(rows.map((r) => r.domain).filter(Boolean))];
 
   const uniqueStates = [
@@ -1048,13 +1085,22 @@ const handleSave = async () => {
 
                         <td>
                           {editingRowId === r.id ? (
-                            <input
-                              value={editForm.month || ""}
-                              onChange={(e) => handleChange("month", e.target.value)}
-                              style={{ width: "50px" }}
-                            />
+                            <div style={{ display: "flex", gap: "4px" }}>
+                              <input
+                                value={editForm.month || ""}
+                                onChange={(e) => handleChange("month", e.target.value)}
+                                style={{ width: "50px" }}
+                                placeholder="Mon"
+                              />
+                              <input
+                                value={editForm.year || ""}
+                                onChange={(e) => handleChange("year", e.target.value)}
+                                style={{ width: "60px" }}
+                                placeholder="Year"
+                              />
+                            </div>
                           ) : (
-                            r.month
+                            r.month === "-" ? "-" : `${r.month} ${r.year !== "-" ? r.year : ""}`.trim()
                           )}
                         </td>
 
