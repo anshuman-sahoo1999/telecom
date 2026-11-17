@@ -7,7 +7,7 @@ import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer,
   PieChart, Pie, Cell, Legend, CartesianGrid
 } from "recharts";
-import { FaTachometerAlt, FaChartBar, FaUsers, FaSitemap, FaPlusCircle, FaClock, FaHistory, FaLayerGroup, FaFolderOpen, FaPaperPlane, FaChartLine, FaTimes, FaBrain } from "react-icons/fa";
+import { FaTachometerAlt, FaChartBar, FaUsers, FaSitemap, FaPlusCircle, FaClock, FaHistory, FaLayerGroup, FaFolderOpen, FaPaperPlane, FaChartLine, FaTimes, FaBrain, FaDatabase, FaCloudUploadAlt, FaTable } from "react-icons/fa";
 import jsPDF from "jspdf";
 import html2canvas from "html2canvas";
 import geoData from "../us-states.json";
@@ -24,6 +24,8 @@ import MasterDomainCreation from "../Pages/MasterDomainCreation";
 import CapacityForecast from "../Pages/CapacityForecast";
 import JobHistory from "../Pages/JobHistory";
 import KPIInsight from "./KPIInsight";
+import RawDataUpload from "./RawDataUpload";
+import RawDataReport from "./RawDataReport";
 import KpiTrendModal from "../components/Kpitrendmodal.jsx";
 import axios from "axios";
 
@@ -303,6 +305,8 @@ export default function TelecomMap() {
   // Dashboard dropdown default BAND rahega. Dashboard click karne par hi khulega (isme sirf "KPI Insight" tab hai)
   const [expandedDashMenu, setExpandedDashMenu] = useState(false);
   const [showTrendModal, setShowTrendModal] = useState(false);
+  // Raw Data dropdown (sub tabs: Raw Data Upload / Raw Data Report) - alag section
+  const [expandedRawMenu, setExpandedRawMenu] = useState(true); // default khula: dono sub tab dikhein
 
   const currentYear = new Date().getFullYear();
 
@@ -469,7 +473,8 @@ export default function TelecomMap() {
   useEffect(() => {
     try {
       const user = JSON.parse(localStorage.getItem("user"));
-      setRole(user?.role);
+      // "Team Lead" / "TeamLead" dono ko ek hi role maano (App.js dono allow karta hai)
+      setRole(user?.role ? String(user.role).replace(/\s+/g, "") : null);
     } catch (e) {
       setRole(null);
     }
@@ -888,6 +893,18 @@ export default function TelecomMap() {
     }
   };
 
+  // Raw Data button click
+  //  - Raw Data ke kisi sub tab par nahi ho -> "Raw Data Upload" khulega aur dropdown open rahega
+  //  - Already Raw Data ke andar ho -> dropdown open/close toggle hoga
+  const handleRawDataClick = () => {
+    if (activePage !== "rawdata-upload" && activePage !== "rawdata-report") {
+      setActivePage("rawdata-upload");
+      setExpandedRawMenu(true);
+    } else {
+      setExpandedRawMenu((prev) => !prev);
+    }
+  };
+
   // ---- Map tooltip data ----
   const tooltipState = tooltip.data?.state;
   const tooltipStateData = tooltipState ? mapReportByState[lc(tooltipState)] || {} : {};
@@ -920,6 +937,22 @@ export default function TelecomMap() {
         </div>
         {/* Data Upload button hidden. Dubara dikhana ho to yaha button add karo aur FaUpload ko react-icons/fa import me wapas jodo. */}
         <button className={`menuBtn ${activePage === "report" ? "active" : ""}`} onClick={() => goTo("report")}><FaChartBar className="menuIcon" />{menuOpen && "Report"}</button>
+        {/* Raw Data group (naya, alag section): sub tabs -> Raw Data Upload, Raw Data Report */}
+        <div className="menuGroupContainer">
+          <button
+            className={`menuBtn ${(activePage === "rawdata-upload" || activePage === "rawdata-report") ? "active" : ""}`}
+            onClick={handleRawDataClick}
+          >
+            <FaDatabase className="menuIcon" />
+            {menuOpen && <span style={{ display: "flex", justifyContent: "space-between", width: "100%", alignItems: "center" }}>Raw Data <span style={{ fontSize: "11px" }}>{expandedRawMenu ? "▲" : "▼"}</span></span>}
+          </button>
+          {expandedRawMenu && (
+            <div className="subMenuContainer" style={menuOpen ? { paddingLeft: "20px", display: "flex", flexDirection: "column", gap: "4px", marginTop: "4px" } : {}}>
+              <button className={`menuBtn subMenuBtn ${activePage === "rawdata-upload" ? "active" : ""}`} onClick={() => goTo("rawdata-upload")}><FaCloudUploadAlt className="menuIcon" style={{ fontSize: "16px" }} />{menuOpen && "Raw Data Upload"}</button>
+              <button className={`menuBtn subMenuBtn ${activePage === "rawdata-report" ? "active" : ""}`} onClick={() => goTo("rawdata-report")}><FaTable className="menuIcon" style={{ fontSize: "16px" }} />{menuOpen && "Raw Data Report"}</button>
+            </div>
+          )}
+        </div>
         {role === "Admin" && <button className={`menuBtn ${activePage === "user-management" ? "active" : ""}`} onClick={() => goTo("user-management")}><FaUsers className="menuIcon" />{menuOpen && "User Management"}</button>}
         {(role === "Admin" || role === "TeamLead") && <button className={`menuBtn ${activePage === "organogram" ? "active" : ""}`} onClick={() => goTo("organogram")}><FaSitemap className="menuIcon" />{menuOpen && "Organogram"}</button>}
 
@@ -1214,6 +1247,8 @@ export default function TelecomMap() {
         {activePage === "workupdate" && (<div className="belowSection"><WorkUpdate refreshDashboard={fetchAllData} /></div>)}
         {activePage === "kpiinsight" && <div className="belowSection"><KPIInsight data={allWorkData} domains={mergedDomains} /></div>}
         {activePage === "report" && <div className="belowSection"><Report /></div>}
+        {activePage === "rawdata-upload" && <div className="belowSection"><RawDataUpload /></div>}
+        {activePage === "rawdata-report" && <div className="belowSection"><RawDataReport /></div>}
         {activePage === "user-management" && <div className="belowSection"><UserManagement /></div>}
         {activePage === "organogram" && <div className="belowSection"><Organogram /></div>}
         {activePage === "jobcreation" && <div className="belowSection"><JobCreation /></div>}
