@@ -306,7 +306,7 @@ export default function TelecomMap() {
   const [expandedDashMenu, setExpandedDashMenu] = useState(false);
   const [showTrendModal, setShowTrendModal] = useState(false);
   // Raw Data dropdown (sub tabs: Raw Data Upload / Raw Data Report) - alag section
-  const [expandedRawMenu, setExpandedRawMenu] = useState(false); // default BAND: Raw Data click karne par hi khulega
+  const [expandedRawMenu, setExpandedRawMenu] = useState(false); // closed by default: opens only when Raw Data is clicked
 
   const currentYear = new Date().getFullYear();
 
