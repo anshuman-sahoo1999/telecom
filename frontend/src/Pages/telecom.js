@@ -24,8 +24,6 @@ import MasterDomainCreation from "../Pages/MasterDomainCreation";
 import CapacityForecast from "../Pages/CapacityForecast";
 import JobHistory from "../Pages/JobHistory";
 import KPIInsight from "./KPIInsight";
-import RawDataUpload from "./RawDataUpload";
-import RawDataReport from "./RawDataReport";
 import KpiTrendModal from "../components/Kpitrendmodal.jsx";
 import axios from "axios";
 
@@ -1247,8 +1245,10 @@ export default function TelecomMap() {
         {activePage === "workupdate" && (<div className="belowSection"><WorkUpdate refreshDashboard={fetchAllData} /></div>)}
         {activePage === "kpiinsight" && <div className="belowSection"><KPIInsight data={allWorkData} domains={mergedDomains} /></div>}
         {activePage === "report" && <div className="belowSection"><Report /></div>}
-        {activePage === "rawdata-upload" && <div className="belowSection"><RawDataUpload /></div>}
-        {activePage === "rawdata-report" && <div className="belowSection"><RawDataReport /></div>}
+        {/* Raw Data Upload: content baad me add hoga */}
+        {activePage === "rawdata-upload" && <div className="belowSection"></div>}
+        {/* Raw Data Report: content baad me add hoga */}
+        {activePage === "rawdata-report" && <div className="belowSection"></div>}
         {activePage === "user-management" && <div className="belowSection"><UserManagement /></div>}
         {activePage === "organogram" && <div className="belowSection"><Organogram /></div>}
         {activePage === "jobcreation" && <div className="belowSection"><JobCreation /></div>}
