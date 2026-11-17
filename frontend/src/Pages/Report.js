@@ -1,567 +1,1334 @@
 import { API_BASE_URL } from "../config";
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useEffect, useState, useRef } from "react";
 import axios from "axios";
-import * as XLSX from "xlsx-js-style";
-import { jsPDF } from "jspdf";
+import jsPDF from "jspdf";
+import html2canvas from "html2canvas";
 import autoTable from "jspdf-autotable";
+import ExcelJS from "exceljs";
 import "../style/report.css";
-
-/* ==========================================================================
-   Report page  (Admin / MIS / TeamLead  ->  /…-dashboard/report)
-   Data  : GET    /api/work/report/monthwise
-   Edit  : PUT    /api/work/update/:id
-   Delete: DELETE /api/work/delete/:id
-   Dates : Receive / ECD / Submission date ke side me time (Excel jaisa "9.00 PM")
-   ========================================================================== */
-
-const PAGE_SIZE = 25;
-
-// ---------- small helpers ----------
-const pad2 = (n) => String(n).padStart(2, "0");
-const text = (v) => (v === null || v === undefined ? "" : String(v).trim());
-const norm = (v) => text(v).toLowerCase();
-
-// 24 ghante "17:53" -> Excel jaisa "5.53 PM"
-const to12h = (t) => {
-  const m = text(t).match(/^(\d{1,2}):(\d{2})$/);
-  if (!m) return "";
-  const h = Number(m[1]);
-  return `${h % 12 || 12}.${m[2]} ${h >= 12 ? "PM" : "AM"}`;
-};
-
-// Stored value "MM-DD-YYYY" ya "MM-DD-YYYY HH:mm"  ->  { date, time }
-// 00:00 tabhi time hai jab "HH:mm" saath likha ho (import me Time column se aaya).
-const splitStored = (value) => {
-  const s = text(value);
-  const m = s.match(/^(\d{1,2})-(\d{1,2})-(\d{4})(?:[ T]+(\d{1,2}):(\d{2}))?/);
-  if (!m) return { date: s, time: "" };
-  return {
-    date: `${pad2(m[1])}-${pad2(m[2])}-${m[3]}`,
-    time: m[4] !== undefined ? `${pad2(m[4])}:${m[5]}` : "",
-  };
-};
-
-// "MM-DD-YYYY" -> "YYYY-MM-DD"  (<input type="date"> ke liye)
-const toInputDate = (mmddyyyy) => {
-  const m = text(mmddyyyy).match(/^(\d{2})-(\d{2})-(\d{4})$/);
-  return m ? `${m[3]}-${m[1]}-${m[2]}` : "";
-};
-
-// months: JSON string ya array -> ["Dec,2025", ...]
-const parseMonths = (value) => {
-  if (Array.isArray(value)) return value.filter(Boolean).map(String);
-  const s = text(value);
-  if (!s) return [];
-  try {
-    const parsed = JSON.parse(s);
-    if (Array.isArray(parsed)) return parsed.filter(Boolean).map(String);
-    return parsed ? [String(parsed)] : [];
-  } catch (e) {
-    return [s];
-  }
-};
-
-const monthLabel = (row) => {
-  const list = parseMonths(row.months);
-  return list.length ? list[list.length - 1] : text(row.month);
-};
-
-const parsePercent = (val) => {
-  const n = parseFloat(text(val).replace("%", ""));
-  if (isNaN(n)) return null;
-  return n > 0 && n <= 1 ? Math.round(n * 100) : Math.round(n);
-};
-
-// Table / export dono ke liye "date, time" ka text
-const dateTimeText = (row, key) => {
-  const display = row[`${key}_display`];
-  if (display) return display;
-  const { date, time } = splitStored(row[key]);
-  return time ? `${date}, ${to12h(time)}` : date;
-};
-
-const COLUMNS = [
-  { key: "month", label: "Month", get: monthLabel },
-  { key: "domain", label: "Domain", get: (r) => text(r.domain) },
-  { key: "job_id", label: "Job ID", get: (r) => text(r.job_id) },
-  { key: "job_type", label: "Job Type", get: (r) => text(r.job_type) },
-  { key: "region", label: "Region", get: (r) => text(r.region) },
-  { key: "state", label: "State", get: (r) => text(r.state) },
-  { key: "county", label: "County", get: (r) => text(r.county) },
-  { key: "production_engineers", label: "Production Engineer", get: (r) => text(r.production_engineers) },
-  { key: "qc_engineers", label: "QC Engineer", get: (r) => text(r.qc_engineers) },
-  { key: "receive_date", label: "Receive Date", get: (r) => dateTimeText(r, "receive_date"), dateTime: true },
-  { key: "ecd_date", label: "ECD Date", get: (r) => dateTimeText(r, "ecd_date"), dateTime: true },
-  { key: "submission_date", label: "Submission Date", get: (r) => dateTimeText(r, "submission_date"), dateTime: true },
-  { key: "otp", label: "OTP", get: (r) => text(r.otp) },
-  { key: "internal_qc", label: "Internal QC", get: (r) => text(r.internal_qc) },
-  { key: "amdocs_qc", label: "Amdocs QC", get: (r) => text(r.amdocs_qc) },
-];
-
-const DATE_FIELDS = ["receive_date", "ecd_date", "submission_date"];
-
-// ---------- date + time cell ----------
-const DateTimeCell = ({ value }) => {
-  const { date, time } = splitStored(value);
-  if (!date) return <span>-</span>;
-  return (
-    <>
-      {date}
-      {time ? <span className="time-chip">{to12h(time)}</span> : null}
-    </>
-  );
-};
-
+import { ComposableMap, Geographies, Geography } from "react-simple-maps";
+import geoData from "../us-states.json";
+import { geoCentroid } from "d3-geo";
+       
 export default function Report() {
-  const [rows, setRows] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
+  const [jumpPage, setJumpPage] = useState("");
+  const [data, setData] = useState([]);
+  const [selectedMonthYear, setSelectedMonthYear] = useState("");
+  const [selectedDomain, setSelectedDomain] = useState("");
+  const [selectedState, setSelectedState] = useState("");
+  const [fromDate, setFromDate] = useState("");
+  const [toDate, setToDate] = useState("");
+  const [currentPage, setCurrentPage] = useState(1);
+  const rowsPerPage = 10;
+  const [openExport, setOpenExport] = useState(false);
+  const exportRef = useRef();
+  const [isGeneratingPDF, setIsGeneratingPDF] = useState(false);
+  const [editingRowId, setEditingRowId] = useState(null);
+  const [editForm, setEditForm] = useState({});
+  const user = JSON.parse(localStorage.getItem("user")) || {};
 
-  const [fDomain, setFDomain] = useState("");
-  const [fMonth, setFMonth] = useState("");
-  const [fState, setFState] = useState("");
-  const [fType, setFType] = useState("");
-  const [search, setSearch] = useState("");
 
-  const [page, setPage] = useState(1);
-  const [pageInput, setPageInput] = useState("1");
+const handleSave = async () => {
+    const confirmSave = window.confirm(
+      "Are you sure you want to save changes?"
+    );
 
-  const [exportOpen, setExportOpen] = useState(false);
-
-  const [editId, setEditId] = useState(null);
-  const [draft, setDraft] = useState({});
-  const [busy, setBusy] = useState(false);
-
-  // ---------- load ----------
-  const load = useCallback(async () => {
-    setLoading(true);
-    setError("");
-    try {
-      const res = await axios.get(`${API_BASE_URL}/api/work/report/monthwise`);
-      setRows(Array.isArray(res.data) ? res.data : []);
-    } catch (e) {
-      console.error("Report load failed:", e);
-      setError("Report load nahi ho paya. Thodi der baad dobara try karo.");
-      setRows([]);
-    } finally {
-      setLoading(false);
+    if (!confirmSave) {
+      return;
     }
+
+    try {
+      const parsedUOM = editForm.uom || {};
+
+      const currentMonthVal = editForm.month ? `${editForm.month}-${String(editForm.year).slice(-2)}` : null;
+
+      const payload = {
+        months: currentMonthVal ? [currentMonthVal] : undefined,
+        month: editForm.month,
+        domain: editForm.domain,
+        sow: editForm.sow,
+        job_type: editForm.jobType,
+        region: editForm.region,
+        state: editForm.state,
+        county: editForm.county,
+        uom: parsedUOM,
+        job_id: editForm.job_id,
+        jobId: editForm.job_id, 
+        current_status: editForm.current_status,
+        production_engineers: editForm.production_engineers,
+        qc_engineers: editForm.qc_engineers,
+        otp: editForm.otp,
+        internal_qc: editForm.internal_qc,
+        amdocs_qc: editForm.amdocs_qc,
+        internalQc: editForm.internal_qc,
+        amdocsQc: editForm.amdocs_qc,
+        internalOtp: editForm.otp,
+        jobs_delivered: Number(editForm.jobsDelivered || 0),
+        receive_date: editForm.receive_date || null,
+        ecd_date: editForm.ecd_date || null,
+        submission_date: editForm.submission_date || null,
+        // Date ke side ka time (HH:mm) - khaali ho to date ke saath time save nahi hoga
+        receive_time: editForm.receive_time || "",
+        ecd_time: editForm.ecd_time || "",
+        submission_time: editForm.submission_time || "",
+      };
+
+      const res = await axios.put(
+        `${API_BASE_URL}/api/work/update/${editForm.id}`,
+        payload
+      );
+
+      if (res.status === 200) {
+        alert("✅ Record updated successfully");
+        setEditingRowId(null);
+        await fetchData();
+      }
+    } catch (err) {
+      console.log(err);
+      alert("❌ Update failed");
+    }
+};
+
+  const handleDelete = async (id) => {
+    const confirmDelete = window.confirm(
+      "Are you sure you want to delete this record?"
+    );
+
+    if (!confirmDelete) {
+      return;
+    }
+
+    try {
+      const res = await axios.delete(
+        `${API_BASE_URL}/api/work/delete/${id}`
+      );
+
+      if (res.status === 200) {
+        alert("✅ Record deleted successfully");
+        await fetchData();
+      }
+    } catch (err) {
+      console.error(err);
+      alert("❌ Delete failed");
+    }
+  };
+
+  const fetchData = async () => {
+    try {
+      const res = await axios.get(`${API_BASE_URL}/api/work/all`);
+      console.log("res",res);
+      
+      setData(res.data);
+    } catch (err) {
+      console.error("Error fetching work data:", err);
+    }
+  };
+
+  useEffect(() => {
+    fetchData();
+
+    const handleClickOutside = (e) => {
+      if (exportRef.current && !exportRef.current.contains(e.target)) {
+        setOpenExport(false);
+      }
+    };
+
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
   useEffect(() => {
-    load();
-  }, [load]);
+    setCurrentPage(1);
+  }, [selectedMonthYear, selectedDomain, selectedState, fromDate, toDate]);
 
-  // ---------- filter options ----------
-  const options = useMemo(() => {
-    const uniq = (list) => [...new Set(list.filter(Boolean))].sort((a, b) => a.localeCompare(b));
-    return {
-      domains: uniq(rows.map((r) => text(r.domain))),
-      months: uniq(rows.map(monthLabel)),
-      states: uniq(rows.map((r) => text(r.state))),
-      types: uniq(rows.map((r) => text(r.job_type))),
-    };
-  }, [rows]);
+  const parseDate = (d) => {
+    if (!d) return null;
+    if (d instanceof Date && !isNaN(d.getTime())) return d;
 
-  const filtered = useMemo(() => {
-    const q = norm(search);
-    return rows.filter((r) => {
-      if (fDomain && norm(r.domain) !== norm(fDomain)) return false;
-      if (fMonth && norm(monthLabel(r)) !== norm(fMonth)) return false;
-      if (fState && norm(r.state) !== norm(fState)) return false;
-      if (fType && norm(r.job_type) !== norm(fType)) return false;
-      if (q && !norm(r.job_id).includes(q)) return false;
-      return true;
-    });
-  }, [rows, fDomain, fMonth, fState, fType, search]);
+    try {
+      const parsed = new Date(d);
+      return isNaN(parsed.getTime()) ? null : parsed;
+    } catch {
+      return null;
+    }
+  };
 
-  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+  const formatDateOnly = (date) => {
+    const d = parseDate(date);
+    if (!d) return "-";
 
-  // filter badalne par page 1 par
-  useEffect(() => {
-    setPage(1);
-  }, [fDomain, fMonth, fState, fType, search]);
+    try {
+      return d.toLocaleDateString("en-IN", {
+        timeZone: "Asia/Kolkata",
+        day: "2-digit",
+        month: "short",
+        year: "numeric",
+      });
+    } catch {
+      return "-";
+    }
+  };
 
-  // page range ke bahar na jaye
-  useEffect(() => {
-    if (page > totalPages) setPage(totalPages);
-  }, [page, totalPages]);
+  const formatLocalDateString = (dateStr) => {
+    if (!dateStr) return "";
 
-  useEffect(() => {
-    setPageInput(String(page));
-  }, [page]);
+    const d = new Date(dateStr);
+    if (isNaN(d.getTime())) return "";
 
-  const pageRows = useMemo(
-    () => filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE),
-    [filtered, page]
+    const year = d.getFullYear();
+    const month = String(d.getMonth() + 1).padStart(2, "0");
+    const day = String(d.getDate()).padStart(2, "0");
+    
+    return `${year}-${day}-${month}`;
+  };
+
+  // ---------- DATE KE SIDE ME TIME ----------
+  // Backend se "receive_time" = "17:53" aata hai (24 ghante). Excel jaisa "5.53 PM" dikhate hain.
+  const to12h = (t) => {
+    const m = String(t || "").match(/^(\d{1,2}):(\d{2})$/);
+    if (!m) return "";
+    const h = Number(m[1]);
+    return `${h % 12 || 12}.${m[2]} ${h >= 12 ? "PM" : "AM"}`;
+  };
+
+  // Row se time nikalta hai: pehle backend ka *_time field, warna "MM-DD-YYYY HH:mm" me se
+  const getTime = (item, key) => {
+    const direct = item[`${key}_time`];
+    if (direct) return String(direct);
+    const v = item[key];
+    if (typeof v !== "string") return "";
+    if (/^\d{4}-\d{2}-\d{2}T.*Z$/.test(v.trim())) return ""; // ISO+Z ka time bharosemand nahi
+    const m = v.match(/(?:^|[\sT])(\d{1,2}):(\d{2})/);
+    return m ? `${String(m[1]).padStart(2, "0")}:${m[2]}` : "";
+  };
+
+  // "11-04-2026 17:53" me se time hata kar sirf date deta hai (Date() parse ke liye)
+  const stripTime = (v) => {
+    const s = String(v ?? "");
+    return /^\d{1,2}-\d{1,2}-\d{4}[ T]/.test(s) ? s.replace(/[ T]+\d{1,2}:\d{2}.*$/, "") : s;
+  };
+
+  // PDF / Excel ke liye "2026-01-11 5.53 PM"
+  const dateWithTime = (date, time) => {
+    if (!date) return "";
+    const t = to12h(time);
+    return t ? `${date} ${t}` : date;
+  };
+
+  const renderDateTime = (date, time) => (
+    <>
+      {date || "-"}
+      {date && time ? <span className="time-chip">{to12h(time)}</span> : null}
+    </>
   );
 
-  const lastUpdate = useMemo(() => {
-    const dates = rows
-      .map((r) => r.updated_at || r.created_at)
-      .filter(Boolean)
-      .map((d) => new Date(String(d).replace(/^"|"$/g, "")))
-      .filter((d) => !isNaN(d.getTime()));
-    if (!dates.length) return null;
-    return new Date(Math.max(...dates.map((d) => d.getTime())));
-  }, [rows]);
+  const formatArrayOrString = (val) => {
+    if (!val) return "-";
+    if (Array.isArray(val)) {
+      return val.join(" | ");
+    }
+    return val;
+  };
 
-  // ---------- edit / delete ----------
-  const startEdit = (row) => {
-    const next = {
-      otp: text(row.otp),
-      internal_qc: text(row.internal_qc),
-      amdocs_qc: text(row.amdocs_qc),
-    };
-    DATE_FIELDS.forEach((f) => {
-      const { date, time } = splitStored(row[f]);
-      next[f] = toInputDate(date);
-      next[`${f.replace("_date", "")}_time`] = time;
+  const formatUOM = (uom) => {
+    if (!uom) return "-";
+    if (typeof uom === "string") {
+      return uom;
+    }
+    if (typeof uom === "object") {
+      const entries = Object.entries(uom);
+      if (entries.length === 0) return "-";
+
+      return entries
+        .map(([key, value]) => `${key}: ${value || 0}`)
+        .join(" | ");
+    }
+    return "-";
+  };
+
+  let rows = [];
+
+  data.forEach((item) => {
+    const dateObj = item.updated_at || item.created_at;
+    const monthRaw = item.months?.[0] || item.month;
+
+    let month = "-";
+    let year = "-";
+
+    if (typeof monthRaw === "string" && monthRaw.trim() !== "") {
+      if (monthRaw.includes("-")) {
+        const parts = monthRaw.split("-");
+        month = parts[0] || "-";
+        let rawYear = parts[1] || "-";
+        year = rawYear.length === 2 ? `20${rawYear}` : rawYear;
+      } else if (monthRaw.includes(" ")) {
+        const parts = monthRaw.split(" ");
+        month = parts[0] || "-";
+        year = parts[1] || "-";
+      } else {
+        month = monthRaw;
+      }
+    }
+
+    if ((year === "-" || !year) && dateObj) {
+      const fallbackDate = parseDate(dateObj);
+      if (fallbackDate) {
+        year = fallbackDate.getFullYear().toString();
+      }
+    }
+
+    const monthYear = `${month !== "-" ? month : ""} ${year !== "-" ? year : ""}`.trim() || "-";
+
+    rows.push({
+      id: item.id || item._id,
+      monthYear,
+      month,
+      year,
+      domain: item.domain || "-",
+      sow: formatArrayOrString(item.sow),
+      jobType: formatArrayOrString(item.job_type || item.jobType),
+
+      region:
+        item.region &&
+        item.region !== "Unknown" &&
+        item.region !== "Unknown Region"
+          ? item.region
+          : "N/A",
+
+      state:
+        item.state &&
+        item.state !== "Unknown" &&
+        item.state !== "Unknown State"
+          ? item.state
+          : "N/A",
+
+      county:
+        item.county &&
+        item.county !== "Unknown" &&
+        item.county !== "Unknown County"
+          ? item.county
+          : "",
+
+      job_id: item.job_id || item.jobId || "-",
+      current_status: item.current_status || "-",
+      production_engineers: formatArrayOrString(item.production_engineers),
+      qc_engineers: formatArrayOrString(item.qc_engineers),
+      jobsDelivered: Number(item.jobs_delivered ?? item.jobsDelivered) || 0,
+      uom: item.uom || {},
+      otp: item.otp || item.internalOtp || "-",
+      internal_qc: item.internal_qc || item.internalQc || "-",
+      amdocs_qc: item.amdocs_qc || item.amdocsQc || "-",
+      receive_date: item.receive_date ? formatLocalDateString(stripTime(item.receive_date)) : "",
+      ecd_date: item.ecd_date ? formatLocalDateString(stripTime(item.ecd_date)) : "",
+      submission_date: item.submission_date ? formatLocalDateString(stripTime(item.submission_date)) : "",
+      receive_time: item.receive_date ? getTime(item, "receive_date") : "",
+      ecd_time: item.ecd_date ? getTime(item, "ecd_date") : "",
+      submission_time: item.submission_date ? getTime(item, "submission_date") : "",
+
+      createdAt: parseDate(item.created_at), 
+      lastUpdate: parseDate(dateObj),
+      formattedDate: formatDateOnly(dateObj),
     });
-    setDraft(next);
-    setEditId(row.id);
-  };
+  });
 
-  const cancelEdit = () => {
-    setEditId(null);
-    setDraft({});
-  };
+  rows.sort((a, b) => {
+    const timeA = a.createdAt ? a.createdAt.getTime() : 0;
+    const timeB = b.createdAt ? b.createdAt.getTime() : 0;
+    return timeA - timeB;
+  });
 
-  const saveEdit = async (row) => {
-    if (busy) return;
-    setBusy(true);
-    try {
-      const payload = {
-        otp: draft.otp,
-        internal_qc: draft.internal_qc,
-        amdocs_qc: draft.amdocs_qc,
-        receive_date: draft.receive_date || "",
-        receive_time: draft.receive_time || "",
-        ecd_date: draft.ecd_date || "",
-        ecd_time: draft.ecd_time || "",
-        submission_date: draft.submission_date || "",
-        submission_time: draft.submission_time || "",
-      };
-      await axios.put(`${API_BASE_URL}/api/work/update/${row.id}`, payload);
-      cancelEdit();
-      await load();
-    } catch (e) {
-      console.error("Report update failed:", e);
-      window.alert("Update nahi ho paya. Dobara try karo.");
-    } finally {
-      setBusy(false);
+  const uniqueMonthYear = [...new Set(rows.map((r) => `${r.month} ${r.year}`))];
+  const uniqueDomains = [...new Set(rows.map((r) => r.domain).filter(Boolean))];
+
+  const uniqueStates = [
+    ...new Set(
+      rows.map((r) => {
+        if (
+          r.region === "N/A" ||
+          !r.state ||
+          r.state === "Unknown" ||
+          r.state === "Unknown State" ||
+          r.state === "N/A"
+        ) {
+          return "Other";
+        }
+        return r.state;
+      })
+    ),
+  ].sort((a, b) => {
+    if (a === "Other") return 1;
+    if (b === "Other") return -1;
+    return a.localeCompare(b);
+  });
+
+  const filteredRows = rows.filter((r) => {
+    if (selectedMonthYear && `${r.month} ${r.year}` !== selectedMonthYear)
+      return false;
+    if (selectedDomain && r.domain !== selectedDomain) return false;
+    if (selectedState) {
+      if (selectedState === "Other") {
+        const isOther =
+          r.region === "N/A" ||
+          !r.state ||
+          r.state === "Unknown" ||
+          r.state === "Unknown State" ||
+          r.state === "N/A";
+        if (!isOther) return false;
+      } else if (r.state !== selectedState) {
+        return false;
+      }
     }
-  };
 
-  const deleteRow = async (row) => {
-    if (busy) return;
-    if (!window.confirm(`Job ${text(row.job_id) || row.id} delete karna hai?`)) return;
-    setBusy(true);
-    try {
-      await axios.delete(`${API_BASE_URL}/api/work/delete/${row.id}`);
-      await load();
-    } catch (e) {
-      console.error("Report delete failed:", e);
-      window.alert("Delete nahi ho paya. Dobara try karo.");
-    } finally {
-      setBusy(false);
+    if (fromDate || toDate) {
+      if (!r.lastUpdate) return false;
+      const rowTime = r.lastUpdate.getTime();
+
+      if (fromDate) {
+        const from = new Date(fromDate + "T00:00:00").getTime();
+        if (rowTime < from) return false;
+      }
+
+      if (toDate) {
+        const to = new Date(toDate + "T23:59:59").getTime();
+        if (rowTime > to) return false;
+      }
     }
+    return true;
+  });
+
+  const latestUpdated = filteredRows.length
+    ? filteredRows.reduce((latest, row) => {
+        if (!row.lastUpdate) return latest;
+        return !latest || row.lastUpdate > latest
+          ? row.lastUpdate
+          : latest;
+      }, null)
+    : null;
+
+  const formattedLastUpdated = latestUpdated
+    ? `${latestUpdated.toLocaleTimeString("en-IN", {
+        timeZone: "Asia/Kolkata",
+        hour: "2-digit",
+        minute: "2-digit",
+        hour12: true,
+      })}, ${latestUpdated.toLocaleDateString("en-IN", {
+        timeZone: "Asia/Kolkata",
+        day: "2-digit",
+        month: "2-digit",
+        year: "numeric",
+      })}`
+    : "-";
+
+  const totalJobs = filteredRows.reduce((sum, r) => {
+    return sum + Number(r.jobsDelivered || 0);
+  }, 0);
+
+  const totalPages = Math.max(1, Math.ceil(filteredRows.length / rowsPerPage));
+  const indexOfLast = currentPage * rowsPerPage;
+  const currentRows = filteredRows.slice(
+    indexOfLast - rowsPerPage,
+    indexOfLast
+  );
+
+  const getFileTimestamp = () => {
+    const now = new Date();
+    const date = now.toLocaleDateString("en-CA");
+    const time = now.toLocaleTimeString("en-US", {
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
+      hour12: true,
+    })
+      .replace(/:/g, ".")
+      .replace(/\s/g, "_");
+    return `${date}_at_${time}`;
   };
 
-  // ---------- export ----------
-  const exportExcel = () => {
-    setExportOpen(false);
-    const data = filtered.map((r) => {
-      const o = {};
-      COLUMNS.forEach((c) => {
-        o[c.label] = c.get(r);
+  const downloadPDF = async () => {
+    setIsGeneratingPDF(true);
+    try {
+      const pdf = new jsPDF("l", "mm", "a4");
+      const pageWidth = pdf.internal.pageSize.getWidth();
+      const pageHeight = pdf.internal.pageSize.getHeight();
+
+      const img = new Image();
+      img.src = "/Image/img1.png";
+
+      await new Promise((resolve, reject) => {
+        img.onload = resolve;
+        img.onerror = reject;
       });
-      return o;
-    });
-    const ws = XLSX.utils.json_to_sheet(data);
-    ws["!cols"] = COLUMNS.map((c) => ({ wch: c.dateTime ? 22 : 16 }));
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, "Report");
-    XLSX.writeFile(wb, `Report_${new Date().toISOString().slice(0, 10)}.xlsx`);
+
+      pdf.addImage(img, "PNG", 10, 8, 28, 28);
+      pdf.setFontSize(24);
+      pdf.setFont("helvetica", "bold");
+      pdf.setTextColor(0, 38, 77);
+      pdf.text("TELECOM WORK STATUS REPORT", pageWidth / 2, 20, { align: "center" });
+
+      pdf.setFont("helvetica", "normal");
+      pdf.setFontSize(12);
+      pdf.setTextColor(80);
+      pdf.text(`${new Date().toLocaleString("en-IN")}`, pageWidth - 12, 25, { align: "right" });
+
+      pdf.setDrawColor(180);
+      pdf.setLineWidth(0.8);
+      pdf.line(10, 38, pageWidth - 10, 38);
+
+      pdf.setFillColor(248, 250, 252);
+      pdf.roundedRect(10, 48, pageWidth - 20, 42, 3, 3, "FD");
+
+      pdf.setFontSize(15);
+      pdf.setTextColor(17, 24, 39);
+      pdf.text("REPORT SUMMARY", 15, 60);
+
+      pdf.setFontSize(11);
+      pdf.text(`Month / Year : ${selectedMonthYear || "All"}`, 15, 72);
+      pdf.text(`Date of Report : ${new Date().toLocaleDateString("en-IN")}`, 15, 82);
+      pdf.text(`Total Jobs Delivered : ${totalJobs}`, 170, 82);
+
+      const summaryMap = filteredRows.reduce((acc, r) => {
+        const domain = r.domain || "Unknown";
+        const sub = r.jobType || "-";
+        const totalJob = Number(r.jobsDelivered || 0);
+
+        if (!acc[domain]) {
+          acc[domain] = { total: 0, subMap: {} };
+        }
+        acc[domain].total += totalJob;
+
+        if (sub !== "-") {
+          acc[domain].subMap[sub] = (acc[domain].subMap[sub] || 0) + totalJob;
+        }
+        return acc;
+      }, {});
+
+      const summaryData = Object.entries(summaryMap).map(([domain, value]) => {
+        const subText = Object.entries(value.subMap)
+          .map(([k, v]) => `${k}: ${v}`)
+          .join(", ") || "-";
+        return [domain, subText, `${value.total}`];
+      });
+
+      autoTable(pdf, {
+        startY: 92,
+        head: [["Domain", "Sub Domain", "Total job"]],
+        body: summaryData,
+        theme: "grid",
+        styles: { fontSize: 9, cellPadding: 3, halign: "center" },
+        headStyles: { fillColor: [22, 78, 99], textColor: 255, fontStyle: "bold" },
+        alternateRowStyles: { fillColor: [248, 250, 252] },
+        margin: { left: 5, right: 5 },
+      });
+
+      const finalY = pdf.lastAutoTable.finalY + 12;
+      pdf.setFontSize(16);
+      pdf.setTextColor(20);
+      pdf.text("DETAIL OVERVIEW", pageWidth / 2, finalY, { align: "center" });
+
+      const tableData = filteredRows.map((r, i) => ([
+        i + 1,
+        r.month,
+        r.year,
+        r.domain,
+        r.sow,
+        r.jobType,
+        r.region,
+        r.state === "N/A" ? "N/A" : r.county && r.county !== "-" ? `${r.state} (${r.county})` : r.state,
+        r.job_id,
+        r.current_status,
+        r.production_engineers,
+        r.qc_engineers,
+        r.jobsDelivered || 0,
+        formatUOM(r.uom),
+        r.otp,
+        r.internal_qc,
+        r.amdocs_qc,
+        dateWithTime(r.receive_date, r.receive_time) || "-",
+        dateWithTime(r.ecd_date, r.ecd_time) || "-",
+        dateWithTime(r.submission_date, r.submission_time) || "-",
+      ]));
+
+      autoTable(pdf, {
+        startY: finalY + 8,
+        theme: "grid",
+        head: [["Sl", "Month", "Year", "Domain", "SOW", "Job Type", "Region", "Market", "Job ID", "Status", "Prod Eng", "QC Eng", "Jobs", "UOM", "OTP", "Int QC", "QC", "Receive Date", "ECD Date", "Submission Date"]],
+        body: tableData,
+        styles: { fontSize: 4.5, cellPadding: 1.5, overflow: "linebreak", valign: "middle", halign: "center" },
+        headStyles: { fillColor: [22, 78, 99], textColor: 255, fontStyle: "bold" },
+        alternateRowStyles: { fillColor: [248, 250, 252] },
+        margin: { left: 5, right: 5 },
+        didDrawPage: () => {
+          pdf.setFontSize(10);
+          pdf.setTextColor(120);
+          pdf.text(`Page ${pdf.internal.getNumberOfPages()}`, pageWidth / 2, pageHeight - 8, { align: "center" });
+        }
+      });
+
+      const mapElement = document.querySelector(".pdf-map");
+      if (mapElement) {
+        const mapCanvas = await html2canvas(mapElement, { scale: 2, backgroundColor: "#ffffff" });
+        const mapImg = mapCanvas.toDataURL("image/png");
+
+        pdf.addPage();
+        pdf.addImage(img, "PNG", 10, 8, 28, 28);
+        pdf.setFontSize(20);
+        pdf.setTextColor(20);
+        pdf.text("STATES COVERAGE MAP", pageWidth / 2, 18, { align: "center" });
+        pdf.setFontSize(10);
+        pdf.setTextColor(80);
+        pdf.text(`Report Date : ${new Date().toLocaleString("en-IN")}`, pageWidth - 12, 25, { align: "right" });
+        pdf.setDrawColor(180);
+        pdf.setLineWidth(0.8);
+        pdf.line(10, 38, pageWidth - 10, 38);
+        pdf.addImage(mapImg, "PNG", 15, 45, pageWidth - 30, 145);
+      }
+
+      pdf.save(`Work_Report_${getFileTimestamp()}.pdf`);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setIsGeneratingPDF(false);
+    }
   };
 
-  const exportPdf = () => {
-    setExportOpen(false);
-    const doc = new jsPDF({ orientation: "landscape", unit: "pt", format: "a3" });
-    doc.setFontSize(16);
-    doc.text("Report", 40, 36);
-    autoTable(doc, {
-      startY: 52,
-      head: [COLUMNS.map((c) => c.label)],
-      body: filtered.map((r) => COLUMNS.map((c) => c.get(r))),
-      styles: { fontSize: 7, cellPadding: 3 },
-      headStyles: { fillColor: [79, 70, 229] },
-    });
-    doc.save(`Report_${new Date().toISOString().slice(0, 10)}.pdf`);
-  };
-
-  // ---------- render helpers ----------
-  const setDraftField = (key, value) => setDraft((d) => ({ ...d, [key]: value }));
-
-  const renderQc = (value) => {
-    const v = text(value);
-    if (!v) return "-";
-    const pct = parsePercent(v);
-    if (pct === null) return v;
-    const up = pct >= 90;
-    return (
-      <span className={`qc-trend ${up ? "up" : "down"}`}>
-        <span className="qc-arrow">{up ? "▲" : "▼"}</span>
-        <span className="qc-value">{v}</span>
-      </span>
-    );
-  };
-
-  const smallInput = { padding: "6px 8px", fontSize: 12, width: 90 };
-
-  const renderDateEdit = (field) => {
-    const timeKey = `${field.replace("_date", "")}_time`;
-    return (
-      <div className="datetime-edit">
-        <input
-          type="date"
-          value={draft[field] || ""}
-          onChange={(e) => setDraftField(field, e.target.value)}
-        />
-        <input
-          type="time"
-          value={draft[timeKey] || ""}
-          onChange={(e) => setDraftField(timeKey, e.target.value)}
-        />
-      </div>
-    );
-  };
-
-  const goToPage = (value) => {
-    const n = parseInt(value, 10);
-    if (isNaN(n)) {
-      setPageInput(String(page));
+  const downloadExcel = async () => {
+    if (!filteredRows.length) {
+      alert("No data to export.");
       return;
     }
-    setPage(Math.min(Math.max(1, n), totalPages));
-    setPageInput(String(Math.min(Math.max(1, n), totalPages)));
+
+    const workbook = new ExcelJS.Workbook();
+    const sheet = workbook.addWorksheet("Work Report");
+
+    sheet.columns = [
+      { header: "Sl.No", key: "sl", width: 8 },
+      { header: "Month", key: "month", width: 10 },
+      { header: "Year", key: "year", width: 10 },
+      { header: "Domain", key: "domain", width: 20 },
+      { header: "SOW", key: "sow", width: 15 },
+      { header: "Job Type", key: "job_type", width: 15 },
+      { header: "Region", key: "region", width: 15 },
+      { header: "Market", key: "market", width: 25 },
+      { header: "Job ID", key: "job_id", width: 15 },
+      { header: "Status", key: "current_status", width: 15 },
+      { header: "Prod Engineers", key: "production_engineers", width: 20 },
+      { header: "QC Engineers", key: "qc_engineers", width: 20 },
+      { header: "Jobs (Total)", key: "jobs", width: 15 },
+      { header: "UOM", key: "uom", width: 25 },
+      { header: "OTP", key: "otp", width: 15 },
+      { header: "Internal QC", key: "internal_qc", width: 15 },
+      { header: "Amdocs QC", key: "amdocs_qc", width: 15 },
+      { header: "Receive Date", key: "receive_date", width: 22 },
+      { header: "ECD Date", key: "ecd_date", width: 22 },
+      { header: "Submission Date", key: "submission_date", width: 22 },
+    ];
+
+    filteredRows.forEach((r, i) => {
+      sheet.addRow({
+        sl: i + 1,
+        month: r.month,
+        year: r.year,
+        domain: r.domain,
+        sow: r.sow,
+        job_type: r.jobType,
+        region: r.region,
+        market: r.state === "N/A" ? "N/A" : r.county && r.county !== "-" ? `${r.state} (${r.county})` : r.state,
+        job_id: r.job_id,
+        current_status: r.current_status,
+        production_engineers: r.production_engineers,
+        qc_engineers: r.qc_engineers,
+        jobs: r.jobsDelivered || 0,
+        uom: formatUOM(r.uom),
+        otp: r.otp,
+        internal_qc: r.internal_qc,
+        amdocs_qc: r.amdocs_qc,
+        receive_date: dateWithTime(r.receive_date, r.receive_time),
+        ecd_date: dateWithTime(r.ecd_date, r.ecd_time),
+        submission_date: dateWithTime(r.submission_date, r.submission_time),
+      });
+    });
+
+    sheet.addRow({ domain: "TOTAL", jobs: totalJobs });
+
+    sheet.getRow(1).eachCell((cell) => {
+      cell.font = { bold: true };
+      cell.alignment = { vertical: "middle", horizontal: "center" };
+    });
+
+    const buffer = await workbook.xlsx.writeBuffer();
+    const blob = new Blob([buffer], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `Work_Report_Detail.xlsx`;
+    a.click();
+    window.URL.revokeObjectURL(url);
   };
 
-  const colCount = COLUMNS.length + 2;
+  const hasDataForState = (stateName) => {
+    return data.some(item => item.state === stateName);
+  };
+  const currentFilterData = filteredRows;
+
+  const allStates = [...new Set(geoData.features.map((f) => f.properties.name))];
+
+  const getStateColor = (stateName) => {
+    const totalJobs = currentFilterData
+      .filter(item => item.state === stateName)
+      .reduce((sum, item) => sum + Number(item.jobsDelivered || 0), 0);
+
+    if (totalJobs === 0) return "#FFC491";
+
+    const totals = allStates.map(state => {
+      return currentFilterData
+        .filter(item => item.state === state)
+        .reduce((sum, item) => sum + Number(item.jobsDelivered || 0), 0);
+    });
+
+    const maxJobs = Math.max(...totals, 1);
+    const ratio = totalJobs / maxJobs;
+
+    const colors = [
+      "#738F52", "#9ACD32", "#78BE21", "#32CD32",
+      "#90EE90", "#00FF00", "#66FF00", "#008000", "#006400"
+    ];
+
+    const index = Math.min(colors.length - 1, Math.floor(ratio * colors.length));
+    return colors[index];
+  };
+
+  const getLabelBgColor = (stateName) => {
+    if (hasDataForState(stateName)) return "#14532d";
+    return "#991b1b";
+  };
+
+  const getLabelTextColor = () => "#ffffff";
+
+  const handleEdit = (row) => {
+    setEditingRowId(row.id);
+    setEditForm({
+      id: row.id,
+      domain: row.domain || "",
+      jobType: row.jobType || "",
+      jobsDelivered: row.jobsDelivered || 0,
+      state: row.state || "",
+      county: row.county || "",
+      region: row.region || "",
+      sow: row.sow || "",
+      uom: row.uom || {},
+      job_id: row.job_id || "",
+      current_status: row.current_status || "",
+      production_engineers: row.production_engineers || "",
+      qc_engineers: row.qc_engineers || "",
+      otp: row.otp || "",
+      internal_qc: row.internal_qc || "",
+      amdocs_qc: row.amdocs_qc || "",
+      receive_date: row.receive_date ? formatLocalDateString(row.receive_date) : "",
+      ecd_date: row.ecd_date ? formatLocalDateString(row.ecd_date) : "",
+      submission_date: row.submission_date ? formatLocalDateString(row.submission_date) : "",
+      receive_time: row.receive_time || "",
+      ecd_time: row.ecd_time || "",
+      submission_time: row.submission_time || "",
+      month: row.month || "",
+      year: row.year || "",
+    });
+  };
+
+  const handleChange = (field, value) => {
+    setEditForm((prev) => ({
+      ...prev,
+      [field]: field === "jobsDelivered" ? Number(value) : value,
+    }));
+  };
+
+  const handleUOMChange = (key, value) => {
+    setEditForm((prev) => ({
+      ...prev,
+      uom: {
+        ...prev.uom,
+        [key]: Number(value)
+      }
+    }));
+  };
 
   return (
-    <div className="report-wrapper" style={{ padding: 24 }}>
-      <h2 className="title">Report</h2>
+    <div className="report-wrapper">
+      {!isGeneratingPDF && (
+        <div className="report-header">
+          <h2 className="title">Work Report</h2>
+          <div className="export-box" ref={exportRef}>
+            <button
+              className="export-btn"
+              onClick={() => setOpenExport(!openExport)}
+            >
+              Export ⬇
+            </button>
 
-      <div className="export-box">
-        <button type="button" className="export-btn" onClick={() => setExportOpen((o) => !o)}>
-          Export ▾
-        </button>
-        {exportOpen && (
-          <div className="export-dropdown">
-            <button type="button" onClick={exportExcel}>Export to Excel</button>
-            <button type="button" onClick={exportPdf}>Export to PDF</button>
+            {openExport && (
+              <div className="export-dropdown">
+                <button onClick={downloadPDF}>Export as PDF</button>
+                <button onClick={downloadExcel}>Export as Excel</button>
+              </div>
+            )}
           </div>
-        )}
-      </div>
-
-      <div className="filters">
-        <div className="left-filters">
-          <div className="filter-group">
-            <label>Domain</label>
-            <select value={fDomain} onChange={(e) => setFDomain(e.target.value)}>
-              <option value="">All</option>
-              {options.domains.map((d) => (
-                <option key={d} value={d}>{d}</option>
-              ))}
-            </select>
-          </div>
-          <div className="filter-group">
-            <label>Month</label>
-            <select value={fMonth} onChange={(e) => setFMonth(e.target.value)}>
-              <option value="">All</option>
-              {options.months.map((m) => (
-                <option key={m} value={m}>{m}</option>
-              ))}
-            </select>
-          </div>
-          <div className="filter-group">
-            <label>State</label>
-            <select value={fState} onChange={(e) => setFState(e.target.value)}>
-              <option value="">All</option>
-              {options.states.map((s) => (
-                <option key={s} value={s}>{s}</option>
-              ))}
-            </select>
-          </div>
-          <div className="filter-group">
-            <label>Job Type</label>
-            <select value={fType} onChange={(e) => setFType(e.target.value)}>
-              <option value="">All</option>
-              {options.types.map((t) => (
-                <option key={t} value={t}>{t}</option>
-              ))}
-            </select>
-          </div>
-        </div>
-
-        <div className="right-filters">
-          <div className="filter-group">
-            <label>Search Job ID</label>
-            <input
-              type="text"
-              placeholder="Job ID"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-            />
-          </div>
-        </div>
-      </div>
-
-      {error && (
-        <div className="table-update-info">
-          <p>{error}</p>
         </div>
       )}
 
-      <div className="table-responsive-container">
-        <table className="table">
-          <thead>
-            <tr>
-              <th>#</th>
-              {COLUMNS.map((c) => (
-                <th key={c.key}>{c.label}</th>
-              ))}
-              <th>Action</th>
-            </tr>
-          </thead>
-          <tbody>
-            {loading ? (
-              <tr>
-                <td className="no-data" colSpan={colCount}>Loading...</td>
-              </tr>
-            ) : pageRows.length === 0 ? (
-              <tr>
-                <td className="no-data" colSpan={colCount}>No data found</td>
-              </tr>
-            ) : (
-              pageRows.map((r, i) => {
-                const editing = editId === r.id;
-                const otpMissing = text(r.otp) === "";
-                return (
-                  <tr key={r.id} className={otpMissing ? "row-missing-otp" : ""}>
-                    <td>{(page - 1) * PAGE_SIZE + i + 1}</td>
+      <div
+        id="pdf-export-area"
+        className={`pdf-export-area ${!isGeneratingPDF ? "pdf-hidden" : ""}`}
+      >
+        <div className="pdf-map">
+          <h3 style={{ textAlign: 'center', marginBottom: '15px', color: '#1f2937' }}>
+            States Coverage Map
+          </h3>
+          <ComposableMap projection="geoAlbersUsa" width={1000} height={550}>
+            <Geographies geography={geoData}>
+              {({ geographies, projection }) => (
+                <>
+                  {geographies.map((geo) => (
+                    <Geography
+                      key={geo.rsmKey}
+                      geography={geo}
+                      fill={getStateColor(geo.properties.name)}
+                      stroke="#2B2727"
+                      strokeWidth={0.8}
+                    />
+                  ))}
+                  {geographies.map((geo) => {
+                    const centroid = geoCentroid(geo);
+                    const coords = projection(centroid);
+                    if (!coords) return null;
 
-                    {COLUMNS.map((c) => {
-                      if (c.dateTime) {
-                        return (
-                          <td key={c.key}>
-                            {editing ? renderDateEdit(c.key) : <DateTimeCell value={r[c.key]} />}
-                          </td>
-                        );
-                      }
-                      if (c.key === "otp") {
-                        return (
-                          <td key={c.key} className={!editing && otpMissing ? "cell-missing" : ""}>
-                            {editing ? (
-                              <input
-                                type="text"
-                                style={smallInput}
-                                value={draft.otp || ""}
-                                onChange={(e) => setDraftField("otp", e.target.value)}
-                              />
-                            ) : otpMissing ? (
-                              "-"
-                            ) : (
-                              text(r.otp)
-                            )}
-                          </td>
-                        );
-                      }
-                      if (c.key === "internal_qc" || c.key === "amdocs_qc") {
-                        return (
-                          <td key={c.key}>
-                            {editing ? (
-                              <input
-                                type="text"
-                                style={smallInput}
-                                value={draft[c.key] || ""}
-                                onChange={(e) => setDraftField(c.key, e.target.value)}
-                              />
-                            ) : c.key === "amdocs_qc" ? (
-                              renderQc(r.amdocs_qc)
-                            ) : (
-                              text(r.internal_qc) || "-"
-                            )}
-                          </td>
-                        );
-                      }
-                      return <td key={c.key}>{c.get(r) || "-"}</td>;
-                    })}
+                    const [x, y] = coords;
+                    const name = geo.properties.name;
+                    const shortNames = {
+                      Alabama: "AL", Alaska: "AK", Arizona: "AZ", Arkansas: "AR",
+                      California: "CA", Colorado: "CO", Connecticut: "CT", Delaware: "DE",
+                      Florida: "FL", Georgia: "GA", Hawaii: "HI", Idaho: "ID",
+                      Illinois: "IL", Indiana: "IN", Iowa: "IA", Kansas: "KS",
+                      Kentucky: "KY", Louisiana: "LA", Maine: "ME", Maryland: "MD",
+                      Massachusetts: "MA", Michigan: "MI", Minnesota: "MN", Mississippi: "MS",
+                      Missouri: "MO", Montana: "MT", Nebraska: "NE", Nevada: "NV",
+                      "New Hampshire": "NH", "New Jersey": "NJ", "New Mexico": "NM", "New York": "NY",
+                      "North Carolina": "NC", "North Dakota": "ND", Ohio: "OH", Oklahoma: "OK",
+                      Oregon: "OR", Pennsylvania: "PA", "Rhode Island": "RI", "South Carolina": "SC",
+                      "South Dakota": "SD", Tennessee: "TN", Texas: "TX", Utah: "UT",
+                      Vermont: "VT", Virginia: "VA", Washington: "WA", "West Virginia": "WV",
+                      Wisconsin: "WI", Wyoming: "WY", "District of Columbia": "DC"
+                    };
 
-                    <td>
-                      <div className="action-buttons">
-                        {editing ? (
-                          <>
-                            <button type="button" className="save-btn" disabled={busy} onClick={() => saveEdit(r)}>
-                              Save
-                            </button>
-                            <button type="button" className="cancel-btn" disabled={busy} onClick={cancelEdit}>
-                              Cancel
-                            </button>
-                          </>
-                        ) : (
-                          <>
-                            <button type="button" className="edit-btn" disabled={busy} onClick={() => startEdit(r)}>
-                              Edit
-                            </button>
-                            <button type="button" className="delete-btn" disabled={busy} onClick={() => deleteRow(r)}>
-                              Delete
-                            </button>
-                          </>
-                        )}
-                      </div>
+                    const label = shortNames[name] || "";
+
+                    return (
+                      <g key={`${geo.rsmKey}-label`}>
+                        <rect
+                          x={x - 12}
+                          y={y - 10}
+                          width={24}
+                          height={16}
+                          rx={4}
+                          fill={getLabelBgColor(name)}
+                          style={{ filter: "drop-shadow(0 2px 5px rgba(0,0,0,0.25))" }}
+                        />
+                        <text
+                          x={x}
+                          y={y}
+                          textAnchor="middle"
+                          dominantBaseline="middle"
+                          style={{
+                            fontSize: "10px",
+                            fontWeight: "700",
+                            fill: getLabelTextColor(name),
+                            pointerEvents: "none"
+                          }}
+                        >
+                          {label}
+                        </text>
+                      </g>
+                    );
+                  })}
+                </>
+              )}
+            </Geographies>
+          </ComposableMap>
+          <div className="map-legend">
+            <div className="legend-item">
+              <span className="legend-selecteddot"></span>
+              <span>Covered-{allStates.filter(s => hasDataForState(s)).length}</span>
+            </div>
+            <div className="legend-item">
+              <span className="legend-not-selecteddot"></span>
+              <span>NotCovered-{allStates.length - allStates.filter(s => hasDataForState(s)).length}</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {!isGeneratingPDF && (
+        <>
+          <div className="filters">
+            <div className="left-filters">
+              <div className="filter-group">
+                <label>Month & Year</label>
+                <select
+                  value={selectedMonthYear}
+                  onChange={(e) => setSelectedMonthYear(e.target.value)}
+                >
+                  <option value="">All</option>
+                  {uniqueMonthYear.map((m, i) => (
+                    <option key={i}>{m}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="filter-group">
+                <label>Domain</label>
+                <select
+                  value={selectedDomain}
+                  onChange={(e) => setSelectedDomain(e.target.value)}
+                >
+                  <option value="">All</option>
+                  {uniqueDomains.map((d, i) => (
+                    <option key={i}>{d}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="filter-group">
+                <label>Markets</label>
+                <select
+                  value={selectedState}
+                  onChange={(e) => setSelectedState(e.target.value)}
+                >
+                  <option value="">All</option>
+                  {uniqueStates.map((s, i) => (
+                    <option
+                      key={i}
+                      value={s}
+                      style={
+                        s === "Other"
+                          ? { fontWeight: "700", background: "#fff3cd", color: "#b45309" }
+                          : {}
+                      }
+                    >
+                      {s}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            <div className="right-filters">
+              <div className="filter-group">
+                <label>From Date</label>
+                <input
+                  type="date"
+                  value={fromDate}
+                  onChange={(e) => setFromDate(e.target.value)}
+                />
+              </div>
+
+              <div className="filter-group">
+                <label>To Date</label>
+                <input
+                  type="date"
+                  value={toDate}
+                  onChange={(e) => setToDate(e.target.value)}
+                />
+              </div>
+            </div>
+          </div>
+
+          <div className="table-update-info">
+            <p>
+              <span className="star-icon">* </span>{" "}
+              This table was last updated by{" "}
+              <strong>
+                {user?.role || "Admin"}
+                {user?.domain ? `-${user.domain}` : ""}
+              </strong>{" "}
+              (<strong>{user?.name || "Unknown User"}</strong>){" "}
+              at <strong>{formattedLastUpdated}</strong>
+            </p>
+          </div>
+
+          <div className="table-responsive-container">
+            <table id="report-table" className="table">
+              <thead>
+                <tr>
+                  <th>Sl.No</th>
+                  <th>Month & Year</th>
+                  <th>Domain</th>
+                  <th>SOW</th>
+                  <th>Job Type</th>
+                  <th>Region</th>
+                  <th>Market Name</th>
+                  <th>Job ID</th>
+                  <th>Current Status</th>
+                  <th>Production Engineers</th>
+                  <th>QC Engineers</th>
+                  <th>Jobs Delivered</th>
+                  <th>UOM</th>
+                  <th>OTP</th>
+                  <th>Internal QC</th>
+                  <th>Amdocs QC</th>
+                  <th>Receive Date</th>
+                  <th>ECD Date</th>
+                  <th>Submission Date</th>
+                  <th>Action</th>
+                </tr>
+              </thead>
+              <tbody>
+                {currentRows.length > 0 ? (
+                  currentRows.map((r, i) => {
+                    const isMissingOtpOrAmdocs = !r.otp || r.otp === "-" || !r.amdocs_qc || r.amdocs_qc === "-";
+                    return (
+                      <tr key={r.id} className={isMissingOtpOrAmdocs ? "light-orange-row" : ""}>
+                        <td>{(currentPage - 1) * rowsPerPage + i + 1}</td>
+
+                        <td>
+                          {editingRowId === r.id ? (
+                            <input
+                              value={editForm.month || ""}
+                              onChange={(e) => handleChange("month", e.target.value)}
+                              style={{ width: "50px" }}
+                            />
+                          ) : (
+                            r.month
+                          )}
+                        </td>
+
+                        <td>
+                          {editingRowId === r.id ? (
+                            <input
+                              value={editForm.domain || ""}
+                              onChange={(e) => handleChange("domain", e.target.value)}
+                            />
+                          ) : (
+                            r.domain
+                          )}
+                        </td>
+
+                        <td>
+                          {editingRowId === r.id ? (
+                            <input
+                              value={editForm.sow || ""}
+                              onChange={(e) => handleChange("sow", e.target.value)}
+                            />
+                          ) : (
+                            r.sow
+                          )}
+                        </td>
+
+                        <td>
+                          {editingRowId === r.id ? (
+                            <input
+                              value={editForm.jobType || ""}
+                              onChange={(e) => handleChange("jobType", e.target.value)}
+                            />
+                          ) : (
+                            r.jobType
+                          )}
+                        </td>
+
+                        <td>
+                          {editingRowId === r.id ? (
+                            <input
+                              value={editForm.region || ""}
+                              onChange={(e) => handleChange("region", e.target.value)}
+                            />
+                          ) : (
+                            r.region || "N/A"
+                          )}
+                        </td>
+
+                        <td>
+                          {editingRowId === r.id ? (
+                            <div style={{ display: "flex", flexDirection: "column", gap: "5px" }}>
+                              <input
+                                value={editForm.state || ""}
+                                onChange={(e) => handleChange("state", e.target.value)}
+                                placeholder="State"
+                              />
+                              <input
+                                value={editForm.county || ""}
+                                onChange={(e) => handleChange("county", e.target.value)}
+                                placeholder="County"
+                              />
+                            </div>
+                          ) : (
+                            <>
+                              {r.state === "N/A"
+                                ? "N/A"
+                                : r.county &&
+                                  r.county !== "-" &&
+                                  r.county !== "Unknown" &&
+                                  r.county !== "Unknown County"
+                                  ? `${r.state} (${r.county})`
+                                  : r.state}
+                            </>
+                          )}
+                        </td>
+
+                        <td>
+                          {editingRowId === r.id ? (
+                            <input
+                              value={editForm.job_id || ""}
+                              onChange={(e) => handleChange("job_id", e.target.value)}
+                            />
+                          ) : (
+                            r.job_id
+                          )}
+                        </td>
+
+                        <td>
+                          {editingRowId === r.id ? (
+                            <input
+                              value={editForm.current_status || ""}
+                              onChange={(e) => handleChange("current_status", e.target.value)}
+                            />
+                          ) : (
+                            r.current_status
+                          )}
+                        </td>
+
+                        <td>
+                          {editingRowId === r.id ? (
+                            <input
+                              value={editForm.production_engineers || ""}
+                              onChange={(e) => handleChange("production_engineers", e.target.value)}
+                            />
+                          ) : (
+                            r.production_engineers
+                          )}
+                        </td>
+
+                        <td>
+                          {editingRowId === r.id ? (
+                            <input
+                              value={editForm.qc_engineers || ""}
+                              onChange={(e) => handleChange("qc_engineers", e.target.value)}
+                            />
+                          ) : (
+                            r.qc_engineers
+                          )}
+                        </td>
+
+                        <td className="job-cell">
+                          {editingRowId === r.id ? (
+                            <input
+                              type="number"
+                              value={editForm.jobsDelivered || 0}
+                              onChange={(e) => handleChange("jobsDelivered", e.target.value)}
+                              style={{ width: "60px" }}
+                            />
+                          ) : (
+                            <div className="job-main">
+                              {r.jobsDelivered || 0}
+                            </div>
+                          )}
+                        </td>
+
+                        <td>
+                          {editingRowId === r.id ? (
+                            <div style={{ display: "flex", flexDirection: "column", gap: "5px", minWidth: "140px" }}>
+                              {Object.entries(editForm.uom || {}).map(([key, value]) => (
+                                <div key={key} style={{ display: "flex", justifyContent: "space-between", gap: "5px" }}>
+                                  <span style={{ fontSize: "11px" }}>{key}:</span>
+                                  <input
+                                    type="number"
+                                    value={value || 0}
+                                    onChange={(e) => handleUOMChange(key, e.target.value)}
+                                    style={{ width: "50px" }}
+                                  />
+                                </div>
+                              ))}
+                            </div>
+                          ) : (
+                            formatUOM(r.uom)
+                          )}
+                        </td>
+
+                        <td>
+                          {editingRowId === r.id ? (
+                            <input
+                              value={editForm.otp || ""}
+                              onChange={(e) => handleChange("otp", e.target.value)}
+                              style={{ width: "60px" }}
+                            />
+                          ) : (
+                            r.otp
+                          )}
+                        </td>
+
+                        <td>
+                          {editingRowId === r.id ? (
+                            <input
+                              value={editForm.internal_qc || ""}
+                              onChange={(e) => handleChange("internal_qc", e.target.value)}
+                              style={{ width: "60px" }}
+                            />
+                          ) : (
+                            r.internal_qc
+                          )}
+                        </td>
+
+                        <td>
+                          {editingRowId === r.id ? (
+                            <input
+                              value={editForm.amdocs_qc || ""}
+                              onChange={(e) => handleChange("amdocs_qc", e.target.value)}
+                              style={{ width: "60px" }}
+                            />
+                          ) : (
+                            r.amdocs_qc
+                          )}
+                        </td>
+
+                        <td>
+                          {editingRowId === r.id ? (
+                            <div className="datetime-edit">
+                              <input
+                                type="date"
+                                value={editForm.receive_date || ""}
+                                onChange={(e) => handleChange("receive_date", e.target.value)}
+                              />
+                              <input
+                                type="time"
+                                value={editForm.receive_time || ""}
+                                onChange={(e) => handleChange("receive_time", e.target.value)}
+                              />
+                            </div>
+                          ) : (
+                            renderDateTime(r.receive_date, r.receive_time)
+                          )}
+                        </td>
+
+                        <td>
+                          {editingRowId === r.id ? (
+                            <div className="datetime-edit">
+                              <input
+                                type="date"
+                                value={editForm.ecd_date || ""}
+                                onChange={(e) => handleChange("ecd_date", e.target.value)}
+                              />
+                              <input
+                                type="time"
+                                value={editForm.ecd_time || ""}
+                                onChange={(e) => handleChange("ecd_time", e.target.value)}
+                              />
+                            </div>
+                          ) : (
+                            renderDateTime(r.ecd_date, r.ecd_time)
+                          )}
+                        </td>
+
+                        <td>
+                          {editingRowId === r.id ? (
+                            <div className="datetime-edit">
+                              <input
+                                type="date"
+                                value={editForm.submission_date || ""}
+                                onChange={(e) => handleChange("submission_date", e.target.value)}
+                              />
+                              <input
+                                type="time"
+                                value={editForm.submission_time || ""}
+                                onChange={(e) => handleChange("submission_time", e.target.value)}
+                              />
+                            </div>
+                          ) : (
+                            renderDateTime(r.submission_date, r.submission_time)
+                          )}
+                        </td>
+
+                        <td>
+                          {editingRowId === r.id ? (
+                            <div className="action-buttons">
+                              <button
+                                className="cancel-btn"
+                                onClick={() => setEditingRowId(null)}
+                              >
+                                ❌
+                              </button>
+                              <button className="save-btn" onClick={handleSave}>
+                                ✔️
+                              </button>
+                            </div>
+                          ) : (
+                            <div className="action-buttons">
+                              <button
+                                className="edit-btn"
+                                onClick={() => handleEdit(r)}
+                              >
+                                ✏️
+                              </button>
+                              <button
+                                className="delete-btn"
+                                onClick={() => handleDelete(r.id)}
+                              >
+                                🗑️
+                              </button>
+                            </div>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })
+                ) : (
+                  <tr>
+                    <td colSpan="21" className="no-data">
+                      ❌ No data found
                     </td>
                   </tr>
-                );
-              })
-            )}
-          </tbody>
-        </table>
-      </div>
+                )}
+              </tbody>
+            </table>
+          </div>
 
-      <div className="pagination">
-        <span>
-          {filtered.length} records &nbsp;|&nbsp; Page {page} of {totalPages}
-        </span>
-        <button type="button" disabled={page <= 1} onClick={() => setPage(1)}>
-          « First
-        </button>
-        <button type="button" disabled={page <= 1} onClick={() => setPage((p) => Math.max(1, p - 1))}>
-          ‹ Prev
-        </button>
-        <input
-          className="page-input"
-          type="text"
-          value={pageInput}
-          onChange={(e) => setPageInput(e.target.value)}
-          onBlur={(e) => goToPage(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter") goToPage(e.target.value);
-          }}
-        />
-        <button type="button" disabled={page >= totalPages} onClick={() => setPage((p) => Math.min(totalPages, p + 1))}>
-          Next ›
-        </button>
-        <button type="button" disabled={page >= totalPages} onClick={() => setPage(totalPages)}>
-          Last »
-        </button>
-      </div>
+          <div className="report-footer">
+            <div className="last-update">
+              <strong>Total Records:</strong> {filteredRows.length}
+            </div>
 
-      {lastUpdate && (
-        <div className="last-update">
-          Last updated: {lastUpdate.toLocaleDateString()} {lastUpdate.toLocaleTimeString()}
-        </div>
+            <div className="pagination">
+              <button
+                disabled={currentPage === 1}
+                onClick={() => setCurrentPage(currentPage - 1)}
+              >
+                Prev
+              </button>
+
+              <span>
+                Page {currentPage} / {totalPages}
+              </span>
+
+              <input
+                type="number"
+                value={jumpPage}
+                placeholder="Page"
+                onChange={(e) => {
+                  let val = e.target.value;
+                  setJumpPage(val);
+                  let page = Number(val);
+                  if (!page) return;
+                  if (page < 1) page = 1;
+                  if (page > totalPages) page = totalPages;
+                  setCurrentPage(page);
+                }}
+                className="page-input"
+              />
+
+              <button
+                disabled={currentPage === totalPages}
+                onClick={() => setCurrentPage(currentPage + 1)}
+              >
+                Next
+              </button>
+            </div>
+          </div>
+        </>
       )}
     </div>
   );
