@@ -1,14 +1,7 @@
+const crypto = require("crypto");
 const ExcelJS = require("exceljs");
 const db = require("../config/db");
 
-/* ======================================================
-   RAW DATA  (Ecometrix raw file)
-   Table: raw_data  (PostgreSQL / NeonDB)
-   - Upload page  -> importExcel, getFiles, deleteFile
-   - Report page  -> getDomains, getRawData, exportExcel
-====================================================== */
-
-// Excel header  ->  DB column  (type: text | int | num | date)
 const COLUMNS = [
   { header: "ID", key: "ext_id", type: "int" },
   { header: "EWO", key: "ewo", type: "text" },
@@ -36,15 +29,19 @@ const COLUMNS = [
   { header: "Remarks", key: "remarks", type: "text" },
 ];
 
-const norm = (s) => String(s || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+const KEYS = COLUMNS.map((c) => c.key);
+const REQUIRED_HEADERS = ["ID", "Domain"];
+
+const norm = (s) => String(s === null || s === undefined ? "" : s).toLowerCase().replace(/[^a-z0-9]/g, "");
 const HEADER_LOOKUP = Object.fromEntries(COLUMNS.map((c) => [norm(c.header), c]));
 
-/* ---------- small promise wrapper over db.query(sql, params, cb) ---------- */
+/* ---------- promise wrapper over db.query(sql, params, cb) ---------- */
 const q = (sql, params = []) =>
   new Promise((resolve, reject) => {
     db.query(sql, params, (err, rows) => (err ? reject(err) : resolve(rows)));
   });
 
+/* ---------- table creation (once per server instance) ---------- */
 let tableReady = null;
 const ensureTable = () => {
   if (!tableReady) {
@@ -53,6 +50,7 @@ const ensureTable = () => {
         CREATE TABLE IF NOT EXISTS raw_data (
           id SERIAL PRIMARY KEY,
           file_name TEXT NOT NULL,
+          import_batch TEXT,
           ext_id BIGINT,
           ewo TEXT, sow TEXT, project TEXT, domain TEXT, region TEXT, market TEXT,
           job_type TEXT, vendor TEXT,
@@ -64,8 +62,10 @@ const ensureTable = () => {
           att_submission_date TEXT, quality_iteration_sum NUMERIC, remarks TEXT,
           created_at TIMESTAMP DEFAULT NOW()
         )`);
+      await q(`ALTER TABLE raw_data ADD COLUMN IF NOT EXISTS import_batch TEXT`);
       await q(`CREATE INDEX IF NOT EXISTS idx_raw_data_domain ON raw_data (domain)`);
       await q(`CREATE INDEX IF NOT EXISTS idx_raw_data_file ON raw_data (file_name)`);
+      await q(`CREATE INDEX IF NOT EXISTS idx_raw_data_ext_id ON raw_data (ext_id)`);
     })().catch((e) => {
       tableReady = null; // retry on the next request
       throw e;
@@ -74,7 +74,7 @@ const ensureTable = () => {
   return tableReady;
 };
 
-/* ---------- cell cleaning ---------- */
+/* ---------- cell helpers ---------- */
 const pad = (n) => String(n).padStart(2, "0");
 const fmtDate = (d) =>
   `${d.getUTCFullYear()}-${pad(d.getUTCMonth() + 1)}-${pad(d.getUTCDate())} ` +
@@ -86,11 +86,12 @@ const cellValue = (cell) => {
   if (v instanceof Date) return v;
   if (typeof v === "object") {
     if (Array.isArray(v.richText)) v = v.richText.map((t) => t.text || "").join("");
-    else if (v.result !== undefined) v = v.result;
-    else if (v.text !== undefined) v = v.text;
-    else if (v.error) return null;
+    else if (v.result !== undefined) v = v.result; // formula
+    else if (v.text !== undefined) v = v.text; // hyperlink
+    else return null; // error cell etc.
   }
   if (v instanceof Date) return v;
+  if (v && typeof v === "object") return null;
   if (typeof v === "string") {
     v = v.trim();
     return v === "" ? null : v;
@@ -105,44 +106,71 @@ const clean = (raw, type) => {
     if (raw instanceof Date) return isNaN(raw.getTime()) ? null : fmtDate(raw);
     return String(raw);
   }
-  const n = Number(raw);
-  if (Number.isNaN(n)) return null;
+  const n = raw instanceof Date ? NaN : Number(raw);
+  if (Number.isNaN(n)) return null; // e.g. "N/A" in a numeric column
   return type === "int" ? Math.round(n) : n;
 };
 
+/* DB row -> API row (NUMERIC/BIGINT come back as strings from pg) */
+const toApiRow = (row) => {
+  const out = {};
+  COLUMNS.forEach((c) => {
+    const v = row[c.key];
+    if (v === null || v === undefined) out[c.key] = null;
+    else if (c.type === "int" || c.type === "num") out[c.key] = Number(v);
+    else out[c.key] = v;
+  });
+  return out;
+};
+
 /* ======================================================
-   POST /api/rawdata/import-excel   (multipart: file)
-   If the same ID already exists in the DB, the old record is
-   replaced (no duplicates across uploads).
+   POST /api/rawdata/import-excel      (multipart field: "file")
+
+   - Header names are matched by name, so column order / extra
+     columns in the Excel do not matter.
+   - Rows are inserted first under a new batch id; only after
+     that succeeds, older rows with the same ID are removed.
+     If anything fails, the new rows are rolled back and the
+     existing data stays untouched.
 ====================================================== */
 exports.importExcel = async (req, res) => {
+  let batch = null;
   try {
     if (!req.file) {
       return res.status(400).json({ success: false, message: "Excel file is required" });
     }
+    if (!/\.(xlsx|xlsm)$/i.test(req.file.originalname || "")) {
+      return res.status(400).json({ success: false, message: "Only .xlsx files are supported" });
+    }
     await ensureTable();
 
     const wb = new ExcelJS.Workbook();
-    await wb.xlsx.load(req.file.buffer);
+    try {
+      await wb.xlsx.load(req.file.buffer);
+    } catch (e) {
+      return res.status(400).json({ success: false, message: "The file could not be read. It may be corrupted." });
+    }
     const ws = wb.worksheets[0];
-    if (!ws) return res.status(400).json({ success: false, message: "No worksheet found in the Excel file" });
+    if (!ws) {
+      return res.status(400).json({ success: false, message: "No worksheet found in the Excel file" });
+    }
 
-    // header row -> column mapping (column order / extra columns do not matter)
+    // header row -> column definition
     const map = {};
-    ws.getRow(1).eachCell((cell, col) => {
+    ws.getRow(1).eachCell({ includeEmpty: false }, (cell, col) => {
       const def = HEADER_LOOKUP[norm(cellValue(cell))];
-      if (def) map[col] = def;
+      if (def && !Object.values(map).includes(def)) map[col] = def;
     });
     const found = Object.values(map).map((d) => d.key);
     const missing = COLUMNS.filter((c) => !found.includes(c.key)).map((c) => c.header);
-    if (!found.includes("ext_id") || !found.includes("domain")) {
+    if (REQUIRED_HEADERS.some((h) => missing.includes(h))) {
       return res.status(400).json({
         success: false,
         message: "This does not look like an Ecometrix raw file. Missing columns: " + missing.join(", "),
       });
     }
 
-    const fileName = req.file.originalname;
+    // data rows
     const records = [];
     ws.eachRow({ includeEmpty: false }, (row, rowNumber) => {
       if (rowNumber === 1) return;
@@ -155,37 +183,41 @@ exports.importExcel = async (req, res) => {
       });
       if (hasData) records.push(rec);
     });
-
     if (!records.length) {
       return res.status(400).json({ success: false, message: "No data rows found in the Excel file" });
     }
 
-    // Remove old records with the same ID (replace behaviour)
+    const fileName = req.file.originalname;
+    batch = crypto.randomUUID();
+
+    // 1) insert the new rows (500 rows per query)
+    const BATCH = 500;
+    for (let i = 0; i < records.length; i += BATCH) {
+      const part = records.slice(i, i + BATCH);
+      const params = [];
+      const valuesSql = part.map((rec) => {
+        params.push(fileName, batch);
+        KEYS.forEach((k) => params.push(rec[k] === undefined ? null : rec[k]));
+        return "(" + new Array(KEYS.length + 2).fill("?").join(",") + ")";
+      });
+      // ON CONFLICT DO NOTHING keeps the db wrapper from appending RETURNING id
+      await q(
+        `INSERT INTO raw_data (file_name, import_batch, ${KEYS.join(",")}) VALUES ${valuesSql.join(",")} ON CONFLICT DO NOTHING`,
+        params
+      );
+    }
+
+    // 2) replace: remove OLD rows that have the same ID
     const ids = [...new Set(records.map((r) => r.ext_id).filter((x) => x !== null))];
     let replaced = 0;
     for (let i = 0; i < ids.length; i += 1000) {
       const chunk = ids.slice(i, i + 1000);
       const ph = chunk.map(() => "?").join(",");
-      const r = await q(`DELETE FROM raw_data WHERE ext_id IN (${ph})`, chunk);
-      replaced += r.affectedRows || 0;
-    }
-
-    // Bulk insert (500 rows / query)
-    const keys = COLUMNS.map((c) => c.key);
-    const BATCH = 500;
-    for (let i = 0; i < records.length; i += BATCH) {
-      const part = records.slice(i, i + BATCH);
-      const params = [];
-      const rowsSql = part.map((rec) => {
-        params.push(fileName);
-        keys.forEach((k) => params.push(rec[k] === undefined ? null : rec[k]));
-        return "(" + new Array(keys.length + 1).fill("?").join(",") + ")";
-      });
-      // ON CONFLICT DO NOTHING: the db wrapper then does not append RETURNING id
-      await q(
-        `INSERT INTO raw_data (file_name, ${keys.join(",")}) VALUES ${rowsSql.join(",")} ON CONFLICT DO NOTHING`,
-        params
+      const r = await q(
+        `DELETE FROM raw_data WHERE ext_id IN (${ph}) AND (import_batch IS NULL OR import_batch <> ?)`,
+        [...chunk, batch]
       );
+      replaced += r.affectedRows || 0;
     }
 
     res.json({
@@ -198,11 +230,21 @@ exports.importExcel = async (req, res) => {
     });
   } catch (err) {
     console.error("Raw data import error:", err);
-    res.status(500).json({ success: false, message: err.message || "Import failed" });
+    if (batch) {
+      // roll back the rows of this import
+      try {
+        await q(`DELETE FROM raw_data WHERE import_batch = ?`, [batch]);
+      } catch (e) {
+        console.error("Raw data rollback error:", e.message);
+      }
+    }
+    if (!res.headersSent) {
+      res.status(500).json({ success: false, message: err.message || "Import failed" });
+    }
   }
 };
 
-/* GET /api/rawdata/files  -> uploaded file list */
+/* GET /api/rawdata/files  ->  imported file list */
 exports.getFiles = async (req, res) => {
   try {
     await ensureTable();
@@ -234,7 +276,7 @@ exports.deleteFile = async (req, res) => {
   }
 };
 
-/* GET /api/rawdata/domains  -> domain dropdown */
+/* GET /api/rawdata/domains  ->  domain dropdown values */
 exports.getDomains = async (req, res) => {
   try {
     await ensureTable();
@@ -251,18 +293,18 @@ exports.getDomains = async (req, res) => {
   }
 };
 
-/* shared query for report + export */
+/* shared by report + export */
 const fetchRows = async (domain) => {
   await ensureTable();
-  const cols = COLUMNS.map((c) => c.key).join(", ");
   const hasDomain = domain && domain !== "ALL";
-  return q(
-    `SELECT ${cols} FROM raw_data ${hasDomain ? "WHERE domain = ?" : ""} ORDER BY id ASC`,
-    hasDomain ? [domain] : []
+  const rows = await q(
+    `SELECT ${KEYS.join(", ")} FROM raw_data ${hasDomain ? "WHERE domain = ?" : ""} ORDER BY id ASC`,
+    hasDomain ? [String(domain)] : []
   );
+  return rows.map(toApiRow);
 };
 
-/* GET /api/rawdata?domain=JPA|ALL  -> table data + column list */
+/* GET /api/rawdata?domain=JPA|ALL  ->  columns + rows */
 exports.getRawData = async (req, res) => {
   try {
     const rows = await fetchRows(req.query.domain);
@@ -277,7 +319,7 @@ exports.getRawData = async (req, res) => {
   }
 };
 
-/* GET /api/rawdata/export/excel?domain=JPA|ALL  -> .xlsx download */
+/* GET /api/rawdata/export/excel?domain=JPA|ALL  ->  .xlsx download */
 exports.exportExcel = async (req, res) => {
   try {
     const domain = req.query.domain;
@@ -293,8 +335,7 @@ exports.exportExcel = async (req, res) => {
     rows.forEach((r) => {
       const o = {};
       COLUMNS.forEach((c) => {
-        const v = r[c.key];
-        o[c.key] = v === null || v === undefined ? "" : c.type === "num" || c.type === "int" ? Number(v) : v;
+        o[c.key] = r[c.key] === null || r[c.key] === undefined ? "" : r[c.key];
       });
       ws.addRow(o);
     });
@@ -305,16 +346,12 @@ exports.exportExcel = async (req, res) => {
     head.height = 30;
     head.eachCell((c) => {
       c.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF1E3A8A" } };
-      c.border = { bottom: { style: "thin", color: { argb: "FF93C5FD" } } };
     });
     ws.views = [{ state: "frozen", ySplit: 1 }];
     ws.autoFilter = { from: { row: 1, column: 1 }, to: { row: 1, column: COLUMNS.length } };
 
     const label = !domain || domain === "ALL" ? "All_Domains" : String(domain).replace(/[^\w-]+/g, "_");
-    res.setHeader(
-      "Content-Type",
-      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-    );
+    res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
     res.setHeader("Content-Disposition", `attachment; filename="Raw_Data_Report_${label}.xlsx"`);
     await wb.xlsx.write(res);
     res.end();
