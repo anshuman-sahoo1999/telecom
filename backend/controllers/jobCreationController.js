@@ -35,15 +35,9 @@ const qcVal = (v) => {
   return f === "" ? null : f;
 };
 
-/* ======================================
-   DATE + TIME HELPERS
-   Receive / Submission date ke saath time "MM-DD-YYYY HH:mm" me save hota hai
-   (work_updates ke format jaisa). Time na ho to date waisi hi rehti hai jaisi aayi.
-====================================== */
 const pad2 = (n) => String(n).padStart(2, "0");
 
-// "10:30", "10:30 PM", Excel fraction (0.4375) se "HH:mm" (24 ghante). Time na ho / 00:00 ho to "".
-const extractTime = (v) => {
+const extractTime = (v, explicit = false) => {
   if (v === null || v === undefined) return "";
   const s = v.toString().trim();
   if (!s) return "";
@@ -63,7 +57,7 @@ const extractTime = (v) => {
   if (ap === "pm" && h < 12) h += 12;
   if (ap === "am" && h === 12) h = 0;
   if (h > 23 || min > 59) return "";
-  return h === 0 && min === 0 ? "" : `${pad2(h)}:${pad2(min)}`;
+  return h === 0 && min === 0 && !explicit ? "" : `${pad2(h)}:${pad2(min)}`;
 };
 
 // Date text ko "MM-DD-YYYY" banata hai (nahi bana to null)
@@ -86,7 +80,7 @@ const joinDateTime = (dateVal, timeVal) => {
   const dateStr = clean(dateVal);
   // ISO + Z (timezone wali string) ke andar ka time bharosemand nahi
   const embedded = /T.*Z$/.test(dateStr) ? "" : extractTime(dateStr.includes(":") ? dateStr : "");
-  const time = embedded || extractTime(timeVal);
+  const time = embedded || extractTime(timeVal, true);
   if (!time) return dateVal;
 
   const mdy = toMdy(dateStr);
@@ -106,8 +100,8 @@ const timeFromUom = (uomRaw) => {
 
   Object.keys(obj).forEach((k) => {
     const c = k.toLowerCase().replace(/[^a-z0-9]/g, "");
-    if (/receiv.*time/.test(c)) out.receive = out.receive || extractTime(obj[k]);
-    else if (/submi.*time/.test(c)) out.submission = out.submission || extractTime(obj[k]);
+    if (/receiv.*time/.test(c)) out.receive = out.receive || extractTime(obj[k], true);
+    else if (/submi.*time/.test(c)) out.submission = out.submission || extractTime(obj[k], true);
   });
   return out;
 };
