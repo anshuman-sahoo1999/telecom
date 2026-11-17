@@ -54,7 +54,7 @@ export default function RawDataUpload() {
       const res = await axios.get(`${API_BASE_URL}/api/rawdata/files`);
       setFiles(res.data?.data || []);
     } catch (e) {
-      showToast("Uploaded files load nahi ho paye.");
+      showToast("Could not load the uploaded files.");
     } finally {
       setLoadingList(false);
     }
@@ -71,12 +71,12 @@ export default function RawDataUpload() {
     if (inputRef.current) inputRef.current.value = "";
   };
 
-  /* ---- file choose -> browser me preview ---- */
+  /* ---- choose file -> preview in the browser ---- */
   const handleChoose = async (e) => {
     const file = e.target.files && e.target.files[0];
     if (!file) return;
     if (!/\.(xlsx|xlsm)$/i.test(file.name)) {
-      showToast("Sirf .xlsx file upload karein.");
+      showToast("Please upload an .xlsx file only.");
       if (inputRef.current) inputRef.current.value = "";
       return;
     }
@@ -107,7 +107,7 @@ export default function RawDataUpload() {
       setExcelFile(file);
     } catch (err) {
       console.error(err);
-      showToast("Excel file read nahi ho payi. File corrupt ho sakti hai.");
+      showToast("Could not read the Excel file. The file may be corrupted.");
       clearSelection();
     } finally {
       setParsing(false);
@@ -124,14 +124,14 @@ export default function RawDataUpload() {
       const res = await axios.post(`${API_BASE_URL}/api/rawdata/import-excel`, fd);
       const d = res.data || {};
       showToast(
-        `${d.inserted} rows import hui` + (d.replaced ? ` (${d.replaced} purani rows replace hui)` : ""),
+        `${d.inserted} rows imported successfully` + (d.replaced ? ` (${d.replaced} existing rows replaced)` : ""),
         "ok"
       );
       clearSelection();
       fetchFiles();
     } catch (err) {
       setConfirmSave(false);
-      showToast(err.response?.data?.message || "Import failed. Dobara try karein.");
+      showToast(err.response?.data?.message || "Import failed. Please try again.");
     } finally {
       setSaving(false);
     }
@@ -145,9 +145,9 @@ export default function RawDataUpload() {
     try {
       const res = await axios.delete(`${API_BASE_URL}/api/rawdata/file/${encodeURIComponent(name)}`);
       setFiles((p) => p.filter((f) => f.file_name !== name));
-      showToast(`"${name}" delete ho gayi (${res.data?.deletedCount ?? 0} rows).`, "ok");
+      showToast(`"${name}" deleted successfully (${res.data?.deletedCount ?? 0} rows removed).`, "ok");
     } catch (err) {
-      showToast(err.response?.data?.message || "Delete nahi ho paya.");
+      showToast(err.response?.data?.message || "Could not delete the file.");
     } finally {
       setDeleting(null);
     }
@@ -163,7 +163,7 @@ export default function RawDataUpload() {
         <div className="rd-head">
           <div>
             <h2>Import Ecometrix Raw File</h2>
-            <p>Excel upload karein → Preview dekhein → Import karein</p>
+            <p>Upload Excel → Preview → Import</p>
           </div>
           <label className="rd-btn" style={{ cursor: "pointer" }}>
             <UploadCloud size={16} />
@@ -184,7 +184,7 @@ export default function RawDataUpload() {
           {loadingList ? (
             <div className="rd-empty">Loading...</div>
           ) : files.length === 0 ? (
-            <div className="rd-empty">Abhi koi Excel import nahi hui</div>
+            <div className="rd-empty">No Excel file has been imported yet</div>
           ) : (
             files.map((f) => (
               <div className="rd-file" key={f.file_name}>
@@ -248,7 +248,7 @@ export default function RawDataUpload() {
             <div className="rd-modal-f">
               <span className="rd-note">
                 Total {preview.total} rows
-                {preview.total > PREVIEW_ROWS ? ` (preview me pehli ${PREVIEW_ROWS})` : ""}
+                {preview.total > PREVIEW_ROWS ? ` (showing first ${PREVIEW_ROWS} in preview)` : ""}
               </span>
               <button className="rd-btn gray" onClick={clearSelection} disabled={saving}>
                 Cancel
@@ -264,8 +264,8 @@ export default function RawDataUpload() {
       {confirmSave && (
         <div className="rd-overlay" style={{ zIndex: 2100 }}>
           <div className="rd-confirm">
-            <h3>Kya ye Excel save karni hai?</h3>
-            <p>Same ID wali purani rows replace ho jayengi.</p>
+            <h3>Do you want to save this Excel?</h3>
+            <p>Existing rows with the same ID will be replaced.</p>
             <div className="a">
               <button className="rd-btn gray" disabled={saving} onClick={() => setConfirmSave(false)}>
                 Cancel
@@ -281,7 +281,7 @@ export default function RawDataUpload() {
       {deleteTarget && (
         <div className="rd-overlay" style={{ zIndex: 2100 }}>
           <div className="rd-confirm">
-            <h3>Ye file delete karni hai?</h3>
+            <h3>Delete this file?</h3>
             <p>{deleteTarget.file_name}</p>
             <div className="a">
               <button className="rd-btn gray" onClick={() => setDeleteTarget(null)}>
