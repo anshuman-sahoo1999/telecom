@@ -117,7 +117,7 @@ const DeviationCell = ({ text, trend }) => {
   return (
     <span style={{ display: "inline-flex", alignItems: "center", gap: 4, fontWeight: 700, color }}>
       <span>{text}</span>
-      <span style={{ fontSize: 12, lineHeight: 1 }}>{trend === "up" ? "▲" : "▼"}</span>
+      <span style={{ fontSize: 16, lineHeight: 1 }}>{trend === "up" ? "▲" : "▼"}</span>
     </span>
   );
 };
