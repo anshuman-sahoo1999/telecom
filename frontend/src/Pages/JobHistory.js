@@ -8,7 +8,6 @@ const normalizeUpper = (d) => (d || "").toString().trim().toUpperCase();
 
 const pad2 = (n) => String(n).padStart(2, "0");
 
-// Date ko "YYYY-MM-DD" banata hai. "03-05-2026 10:30" jaisi value me time ho tab bhi date sahi nikalti hai.
 const toDateKey = (value) => {
   if (!value) return null;
   if (typeof value === "string") {
@@ -133,7 +132,7 @@ const DeviationCell = ({ text, trend }) => {
   return (
     <span style={{ display: "inline-flex", alignItems: "center", gap: 4, fontWeight: 700, color }}>
       <span>{text}</span>
-      <span style={{ fontSize: 16, lineHeight: 1 }}>{trend === "up" ? "↑" : "↓"}</span>
+      <span style={{ fontSize: 16, lineHeight: 1 }}>{trend === "up" ? "⮝" : "⮟"}</span>
     </span>
   );
 };
