@@ -28,7 +28,7 @@ const getDeviation = (internalQc, amdocsQc) => {
   const abs = `${Math.abs(diff)}%`;
   return {
     text: abs,
-    signed: `${diff > 0 ? "+" : "-"}${abs}`, 
+    signed: `${diff > 0 ? "+" : "-"}${abs}`,
     trend: diff > 0 ? "up" : "down",
   };
 };
@@ -39,7 +39,7 @@ const DeviationCell = ({ internalQc, amdocsQc }) => {
   return (
     <span className={`qc-trend ${dev.trend}`}>
       <span className="qc-value">{dev.text}</span>
-      <span className="qc-arrow">{dev.trend === "up" ? "⮝" : "⮟"}</span>
+      <span className="qc-arrow">{dev.trend === "up" ? "▲" : "▼"}</span>
     </span>
   );
 };
@@ -72,7 +72,6 @@ const parseMonthYear = (raw) => {
   return { month: str, year: "-" };
 };
 
-// OTP khaali ("", "-" ya sirf space) ho to row red
 const isOtpMissing = (otp) => {
   const t = String(otp ?? "").trim();
   return t === "" || t === "-";
@@ -110,7 +109,6 @@ const handleSave = async () => {
     try {
       const parsedUOM = editForm.uom || {};
 
-      // Backend ka format "Jan,2026" hai ("Jan-26" bhejne par saal galat ban sakta hai)
       const editMonth = parseMonthYear(`${editForm.month || ""} ${editForm.year || ""}`);
       const currentMonthVal =
         editMonth.month !== "-" && editMonth.year !== "-" ? `${editMonth.month},${editMonth.year}` : null;
@@ -126,7 +124,7 @@ const handleSave = async () => {
         county: editForm.county,
         uom: parsedUOM,
         job_id: editForm.job_id,
-        jobId: editForm.job_id, 
+        jobId: editForm.job_id,
         current_status: editForm.current_status,
         production_engineers: editForm.production_engineers,
         qc_engineers: editForm.qc_engineers,
@@ -140,7 +138,6 @@ const handleSave = async () => {
         receive_date: editForm.receive_date || null,
         ecd_date: editForm.ecd_date || null,
         submission_date: editForm.submission_date || null,
-        // Date ke side ka time (HH:mm) - khaali ho to date ke saath time save nahi hoga
         receive_time: editForm.receive_time || "",
         ecd_time: editForm.ecd_time || "",
         submission_time: editForm.submission_time || "",
@@ -190,7 +187,7 @@ const handleSave = async () => {
     try {
       const res = await axios.get(`${API_BASE_URL}/api/work/all`);
       console.log("res",res);
-      
+
       setData(res.data);
     } catch (err) {
       console.error("Error fetching work data:", err);
@@ -251,12 +248,10 @@ const handleSave = async () => {
     const year = d.getFullYear();
     const month = String(d.getMonth() + 1).padStart(2, "0");
     const day = String(d.getDate()).padStart(2, "0");
-    
+
     return `${year}-${day}-${month}`;
   };
 
-  // ---------- DATE KE SIDE ME TIME ----------
-  // Backend se "receive_time" = "17:53" aata hai (24 ghante). Excel jaisa "5.53 PM" dikhate hain.
   const to12h = (t) => {
     const m = String(t || "").match(/^(\d{1,2}):(\d{2})$/);
     if (!m) return "";
@@ -264,24 +259,21 @@ const handleSave = async () => {
     return `${h % 12 || 12}.${m[2]} ${h >= 12 ? "PM" : "AM"}`;
   };
 
-  // Row se time nikalta hai: pehle backend ka *_time field, warna "MM-DD-YYYY HH:mm" me se
   const getTime = (item, key) => {
     const direct = item[`${key}_time`];
     if (direct) return String(direct);
     const v = item[key];
     if (typeof v !== "string") return "";
-    if (/^\d{4}-\d{2}-\d{2}T.*Z$/.test(v.trim())) return ""; // ISO+Z ka time bharosemand nahi
+    if (/^\d{4}-\d{2}-\d{2}T.*Z$/.test(v.trim())) return "";
     const m = v.match(/(?:^|[\sT])(\d{1,2}):(\d{2})/);
     return m ? `${String(m[1]).padStart(2, "0")}:${m[2]}` : "";
   };
 
-  // "11-04-2026 17:53" me se time hata kar sirf date deta hai (Date() parse ke liye)
   const stripTime = (v) => {
     const s = String(v ?? "");
     return /^\d{1,2}-\d{1,2}-\d{4}[ T]/.test(s) ? s.replace(/[ T]+\d{1,2}:\d{2}.*$/, "") : s;
   };
 
-  // PDF / Excel ke liye "2026-01-11 5.53 PM"
   const dateWithTime = (date, time) => {
     if (!date) return "";
     const t = to12h(time);
@@ -323,11 +315,9 @@ const handleSave = async () => {
 
   data.forEach((item) => {
     const dateObj = item.updated_at || item.created_at;
-    // months array me aakhri month sabse latest hota hai (Work Update/Job History bhi wahi dikhate hain)
     const monthsList = Array.isArray(item.months) ? item.months : [];
     const monthRaw = monthsList.length ? monthsList[monthsList.length - 1] : item.month;
 
-    // Month / Year ko ek hi format me laate hain ("Jan" + "2026")
     let { month, year } = parseMonthYear(monthRaw);
 
     if ((year === "-" || !year) && dateObj) {
@@ -385,7 +375,7 @@ const handleSave = async () => {
       ecd_time: item.ecd_date ? getTime(item, "ecd_date") : "",
       submission_time: item.submission_date ? getTime(item, "submission_date") : "",
 
-      createdAt: parseDate(item.created_at), 
+      createdAt: parseDate(item.created_at),
       lastUpdate: parseDate(dateObj),
       formattedDate: formatDateOnly(dateObj),
     });
@@ -1061,7 +1051,6 @@ const handleSave = async () => {
                   currentRows.map((r, i) => {
                     const otpMissing = isOtpMissing(r.otp);
                     const amdocsMissing = !r.amdocs_qc || r.amdocs_qc === "-";
-                    // OTP khaali ho to poori row red (Job History jaisa), sirf Amdocs khaali ho to purani light-orange class
                     const rowClass = otpMissing ? "row-missing-otp" : amdocsMissing ? "light-orange-row" : "";
                     return (
                       <tr
