@@ -5,10 +5,21 @@ const ctrl = require("../controllers/rawDataController");
 
 const upload = multer({
   storage: multer.memoryStorage(),
-  limits: { fileSize: 50 * 1024 * 1024 },
+  limits: { fileSize: 50 * 1024 * 1024 }, // 50 MB
 });
 
-router.post("/import-excel", upload.single("file"), ctrl.importExcel);
+// Wrap multer so upload errors (e.g. file too large) return clean JSON
+const uploadSingle = (req, res, next) =>
+  upload.single("file")(req, res, (err) => {
+    if (!err) return next();
+    const tooBig = err.code === "LIMIT_FILE_SIZE";
+    res.status(tooBig ? 413 : 400).json({
+      success: false,
+      message: tooBig ? "File is too large (max 50 MB)" : err.message,
+    });
+  });
+
+router.post("/import-excel", uploadSingle, ctrl.importExcel);
 router.get("/files", ctrl.getFiles);
 router.delete("/file/:fileName", ctrl.deleteFile);
 router.get("/domains", ctrl.getDomains);
