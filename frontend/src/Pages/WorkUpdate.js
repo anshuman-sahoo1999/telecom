@@ -225,6 +225,19 @@ export default function WorkUpdate({ refreshDashboard }) {
       setSuccessMsg(true);
       setTimeout(() => setSuccessMsg(false), 2000);
 
+      // Date ke side ka time: Excel me kitni rows me mila aur DB me kitni rows me save hua
+      const timeParsed = res && res.data ? res.data.timeRowsParsed : undefined;
+      const timeSaved = res && res.data ? res.data.timeRowsInDb : undefined;
+      if (typeof timeParsed === "number") {
+        if (timeParsed > 0 && timeSaved === 0) {
+          showToast("Excel me time mila, par database me save nahi hua. Date column chhota ho sakta hai.");
+        } else if (timeParsed === 0) {
+          showToast("Is Excel me kisi date ke saath time nahi mila (sirf date hai).", "info");
+        } else {
+          showToast(`Time save hua: ${timeSaved === null || timeSaved === undefined ? timeParsed : timeSaved} rows me`, "info");
+        }
+      }
+
       removeFile();
       setShowPopup(false);
 
