@@ -14,19 +14,17 @@ import {
 import "../style/workupdate.css";
 const pad2 = (n) => String(n).padStart(2, "0");
 
-// 24 ghante -> Excel jaisa "9.00 PM" / "12.55 PM" / "1.21 AM"
 const to12h = (h, m) => `${Number(h) % 12 || 12}.${pad2(m)} ${Number(h) >= 12 ? "PM" : "AM"}`;
-
 const timeTag = (h, m) =>
   `<span style="display:inline-block;margin-left:6px;padding:1px 6px;border-radius:10px;background:#e0f2fe;color:#0369a1;font-size:11px;font-weight:600;white-space:nowrap;">${to12h(h, m)}</span>`;
 
 const formatExcelDateCell = (d) => {
   if (isNaN(d.getTime())) return "";
-  const t = new Date(d.getTime() + 30000); // Excel float error se 10:59:59.99 -> 10:59 na ban jaye
+  const t = new Date(d.getTime() + 30000); 
   const y = t.getUTCFullYear();
   const h = t.getUTCHours();
   const mi = t.getUTCMinutes();
-  if (y < 1950) return to12h(h, mi); // 1899-12-30 = Excel ka sirf-time cell
+  if (y < 1950) return to12h(h, mi); 
   const date = `${pad2(t.getUTCMonth() + 1)}/${pad2(t.getUTCDate())}/${y}`;
   return h === 0 && mi === 0 ? date : `${date} ${to12h(h, mi)}`;
 };
