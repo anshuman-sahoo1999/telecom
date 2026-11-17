@@ -21,6 +21,8 @@ import TimesheetManagement from "./Pages/TimesheetManagement";
 import JobHistory from "./Pages/JobHistory";
 import CapacityForecast from "./Pages/CapacityForecast";
 import KPIInsight from "./Pages/KPIInsight";
+import RawDataUpload from "./Pages/RawDataUpload";
+import RawDataReport from "./Pages/RawDataReport";
 
 function App() {
   return (
@@ -66,6 +68,8 @@ function App() {
           <Route path="/mis-dashboard/jobhistory" element={<JobHistory />} />
           <Route path="/mis-dashboard/capacityforecast" element={<CapacityForecast />} />
           <Route path="/mis-dashboard/kpiinsight" element={<KPIInsight />} />
+          <Route path="/mis-dashboard/rawdata-upload" element={<RawDataUpload />} />
+          <Route path="/mis-dashboard/rawdata-report" element={<RawDataReport />} />
         </Route>
 
         {/* Team Lead Routes */}
