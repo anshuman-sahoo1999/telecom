@@ -7,7 +7,7 @@ import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer,
   PieChart, Pie, Cell, Legend, CartesianGrid
 } from "recharts";
-import { FaTachometerAlt, FaChartBar, FaUsers, FaSitemap, FaPlusCircle, FaClock, FaHistory, FaLayerGroup, FaFolderOpen, FaPaperPlane, FaChartLine, FaTimes, FaBrain, FaDatabase, FaFileUpload, FaTable } from "react-icons/fa";
+import { FaTachometerAlt, FaChartBar, FaUsers, FaSitemap, FaPlusCircle, FaClock, FaHistory, FaLayerGroup, FaFolderOpen, FaPaperPlane, FaChartLine, FaTimes, FaBrain, FaDatabase, FaFileExcel, FaTable } from "react-icons/fa";
 import jsPDF from "jspdf";
 import html2canvas from "html2canvas";
 import geoData from "../us-states.json";
@@ -973,7 +973,7 @@ export default function TelecomMap() {
             </button>
             {expandedRawMenu && (
               <div className="subMenuContainer" style={menuOpen ? { paddingLeft: "20px", display: "flex", flexDirection: "column", gap: "4px", marginTop: "4px" } : {}}>
-                <button className={`menuBtn subMenuBtn ${activePage === "rawdata-upload" ? "active" : ""}`} onClick={() => goTo("rawdata-upload")}><FaFileUpload className="menuIcon" style={{ fontSize: "16px" }} />{menuOpen && "Raw Data Upload"}</button>
+                <button className={`menuBtn subMenuBtn ${activePage === "rawdata-upload" ? "active" : ""}`} onClick={() => goTo("rawdata-upload")}><FaFileExcel className="menuIcon" style={{ fontSize: "16px" }} />{menuOpen && "Raw Data Upload"}</button>
                 <button className={`menuBtn subMenuBtn ${activePage === "rawdata-report" ? "active" : ""}`} onClick={() => goTo("rawdata-report")}><FaTable className="menuIcon" style={{ fontSize: "16px" }} />{menuOpen && "Raw Data Report"}</button>
               </div>
             )}
