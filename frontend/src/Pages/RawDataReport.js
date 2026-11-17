@@ -1,10 +1,10 @@
 import { API_BASE_URL } from "../config";
-import React, { useState, useEffect, useMemo, useCallback } from "react";
+import React, { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import axios from "axios";
 import { saveAs } from "file-saver";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
-import { FileSpreadsheet, FileText } from "lucide-react";
+import { FileSpreadsheet, FileText, Download, ChevronDown } from "lucide-react";
 import "../style/rawdata.css";
 
 const PAGE_SIZES = [25, 50, 100, 500, "All"];
@@ -21,6 +21,22 @@ export default function RawDataReport() {
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(50);
   const [exporting, setExporting] = useState("");
+  const [exportOpen, setExportOpen] = useState(false);
+  const exportRef = useRef(null);
+
+  /* bahar click / Esc par Export dropdown band */
+  useEffect(() => {
+    const onDown = (e) => {
+      if (exportRef.current && !exportRef.current.contains(e.target)) setExportOpen(false);
+    };
+    const onKey = (e) => e.key === "Escape" && setExportOpen(false);
+    document.addEventListener("mousedown", onDown);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onDown);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, []);
 
   /* domain dropdown */
   useEffect(() => {
@@ -146,12 +162,42 @@ export default function RawDataReport() {
           </div>
 
           <div className="right">
-            <button className="rd-btn green" onClick={exportExcel} disabled={noData || loading || !!exporting}>
-              <FileSpreadsheet size={16} /> {exporting === "excel" ? "Exporting..." : "Export Excel"}
-            </button>
-            <button className="rd-btn red" onClick={exportPdf} disabled={noData || loading || !!exporting}>
-              <FileText size={16} /> {exporting === "pdf" ? "Exporting..." : "Export PDF"}
-            </button>
+            <div className="rd-export" ref={exportRef}>
+              <button
+                className="rd-btn rd-export-btn"
+                onClick={() => setExportOpen((o) => !o)}
+                disabled={noData || loading || !!exporting}
+                aria-haspopup="menu"
+                aria-expanded={exportOpen}
+              >
+                <Download size={16} />
+                {exporting === "excel" ? "Exporting Excel..." : exporting === "pdf" ? "Exporting PDF..." : "Export"}
+                <ChevronDown size={16} className={exportOpen ? "rd-caret open" : "rd-caret"} />
+              </button>
+
+              {exportOpen && (
+                <div className="rd-export-menu" role="menu">
+                  <button
+                    role="menuitem"
+                    onClick={() => {
+                      setExportOpen(false);
+                      exportExcel();
+                    }}
+                  >
+                    <FileSpreadsheet size={16} color="#16a34a" /> Excel (.xlsx)
+                  </button>
+                  <button
+                    role="menuitem"
+                    onClick={() => {
+                      setExportOpen(false);
+                      exportPdf();
+                    }}
+                  >
+                    <FileText size={16} color="#dc2626" /> PDF (.pdf)
+                  </button>
+                </div>
+              )}
+            </div>
           </div>
         </div>
 
