@@ -7,7 +7,7 @@ import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer,
   PieChart, Pie, Cell, Legend, CartesianGrid
 } from "recharts";
-import { FaTachometerAlt, FaChartBar, FaUsers, FaSitemap, FaPlusCircle, FaClock, FaHistory, FaLayerGroup, FaFolderOpen, FaPaperPlane, FaChartLine, FaTimes, FaBrain, FaDatabase, FaCloudUploadAlt, FaTable } from "react-icons/fa";
+import { FaTachometerAlt, FaChartBar, FaUsers, FaSitemap, FaPlusCircle, FaClock, FaHistory, FaLayerGroup, FaFolderOpen, FaPaperPlane, FaChartLine, FaTimes, FaBrain, FaDatabase, FaFileUpload, FaTable } from "react-icons/fa";
 import jsPDF from "jspdf";
 import html2canvas from "html2canvas";
 import geoData from "../us-states.json";
@@ -935,22 +935,6 @@ export default function TelecomMap() {
         </div>
         {/* Data Upload button hidden. Dubara dikhana ho to yaha button add karo aur FaUpload ko react-icons/fa import me wapas jodo. */}
         <button className={`menuBtn ${activePage === "report" ? "active" : ""}`} onClick={() => goTo("report")}><FaChartBar className="menuIcon" />{menuOpen && "Report"}</button>
-        {/* Raw Data group (naya, alag section): sub tabs -> Raw Data Upload, Raw Data Report */}
-        <div className="menuGroupContainer">
-          <button
-            className={`menuBtn ${(activePage === "rawdata-upload" || activePage === "rawdata-report") ? "active" : ""}`}
-            onClick={handleRawDataClick}
-          >
-            <FaDatabase className="menuIcon" />
-            {menuOpen && <span style={{ display: "flex", justifyContent: "space-between", width: "100%", alignItems: "center" }}>Raw Data <span style={{ fontSize: "11px" }}>{expandedRawMenu ? "▲" : "▼"}</span></span>}
-          </button>
-          {expandedRawMenu && (
-            <div className="subMenuContainer" style={menuOpen ? { paddingLeft: "20px", display: "flex", flexDirection: "column", gap: "4px", marginTop: "4px" } : {}}>
-              <button className={`menuBtn subMenuBtn ${activePage === "rawdata-upload" ? "active" : ""}`} onClick={() => goTo("rawdata-upload")}><FaCloudUploadAlt className="menuIcon" style={{ fontSize: "16px" }} />{menuOpen && "Raw Data Upload"}</button>
-              <button className={`menuBtn subMenuBtn ${activePage === "rawdata-report" ? "active" : ""}`} onClick={() => goTo("rawdata-report")}><FaTable className="menuIcon" style={{ fontSize: "16px" }} />{menuOpen && "Raw Data Report"}</button>
-            </div>
-          )}
-        </div>
         {role === "Admin" && <button className={`menuBtn ${activePage === "user-management" ? "active" : ""}`} onClick={() => goTo("user-management")}><FaUsers className="menuIcon" />{menuOpen && "User Management"}</button>}
         {(role === "Admin" || role === "TeamLead") && <button className={`menuBtn ${activePage === "organogram" ? "active" : ""}`} onClick={() => goTo("organogram")}><FaSitemap className="menuIcon" />{menuOpen && "Organogram"}</button>}
 
@@ -978,6 +962,22 @@ export default function TelecomMap() {
         {role === "MIS" && (
           <>
             <button className={`menuBtn ${activePage === "capacityforecast" ? "active" : ""}`} onClick={() => goTo("capacityforecast")}><FaChartLine className="menuIcon" />{menuOpen && "Capacity / Forecast"}</button>
+          {/* Raw Data group (naya, alag section): sub tabs -> Raw Data Upload, Raw Data Report */}
+          <div className="menuGroupContainer">
+            <button
+              className={`menuBtn ${(activePage === "rawdata-upload" || activePage === "rawdata-report") ? "active" : ""}`}
+              onClick={handleRawDataClick}
+            >
+              <FaDatabase className="menuIcon" />
+              {menuOpen && <span style={{ display: "flex", justifyContent: "space-between", width: "100%", alignItems: "center" }}>Raw Data <span style={{ fontSize: "11px" }}>{expandedRawMenu ? "▲" : "▼"}</span></span>}
+            </button>
+            {expandedRawMenu && (
+              <div className="subMenuContainer" style={menuOpen ? { paddingLeft: "20px", display: "flex", flexDirection: "column", gap: "4px", marginTop: "4px" } : {}}>
+                <button className={`menuBtn subMenuBtn ${activePage === "rawdata-upload" ? "active" : ""}`} onClick={() => goTo("rawdata-upload")}><FaFileUpload className="menuIcon" style={{ fontSize: "16px" }} />{menuOpen && "Raw Data Upload"}</button>
+                <button className={`menuBtn subMenuBtn ${activePage === "rawdata-report" ? "active" : ""}`} onClick={() => goTo("rawdata-report")}><FaTable className="menuIcon" style={{ fontSize: "16px" }} />{menuOpen && "Raw Data Report"}</button>
+              </div>
+            )}
+          </div>
             <button className={`menuBtn ${activePage === "domaincreation" ? "active" : ""}`} onClick={() => goTo("domaincreation")}><FaLayerGroup className="menuIcon" />{menuOpen && "Domain Creation"}</button>
           </>
         )}
