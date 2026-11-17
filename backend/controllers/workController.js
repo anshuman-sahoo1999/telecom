@@ -27,7 +27,6 @@ const chunkArray = (arr, size) => {
   return out;
 };
 
-// list ke items par worker chalata hai, ek saath max `limit` hi
 const runLimited = async (list, limit, worker) => {
   let idx = 0;
   const runners = Array.from({ length: Math.min(limit, list.length) }, async () => {
@@ -292,11 +291,6 @@ const parseExcelDate = (value) => {
   let monthNum = (useUTC ? d.getUTCMonth() : d.getMonth()) + 1;
   let dayNum = useUTC ? d.getUTCDate() : d.getDate();
 
-  // Excel ke asli Date cells (Date object / serial number) me din aur mahina ulta aata hai:
-  // sheet me "01-05-2026" (Jan 5) likha tha, par Excel ne use 1 May padh liya.
-  // Excel wahi cell din-pehle dikhata hai ("01-05-2026"), isliye jo Excel me dikhta hai wahi
-  // chahiye to din ko mahina maanna padega. (Month column se match karne par ~90% rows me yahi sahi nikla.)
-  // Agar din 12 se bada hai to wo asli date hai, use waisa hi rakho.
   if (useUTC && dayNum <= 12) {
     [monthNum, dayNum] = [dayNum, monthNum];
   }
@@ -304,11 +298,6 @@ const parseExcelDate = (value) => {
   return `${pad(monthNum)}-${pad(dayNum)}-${year}`;
 };
 
-// Kisi bhi value (Date / Excel number / text) me se "HH:mm" (24 ghante) nikalta hai.
-// Time na ho ya 00:00 ho to "" (matlab sirf date).
-// explicit=true: ye value alag "Receive Time / Submission Time" column se aayi hai.
-//   Wahan 12:00 AM (00:00) asli time hai, isliye "00:00" wapas aata hai
-//   (par agar us column me asli date padi ho, jaise 12-Jan-2026 00:00, to wo time nahi hai -> "").
 const extractTime = (v, explicit = false) => {
   if (v === null || v === undefined || v === "") return "";
 
