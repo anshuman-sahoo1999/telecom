@@ -8,18 +8,15 @@ const normalizeUpper = (d) => (d || "").toString().trim().toUpperCase();
 
 const pad2 = (n) => String(n).padStart(2, "0");
 
-// Date ko "YYYY-MM-DD" banata hai. "03-05-2026 10:30" jaisi value me time ho tab bhi date sahi nikalti hai.
 const toDateKey = (value) => {
   if (!value) return null;
   if (typeof value === "string") {
     const v = value.trim();
     if (/^\d{4}-\d{2}-\d{2}$/.test(v)) return v;
 
-    // "2026-03-05 10:30"
     let m = v.match(/^(\d{4})-(\d{2})-(\d{2})\s+\d{1,2}:\d{2}/);
     if (m) return `${m[1]}-${m[2]}-${m[3]}`;
 
-    // "03-05-2026" ya "03-05-2026 10:30" (MM-DD-YYYY)
     m = v.match(/^(\d{1,2})[-/](\d{1,2})[-/](\d{4})(?:\s|$)/);
     if (m && Number(m[1]) >= 1 && Number(m[1]) <= 12 && Number(m[2]) >= 1 && Number(m[2]) <= 31) {
       return `${m[3]}-${pad2(m[1])}-${pad2(m[2])}`;
@@ -30,12 +27,9 @@ const toDateKey = (value) => {
   return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
 };
 
-// "03-05-2026 10:30" me se "10:30" nikalta hai. Time na ho to "".
-// 00:00 (12.00 AM) tabhi time maana jata hai jab "MM-DD-YYYY HH:mm" format me ho (import me Time column se aaya).
 const toTimeKey = (value) => {
   if (typeof value !== "string") return "";
   const v = value.trim();
-  // ISO + Z (timezone wali string) ka time bharosemand nahi, isliye ignore
   if (/^\d{4}-\d{2}-\d{2}T.*Z$/.test(v)) return "";
   const m = v.match(/(?:^|[\sT])(\d{1,2}):(\d{2})/);
   if (!m) return "";
@@ -43,7 +37,6 @@ const toTimeKey = (value) => {
   return `${pad2(m[1])}:${m[2]}`;
 };
 
-// "17:53" -> "5.53 PM" (Excel jaisa 12 ghante ka time)
 const timeTo12h = (t) => {
   const m = String(t || "").match(/^(\d{1,2}):(\d{2})$/);
   if (!m) return "";
@@ -51,7 +44,6 @@ const timeTo12h = (t) => {
   return `${h % 12 || 12}.${m[2]} ${h >= 12 ? "PM" : "AM"}`;
 };
 
-// UI ke liye MM-DD-YYYY
 const formatLocalDate = (value) => {
   const key = toDateKey(value);
   if (!key) return "-";
@@ -79,7 +71,6 @@ const parseMonthField = (job) => {
         return parsed.length > 0 ? parsed[0] : "-";
       }
     } catch (e) {
-      // JSON nahi hai to normal string ki tarah hi use hoga
       return val;
     }
   }
@@ -99,20 +90,14 @@ const qcColor = (value) => {
   return "red";
 };
 
-// "80%", "↑ 80%", "0.8" jaisi value se number nikalta hai (nahi mila to null)
 const parsePercent = (v) => {
   if (v === null || v === undefined) return null;
-  // Arrow, % aur space hata ke sirf number (digits, dot, minus) rakhta hai
   const t = v.toString().replace(/[^0-9.-]/g, "");
   if (t === "" || t === "-") return null;
   const n = parseFloat(t);
   return isNaN(n) ? null : n;
 };
 
-// Deviation = Amdocs QC - Internal QC
-//   Internal 80%, Amdocs 90%  -> 10%  ↑ (green)
-//   Internal 70%, Amdocs 60%  -> 10%  ↓ (red)
-// Dono me se koi khaali ho to "-"
 const getDeviation = (internalQc, amdocsQc) => {
   const internal = parsePercent(internalQc);
   const amdocs = parsePercent(amdocsQc);
@@ -126,19 +111,17 @@ const getDeviation = (internalQc, amdocsQc) => {
 const DEVIATION_UP = "#16a34a";
 const DEVIATION_DOWN = "#dc2626";
 
-// Deviation cell: value + uske side me arrow
 const DeviationCell = ({ text, trend }) => {
   if (!trend) return text || "-";
   const color = trend === "up" ? DEVIATION_UP : DEVIATION_DOWN;
   return (
     <span style={{ display: "inline-flex", alignItems: "center", gap: 4, fontWeight: 700, color }}>
       <span>{text}</span>
-      <span style={{ fontSize: 16, lineHeight: 1 }}>{trend === "up" ? "⮝" : "⮟"}</span>
+      <span style={{ fontSize: 12, lineHeight: 1 }}>{trend === "up" ? "▲" : "▼"}</span>
     </span>
   );
 };
 
-// Date ke side me time ka chhota chip (inline style: css purani ho tab bhi dikhe)
 const timeChipStyle = {
   display: "inline-block",
   marginLeft: 6,
@@ -163,7 +146,6 @@ const DateTimeCell = ({ value }) => {
   );
 };
 
-// OTP khaali ho to poori row ka background red (text ka color normal rahega)
 const rowMissingStyle = { background: "#fee2e2" };
 const otpCellMissingStyle = {
   background: "#fecaca",
@@ -252,13 +234,11 @@ const JobHistory = () => {
   const [workLoading, setWorkLoading] = useState(false);
   const [tlName, setTlName] = useState("-");
 
-  // Screen par message + confirm box
-  const [toast, setToast] = useState(null); // { type, text }
-  const [confirmAction, setConfirmAction] = useState(null); // { type: "delete" | "save", job?, id? }
+  const [toast, setToast] = useState(null);
+  const [confirmAction, setConfirmAction] = useState(null);
   const toastTimerRef = useRef(null);
   const workRequestRef = useRef(0);
 
-  // Pagination State
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 10;
 
@@ -284,7 +264,6 @@ const JobHistory = () => {
     };
   }, []);
 
-  /* ---------------- API calls ---------------- */
 
   const fetchReportData = useCallback(async () => {
     try {
@@ -351,7 +330,6 @@ const JobHistory = () => {
         adminStatus: item.adminStatus || "-",
       }));
 
-      // Agar beech mein dusra job khul gaya ho to purana result ignore karo
       if (workRequestRef.current === requestId) {
         setWorkData(normalizedData);
       }
@@ -364,7 +342,6 @@ const JobHistory = () => {
     }
   };
 
-  /* ---------------- Combined data ---------------- */
 
   const rawCombinedData = [
     ...jobs,
@@ -389,7 +366,6 @@ const JobHistory = () => {
         uniqueMap.set(`job-${jId}`, item);
       }
     } else {
-      // id ke saath prefix, taaki job id aur work id ek jaisi hone par ek dusre ko overwrite na karein
       uniqueMap.set(`row-${item.id ?? `idx-${idx}`}`, item);
     }
   });
@@ -399,9 +375,7 @@ const JobHistory = () => {
   const jobDomains = combinedData.map((j) => normalizeUpper(j.domain));
   const mergedDomains = [...new Set([...masterDomains, ...jobDomains])].filter(Boolean);
 
-  /* ---------------- Delete / Edit / Save ---------------- */
 
-  // Delete: pehle screen par confirm box dikhega
   const requestDelete = (job) => {
     setConfirmAction({ type: "delete", job });
   };
@@ -413,9 +387,6 @@ const JobHistory = () => {
     try {
       const params = new URLSearchParams();
       if (businessJobId) params.set("jobId", businessJobId);
-      // jcId/workId: job_creation aur work_updates ki apni-apni asli id.
-      // Ye backend ko batati hain ki kis table ki kaunsi exact row delete karni
-      // hai, taaki dono tables se hamesha sahi row delete ho (id collision na ho).
       if (job.jcId !== undefined && job.jcId !== null) params.set("jcId", job.jcId);
       if (job.workId !== undefined && job.workId !== null) params.set("workId", job.workId);
 
@@ -449,7 +420,6 @@ const JobHistory = () => {
     });
   };
 
-  // Save: pehle screen par confirm box dikhega
   const requestSave = (id) => {
     setConfirmAction({ type: "save", id });
   };
@@ -465,15 +435,12 @@ const JobHistory = () => {
         amdocsQc: editData.amdocsQc,
         otp: editData.otp,
         internalOtp: editData.otp,
-        // jobId = purani/original Job ID jisse row dhoondhni hai,
-        // newJobId = user ne jo naya Job ID type kiya (agar change kiya ho)
         jobId: originalJobId,
         newJobId: editData.jobId,
         jcId: editData.jcId,
         workId: editData.workId,
       };
 
-      // Month "-" ho to bhejna nahi hai, warna DB mein "-" save ho jata tha
       const monthVal = job ? parseMonthField(job) : "-";
       if (monthVal && monthVal !== "-") {
         payload.month = monthVal;
@@ -514,7 +481,6 @@ const JobHistory = () => {
     showToast("success", "Data refreshed successfully!");
   };
 
-  /* ---------------- View Work modal ---------------- */
 
   const handleViewWork = async (job) => {
     const requestId = workRequestRef.current + 1;
@@ -522,7 +488,6 @@ const JobHistory = () => {
 
     setSelectedJob(job);
     setShowWorkModal(true);
-    // Purane job ka data na dikhe
     setWorkData([]);
     setTlName("-");
     setWorkLoading(true);
@@ -559,7 +524,6 @@ const JobHistory = () => {
     }
   };
 
-  /* ---------------- Filters ---------------- */
 
   const filteredJobs = combinedData.filter((job) => {
     const jobMonthYear = parseMonthField(job);
@@ -588,15 +552,12 @@ const JobHistory = () => {
     return idA - idB;
   });
 
-  /* ---------------- Pagination ---------------- */
 
   const totalPages = Math.ceil(sortedFilteredJobs.length / itemsPerPage) || 1;
-  // currentPage khaali ("") ya limit se bahar ho to bhi table sahi dikhe
   const safePage = Math.min(Math.max(Number(currentPage) || 1, 1), totalPages);
   const startIndex = (safePage - 1) * itemsPerPage;
   const currentJobs = sortedFilteredJobs.slice(startIndex, startIndex + itemsPerPage);
 
-  // Delete ke baad page limit se bahar chala jaye to wapas last page par
   useEffect(() => {
     if (currentPage !== "" && Number(currentPage) > totalPages) {
       setCurrentPage(totalPages);
@@ -640,7 +601,6 @@ const JobHistory = () => {
   const prevDisabled = safePage === 1;
   const nextDisabled = safePage === totalPages;
 
-  /* ---------------- Confirm box text ---------------- */
 
   const confirmTitle = confirmAction?.type === "delete" ? "Delete Job?" : "Save Changes?";
   const confirmText =
@@ -656,7 +616,6 @@ const JobHistory = () => {
 
   return (
     <div className="job-history-container">
-      {/* ---------- Screen par success / error message ---------- */}
       {toast && (
         <div
           role="status"
@@ -686,7 +645,6 @@ const JobHistory = () => {
         </div>
       )}
 
-      {/* ---------- Delete / Save confirm (screen par) ---------- */}
       {confirmAction && (
         <div style={confirmOverlayStyle} onClick={() => setConfirmAction(null)}>
           <div style={confirmModalStyle} onClick={(e) => e.stopPropagation()}>
@@ -854,14 +812,12 @@ const JobHistory = () => {
                 const internalVal = getInternalQc(job);
                 const amdocsVal = getAmdocsQc(job);
 
-                // OTP khaali ("", "-" ya sirf space) ho to poori row red
                 const otpText = String(otpVal || "").trim();
                 const otpMissing = otpText === "" || otpText === "-";
                 const cellStyle = otpMissing ? rowMissingStyle : undefined;
 
                 const isEditingRow = editingId === job.id;
 
-                // Deviation = Amdocs QC - Internal QC (edit karte waqt live badalta hai)
                 const dev = isEditingRow
                   ? getDeviation(editData.internalQc, editData.amdocsQc)
                   : getDeviation(internalVal, amdocsVal);
@@ -880,17 +836,14 @@ const JobHistory = () => {
                     <td style={cellStyle}>{job.market || job.state || "-"}</td>
                     <td style={cellStyle}>{getJobId(job) || "-"}</td>
 
-                    {/* Received Date: date ke side me time */}
                     <td style={cellStyle}>
                       <DateTimeCell value={job.receiveDate || job.receive_date} />
                     </td>
 
-                    {/* ECD: Excel me date ke andar time ho to wo bhi dikhega */}
                     <td style={cellStyle}>
                       <DateTimeCell value={job.ecdDate || job.ecd_date} />
                     </td>
 
-                    {/* Submission Date: date ke side me time */}
                     <td style={cellStyle}>
                       <DateTimeCell
                         value={job.submissionDate || job.submission_date || job.submissiondate}
@@ -937,7 +890,6 @@ const JobHistory = () => {
                       )}
                     </td>
 
-                    {/* Deviation = Amdocs QC - Internal QC (value ke side me ↑ green / ↓ red) */}
                     <td style={cellStyle}>
                       <DeviationCell text={dev.text} trend={dev.trend} />
                     </td>
