@@ -59,7 +59,7 @@ const getTotalDeviation = (list) => {
     sum += dev;
     count += 1;
   });
-  return { value: count ? Math.round(sum / count) : 0, count };
+  return { value: count ? Math.round(sum / count) : null, count }; // nothing to count -> null -> shows "-"
 };
 
 const MONTH_SHORT = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
@@ -514,8 +514,8 @@ const handleSave = async () => {
         String(r.year) === String(nowDate.getFullYear())
     )
   );
-  // Colour of the summary value: 0% -> green (no deviation), anything above 0% -> red
-  const devClass = (v) => (v === null || v === undefined ? "" : v === 0 ? "up" : "down");
+  // Colour of the summary value: red when there is a deviation, no colour when it is "-"
+  const devClass = (v) => (v === null || v === undefined ? "" : "down");
   const totalPages = Math.max(1, Math.ceil(filteredRows.length / rowsPerPage));
   const indexOfLast = currentPage * rowsPerPage;
   const currentRows = filteredRows.slice(
