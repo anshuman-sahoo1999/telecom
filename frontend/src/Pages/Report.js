@@ -44,9 +44,9 @@ const DeviationCell = ({ internalQc, amdocsQc }) => {
   );
 };
 
-const formatPercent = (n) => `${Math.abs(Math.round(n * 100) / 100)}%`;
+const formatPercent = (n) => `${Math.abs(Math.round(n))}%`;
 
-// Total of the per-row "Deviation" column values as shown in the table (up/down arrows ignored)
+// Overall deviation on a 0-100% scale: average of the per-row "Deviation" column values as shown in the table (up/down arrows ignored)
 const getTotalDeviation = (list) => {
   let sum = 0;
   let count = 0;
@@ -57,7 +57,7 @@ const getTotalDeviation = (list) => {
     sum += Math.abs(Math.round((amdocs - internal) * 100) / 100);
     count += 1;
   });
-  return count ? { value: sum, count } : { value: null, count: 0 };
+  return count ? { value: sum / count, count } : { value: null, count: 0 };
 };
 
 const MONTH_SHORT = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
@@ -1052,7 +1052,7 @@ const handleSave = async () => {
                 </span>
               </div>
               <div className="deviation-item">
-                <span className="deviation-label">Current Deviation ({currentMonthLabel})</span>
+                <span className="deviation-label">Current Month Deviation ({currentMonthLabel})</span>
                 <span className={`deviation-value ${devClass(currentMonthDeviation.value)}`}>
                   {currentMonthDeviation.value !== null ? formatPercent(currentMonthDeviation.value) : "-"}
                 </span>
