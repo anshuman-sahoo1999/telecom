@@ -7,7 +7,7 @@ import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer,
   PieChart, Pie, Cell, Legend, CartesianGrid
 } from "recharts";
-import { FaTachometerAlt, FaChartBar, FaUsers, FaSitemap, FaPlusCircle, FaClock, FaHistory, FaLayerGroup, FaFolderOpen, FaPaperPlane, FaChartLine, FaTimes, FaBrain, FaDatabase, FaFileExcel, FaTable } from "react-icons/fa";
+import { FaTachometerAlt, FaChartBar, FaUsers, FaSitemap, FaPlusCircle, FaClock, FaHistory, FaLayerGroup, FaClipboardList, FaPaperPlane, FaChartLine, FaTimes, FaBrain, FaDatabase, FaCloudUploadAlt, FaTable } from "react-icons/fa";
 import jsPDF from "jspdf";
 import html2canvas from "html2canvas";
 import geoData from "../us-states.json";
@@ -893,6 +893,18 @@ export default function TelecomMap() {
     }
   };
 
+  // Job Record Management button click (same behaviour as Raw Data)
+  //  - Is group ke kisi sub tab par nahi ho -> "Job Creation" khulega aur dropdown open rahega
+  //  - Already group ke andar ho -> dropdown open/close toggle hoga
+  const handleJobMenuClick = () => {
+    if (activePage !== "jobcreation" && activePage !== "jobsubmission" && activePage !== "jobhistory") {
+      setActivePage("jobcreation");
+      setExpandedJobMenu(true);
+    } else {
+      setExpandedJobMenu((prev) => !prev);
+    }
+  };
+
   // Raw Data button click
   //  - Raw Data ke kisi sub tab par nahi ho -> "Raw Data Upload" khulega aur dropdown open rahega
   //  - Already Raw Data ke andar ho -> dropdown open/close toggle hoga
@@ -940,16 +952,16 @@ export default function TelecomMap() {
         {role === "Admin" && <button className={`menuBtn ${activePage === "user-management" ? "active" : ""}`} onClick={() => goTo("user-management")}><FaUsers className="menuIcon" />{menuOpen && "User Management"}</button>}
         {(role === "Admin" || role === "TeamLead") && <button className={`menuBtn ${activePage === "organogram" ? "active" : ""}`} onClick={() => goTo("organogram")}><FaSitemap className="menuIcon" />{menuOpen && "Organogram"}</button>}
 
-        {role === "MIS" && (
+        {(role === "MIS" || role === "Admin") && (
           <div className="menuGroupContainer">
             <button
               className={`menuBtn ${(activePage === "jobcreation" || activePage === "jobsubmission" || activePage === "jobhistory") ? "active" : ""}`}
-              onClick={() => setExpandedJobMenu(!expandedJobMenu)}
+              onClick={handleJobMenuClick}
             >
-              <FaFolderOpen className="menuIcon" />
+              <FaClipboardList className="menuIcon" />
               {menuOpen && <span style={{ display: "flex", justifyContent: "space-between", width: "100%", alignItems: "center" }}>Job Record Management <span style={{ fontSize: "11px" }}>{expandedJobMenu ? "▲" : "▼"}</span></span>}
             </button>
-            {((menuOpen && expandedJobMenu) || !menuOpen) && (
+            {expandedJobMenu && (
               <div className="subMenuContainer" style={menuOpen ? { paddingLeft: "20px", display: "flex", flexDirection: "column", gap: "4px", marginTop: "4px" } : {}}>
                 <button className={`menuBtn subMenuBtn ${activePage === "jobcreation" ? "active" : ""}`} onClick={() => goTo("jobcreation")}><FaPlusCircle className="menuIcon" style={{ fontSize: "16px" }} />{menuOpen && "Job Creation"}</button>
                 <button className={`menuBtn subMenuBtn ${activePage === "jobsubmission" ? "active" : ""}`} onClick={() => goTo("jobsubmission")}><FaPaperPlane className="menuIcon" style={{ fontSize: "16px" }} />{menuOpen && "Job Submission"}</button>
@@ -961,28 +973,28 @@ export default function TelecomMap() {
 
         {(role === "Admin" || role === "TeamLead") && <button className={`menuBtn ${activePage === "workstatus" ? "active" : ""}`} onClick={() => goTo("workstatus")}><FaClock className="menuIcon" />{menuOpen && "Timesheet / Work Status"}</button>}
 
-        {role === "MIS" && (
-          <>
-            <button className={`menuBtn ${activePage === "capacityforecast" ? "active" : ""}`} onClick={() => goTo("capacityforecast")}><FaChartLine className="menuIcon" />{menuOpen && "Capacity / Forecast"}</button>
-          {/* Raw Data group (naya, alag section): sub tabs -> Raw Data Upload, Raw Data Report */}
-          <div className="menuGroupContainer">
-            <button
-              className={`menuBtn ${(activePage === "rawdata-upload" || activePage === "rawdata-report") ? "active" : ""}`}
-              onClick={handleRawDataClick}
-            >
-              <FaDatabase className="menuIcon" />
-              {menuOpen && <span style={{ display: "flex", justifyContent: "space-between", width: "100%", alignItems: "center" }}>Raw Data <span style={{ fontSize: "11px" }}>{expandedRawMenu ? "▲" : "▼"}</span></span>}
-            </button>
-            {expandedRawMenu && (
-              <div className="subMenuContainer" style={menuOpen ? { paddingLeft: "20px", display: "flex", flexDirection: "column", gap: "4px", marginTop: "4px" } : {}}>
-                <button className={`menuBtn subMenuBtn ${activePage === "rawdata-upload" ? "active" : ""}`} onClick={() => goTo("rawdata-upload")}><FaFileExcel className="menuIcon" style={{ fontSize: "16px" }} />{menuOpen && "Raw Data Upload"}</button>
-                <button className={`menuBtn subMenuBtn ${activePage === "rawdata-report" ? "active" : ""}`} onClick={() => goTo("rawdata-report")}><FaTable className="menuIcon" style={{ fontSize: "16px" }} />{menuOpen && "Raw Data Report"}</button>
-              </div>
-            )}
-          </div>
-            <button className={`menuBtn ${activePage === "domaincreation" ? "active" : ""}`} onClick={() => goTo("domaincreation")}><FaLayerGroup className="menuIcon" />{menuOpen && "Domain Creation"}</button>
-          </>
+        {role === "MIS" && (<button className={`menuBtn ${activePage === "capacityforecast" ? "active" : ""}`} onClick={() => goTo("capacityforecast")}><FaChartLine className="menuIcon" />{menuOpen && "Capacity / Forecast"}</button>)}
+
+        {/* Raw Data group: sub tabs -> Raw Data Upload, Raw Data Report (MIS + Admin) */}
+        {(role === "MIS" || role === "Admin") && (
+        <div className="menuGroupContainer">
+          <button
+            className={`menuBtn ${(activePage === "rawdata-upload" || activePage === "rawdata-report") ? "active" : ""}`}
+            onClick={handleRawDataClick}
+          >
+            <FaDatabase className="menuIcon" />
+            {menuOpen && <span style={{ display: "flex", justifyContent: "space-between", width: "100%", alignItems: "center" }}>Raw Data <span style={{ fontSize: "11px" }}>{expandedRawMenu ? "▲" : "▼"}</span></span>}
+          </button>
+          {expandedRawMenu && (
+            <div className="subMenuContainer" style={menuOpen ? { paddingLeft: "20px", display: "flex", flexDirection: "column", gap: "4px", marginTop: "4px" } : {}}>
+              <button className={`menuBtn subMenuBtn ${activePage === "rawdata-upload" ? "active" : ""}`} onClick={() => goTo("rawdata-upload")}><FaCloudUploadAlt className="menuIcon" style={{ fontSize: "16px" }} />{menuOpen && "Raw Data Upload"}</button>
+              <button className={`menuBtn subMenuBtn ${activePage === "rawdata-report" ? "active" : ""}`} onClick={() => goTo("rawdata-report")}><FaTable className="menuIcon" style={{ fontSize: "16px" }} />{menuOpen && "Raw Data Report"}</button>
+            </div>
+          )}
+        </div>
         )}
+
+        {role === "MIS" && (<button className={`menuBtn ${activePage === "domaincreation" ? "active" : ""}`} onClick={() => goTo("domaincreation")}><FaLayerGroup className="menuIcon" />{menuOpen && "Domain Creation"}</button>)}
       </div>
 
       <div className="mainContentContainer">
