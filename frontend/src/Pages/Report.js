@@ -44,26 +44,22 @@ const DeviationCell = ({ internalQc, amdocsQc }) => {
   );
 };
 
+// Whole number in % (e.g. 25 -> "25%"), same unit as the table Deviation column
 const formatPercent = (n) => `${Math.abs(Math.round(n))}%`;
 
-// Overall deviation on a 0-100% scale: average of the per-row "Deviation" values as shown in the table
-// (up/down arrows ignored). Rows with no deviation (0%) or empty QC are not counted.
+// Total deviation (%): uses ONLY the per-row "Deviation" column value shown in the table
+// (up/down arrows ignored). Blank rows ("-") and 0% rows are not counted.
+// Result = average of those deviation % values, whole number, no decimals.
 const getTotalDeviation = (list) => {
   let sum = 0;
   let count = 0;
-  let compared = 0;
   list.forEach((r) => {
-    const internal = parsePercentValue(r.internal_qc);
-    const amdocs = parsePercentValue(r.amdocs_qc);
-    if (internal === null || amdocs === null) return;
-    compared += 1;
-    const diff = Math.abs(Math.round((amdocs - internal) * 100) / 100);
-    if (diff === 0) return; // no deviation -> not counted
-    sum += diff;
+    const dev = parsePercentValue(getDeviation(r.internal_qc, r.amdocs_qc).text); // "25%" -> 25, "-" -> null
+    if (dev === null || dev === 0) return;
+    sum += dev;
     count += 1;
   });
-  if (count) return { value: sum / count, count };
-  return { value: compared ? 0 : null, count: 0 }; // 0% if all matched, "-" if nothing to compare
+  return { value: count ? Math.round(sum / count) : 0, count };
 };
 
 const MONTH_SHORT = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
@@ -512,7 +508,11 @@ const handleSave = async () => {
   const currentMonthLabel = `${MONTH_SHORT[nowDate.getMonth()]} ${nowDate.getFullYear()}`;
   const totalDeviation = getTotalDeviation(filteredRows);
   const currentMonthDeviation = getTotalDeviation(
-    filteredRows.filter((r) => `${r.month} ${r.year}` === currentMonthLabel)
+    filteredRows.filter(
+      (r) =>
+        monthIndexOf(r.month) === nowDate.getMonth() &&
+        String(r.year) === String(nowDate.getFullYear())
+    )
   );
   const devClass = () => "";
   const totalPages = Math.max(1, Math.ceil(filteredRows.length / rowsPerPage));
