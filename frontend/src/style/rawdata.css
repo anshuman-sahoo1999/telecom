@@ -19,7 +19,7 @@
   border: 1px solid #dbeafe;
   border-radius: 16px;
   padding: 20px;
-  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.08);
+  box-shadow: 0 10px 25px rgba(0, 0, 0, .08);
 }
 
 .rd-head {
@@ -53,7 +53,7 @@
   font-size: 14px;
   font-weight: 600;
   cursor: pointer;
-  transition: 0.15s;
+  transition: .15s;
   color: #fff;
   background: #2563eb;
 }
@@ -63,7 +63,7 @@
 }
 
 .rd-btn:disabled {
-  opacity: 0.55;
+  opacity: .55;
   cursor: not-allowed;
 }
 
@@ -130,7 +130,7 @@
 .rd-overlay {
   position: fixed;
   inset: 0;
-  background: rgba(15, 23, 42, 0.55);
+  background: rgba(15, 23, 42, .55);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -220,7 +220,7 @@
   padding: 11px 18px;
   border-radius: 10px;
   font-weight: 600;
-  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.2);
+  box-shadow: 0 8px 20px rgba(0, 0, 0, .2);
 }
 
 .rd-toast.ok {
@@ -283,7 +283,7 @@
 
 .rd-select:focus {
   border-color: #2563eb;
-  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.2);
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, .2);
 }
 
 .rd-count {
@@ -373,7 +373,7 @@
 }
 
 .rd-caret {
-  transition: transform 0.15s;
+  transition: transform .15s;
 }
 
 .rd-caret.open {
@@ -389,7 +389,7 @@
   border: 1px solid #60a5fa;
   border-radius: 10px;
   padding: 6px;
-  box-shadow: 0 12px 28px rgba(30, 58, 138, 0.25);
+  box-shadow: 0 12px 28px rgba(30, 58, 138, .25);
   z-index: 50;
   display: flex;
   flex-direction: column;
@@ -414,6 +414,18 @@
 
 .rd-export-menu button:hover {
   background: #bfdbfe;
+}
+
+@media (max-width: 700px) {
+  .rd-toolbar .right {
+    margin-left: 0;
+    width: 100%;
+  }
+
+  .rd-select {
+    min-width: 0;
+    width: 100%;
+  }
 }
 
 .rd-file-actions {
@@ -450,14 +462,17 @@
   color: #475569;
 }
 
-@media (max-width: 700px) {
-  .rd-toolbar .right {
-    margin-left: 0;
-    width: 100%;
-  }
+.rd-card-plain {
+  background: transparent;
+  border: none;
+  box-shadow: none;
+  padding: 0;
+}
 
-  .rd-select {
-    min-width: 0;
-    width: 100%;
-  }
+.rd-card-plain .rd-tablewrap {
+  background: #fff;
+}
+
+.rd-card-plain .rd-table {
+  background: #fff;
 }
