@@ -1029,7 +1029,7 @@ export default function TelecomMap() {
 
             <div className="kpiContainer">
               <div className="kpiHeaderRow">
-                <h2 className="kpiTitle">📊 Job Delivery / Amdocs QC / OTP Summary</h2>
+                <h2 className="kpiTitle">📊 Job Summary Since January 2026 </h2>
                 <button type="button" className="kpiTrendBtn" title="Open OTP / QC trend" onClick={() => setShowTrendModal(true)}> OTP / QC </button>
               </div>
               <div className="kpiGridModern">
