@@ -46,18 +46,24 @@ const DeviationCell = ({ internalQc, amdocsQc }) => {
 
 const formatPercent = (n) => `${Math.abs(Math.round(n))}%`;
 
-// Overall deviation on a 0-100% scale: average of the per-row "Deviation" column values as shown in the table (up/down arrows ignored)
+// Overall deviation on a 0-100% scale: average of the per-row "Deviation" values as shown in the table
+// (up/down arrows ignored). Rows with no deviation (0%) or empty QC are not counted.
 const getTotalDeviation = (list) => {
   let sum = 0;
   let count = 0;
+  let compared = 0;
   list.forEach((r) => {
     const internal = parsePercentValue(r.internal_qc);
     const amdocs = parsePercentValue(r.amdocs_qc);
     if (internal === null || amdocs === null) return;
-    sum += Math.abs(Math.round((amdocs - internal) * 100) / 100);
+    compared += 1;
+    const diff = Math.abs(Math.round((amdocs - internal) * 100) / 100);
+    if (diff === 0) return; // no deviation -> not counted
+    sum += diff;
     count += 1;
   });
-  return count ? { value: sum / count, count } : { value: null, count: 0 };
+  if (count) return { value: sum / count, count };
+  return { value: compared ? 0 : null, count: 0 }; // 0% if all matched, "-" if nothing to compare
 };
 
 const MONTH_SHORT = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
