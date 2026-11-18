@@ -9,7 +9,17 @@ import "../style/rawdata.css";
 
 const PAGE_SIZES = [25, 50, 100, 500, "All"];
 
-const show = (v) => (v === null || v === undefined ? "" : String(v));
+// OTP, Final OTP, QC Rating, No. of Returns, Final No. of Returns -> shown as whole-number % (0.84 -> 84%)
+const PERCENT_KEYS = ["otp", "final_otp", "qc_rating", "no_of_returns", "final_no_of_returns"];
+const PERCENT_HEADERS = ["otp", "finalotp", "qcrating", "noofreturns", "finalnoofreturns"];
+const fmtPct = (v) => {
+  const n = Number(v);
+  return Number.isNaN(n) ? String(v) : `${Math.round(n * 100)}%`;
+};
+const fmtCell = (key, v) => {
+  if (v === null || v === undefined || v === "") return "";
+  return PERCENT_KEYS.includes(key) ? fmtPct(v) : String(v);
+};
 
 export default function RawDataReport() {
   const [domains, setDomains] = useState([]);
@@ -111,7 +121,7 @@ export default function RawDataReport() {
       autoTable(doc, {
         startY: 62,
         head: [columns.map((c) => c.header)],
-        body: rows.map((r) => columns.map((c) => show(r[c.key]))),
+        body: rows.map((r) => columns.map((c) => fmtCell(c.key, r[c.key]))),
         styles: { fontSize: 6, cellPadding: 2, overflow: "linebreak" },
         headStyles: { fillColor: [30, 58, 138], textColor: 255, fontSize: 6, halign: "center" },
         alternateRowStyles: { fillColor: [244, 247, 252] },
@@ -141,7 +151,7 @@ export default function RawDataReport() {
     <div className="rd-page">
       <h2 className="rd-title">Raw Data Report</h2>
 
-      <div className="rd-card">
+      <div className="rd-card rd-card-plain">
         {/* top: left = Domain select, right = Export dropdown (Excel / PDF) */}
         <div className="rd-toolbar">
           <div className="left">
@@ -223,7 +233,7 @@ export default function RawDataReport() {
                   {pageRows.map((r, i) => (
                     <tr key={i}>
                       {columns.map((c) => (
-                        <td key={c.key}>{show(r[c.key])}</td>
+                        <td key={c.key}>{fmtCell(c.key, r[c.key])}</td>
                       ))}
                     </tr>
                   ))}
