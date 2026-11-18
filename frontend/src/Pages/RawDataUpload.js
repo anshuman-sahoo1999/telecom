@@ -9,6 +9,19 @@ const PREVIEW_ROWS = 100;
 const VIEW_PAGE_SIZES = [25, 50, 100, 500, "All"];
 const pad = (n) => String(n).padStart(2, "0");
 
+// OTP, Final OTP, QC Rating, No. of Returns, Final No. of Returns -> shown as whole-number % (0.84 -> 84%)
+const PERCENT_KEYS = ["otp", "final_otp", "qc_rating", "no_of_returns", "final_no_of_returns"];
+const PERCENT_HEADERS = ["otp", "finalotp", "qcrating", "noofreturns", "finalnoofreturns"];
+const fmtPct = (v) => {
+  const n = Number(v);
+  return Number.isNaN(n) ? String(v) : `${Math.round(n * 100)}%`;
+};
+const fmtCell = (key, v) => {
+  if (v === null || v === undefined || v === "") return "";
+  return PERCENT_KEYS.includes(key) ? fmtPct(v) : String(v);
+};
+
+
 const cellToText = (v) => {
   if (v === null || v === undefined) return "";
   if (v instanceof Date) {
@@ -284,7 +297,7 @@ export default function RawDataUpload() {
                               {viewSlice.map((r, i) => (
                                 <tr key={i}>
                                   {viewCols.map((c) => (
-                                    <td key={c.key}>{r[c.key] === null || r[c.key] === undefined ? "" : String(r[c.key])}</td>
+                                    <td key={c.key}>{fmtCell(c.key, r[c.key])}</td>
                                   ))}
                                 </tr>
                               ))}
@@ -365,7 +378,11 @@ export default function RawDataUpload() {
                     {preview.rows.map((r, i) => (
                       <tr key={i}>
                         {r.map((c, j) => (
-                          <td key={j}>{c}</td>
+                          <td key={j}>
+                            {PERCENT_HEADERS.includes(String(preview.headers[j]).toLowerCase().replace(/[^a-z0-9]/g, "")) && c !== ""
+                              ? fmtPct(c)
+                              : c}
+                          </td>
                         ))}
                       </tr>
                     ))}
