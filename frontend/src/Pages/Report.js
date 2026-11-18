@@ -44,19 +44,20 @@ const DeviationCell = ({ internalQc, amdocsQc }) => {
   );
 };
 
-const formatPercent = (n) => `${Math.abs(Math.round(n * 100) / 100)}%`;
+const formatPercent = (n) => `${Math.abs(Math.round(n))}%`;
 
-const getAverageDeviation = (list) => {
+// Sum of the per-row "Deviation" column (Amdocs QC - Internal QC) for the given rows
+const getTotalDeviation = (list) => {
   let sum = 0;
   let count = 0;
   list.forEach((r) => {
     const internal = parsePercentValue(r.internal_qc);
     const amdocs = parsePercentValue(r.amdocs_qc);
     if (internal === null || amdocs === null) return;
-    sum += amdocs - internal;
+    sum += Math.round((amdocs - internal) * 100) / 100;
     count += 1;
   });
-  return count ? { value: sum / count, count } : { value: null, count: 0 };
+  return count ? { value: sum, count } : { value: null, count: 0 };
 };
 
 const MONTH_SHORT = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
@@ -503,11 +504,11 @@ const handleSave = async () => {
   }, 0);
   const nowDate = new Date();
   const currentMonthLabel = `${MONTH_SHORT[nowDate.getMonth()]} ${nowDate.getFullYear()}`;
-  const totalDeviation = getAverageDeviation(filteredRows);
-  const currentMonthDeviation = getAverageDeviation(
+  const totalDeviation = getTotalDeviation(filteredRows);
+  const currentMonthDeviation = getTotalDeviation(
     filteredRows.filter((r) => `${r.month} ${r.year}` === currentMonthLabel)
   );
-  const devClass = (v) => (v === null || v === 0 ? "" : v > 0 ? "up" : "down");
+  const devClass = (v) => (v === null || Math.round(v) === 0 ? "" : v > 0 ? "up" : "down");
   const totalPages = Math.max(1, Math.ceil(filteredRows.length / rowsPerPage));
   const indexOfLast = currentPage * rowsPerPage;
   const currentRows = filteredRows.slice(
