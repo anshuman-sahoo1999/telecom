@@ -41,6 +41,8 @@ function App() {
         >
           <Route path="/admin-dashboard" element={<AdminDashboard />} />
           <Route path="/admin-dashboard/telecom" element={<Telecom />} />
+          <Route path="/admin-dashboard/rawdata-upload" element={<RawDataUpload />} />
+          <Route path="/admin-dashboard/rawdata-report" element={<RawDataReport />} />
           <Route path="/admin-dashboard/workupdate" element={<WorkUpdate />} />
           <Route path="/admin-dashboard/report" element={<Report />} />
           <Route path="/admin-dashboard/user-management" element={<UserManagement />} />
