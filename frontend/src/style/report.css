@@ -429,6 +429,102 @@ input:disabled {
 .pdf-hidden { width: 1200px; }
 .pdf-map    { width: 1000px; padding: 20px; }
 
+/* ---------- Quality Deviation summary (EMC vs Amdocs) ---------- */
+.info-deviation-row {
+  display: flex;
+  align-items: stretch;
+  justify-content: space-between;
+  gap: 16px;
+  margin: 16px 0;
+}
+
+.info-deviation-row .table-update-info {
+  flex: 1;
+  margin: 0;
+  display: flex;
+  align-items: center;
+}
+
+.deviation-summary {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  flex-shrink: 0;
+  padding: 8px 16px;
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+}
+
+.deviation-title {
+  margin: 0 0 4px;
+  font-size: 13px;
+  font-weight: 700;
+  color: #1e3a8a;
+  white-space: nowrap;
+}
+
+.deviation-row {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.deviation-item {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.deviation-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: #4a6995;
+}
+
+.deviation-value {
+  font-size: 14px;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.deviation-value.up   { color: #16a34a; }
+.deviation-value.down { color: #dc2626; }
+
+/* Tablet */
+@media (max-width: 1024px) {
+  .info-deviation-row { gap: 12px; }
+  .deviation-title { font-size: 12.5px; }
+}
+
+/* Mobile */
+@media (max-width: 768px) {
+  .info-deviation-row {
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .deviation-summary {
+    width: 100%;
+    flex-shrink: 1;
+    padding: 10px 14px;
+  }
+
+  .deviation-title {
+    white-space: normal;
+    font-size: 13px;
+  }
+
+  .deviation-item {
+    gap: 8px;
+  }
+
+  .deviation-label {
+    font-size: 12px;
+  }
+}
+
 @media (max-width: 1024px) {
   .title {
     padding: 0 120px;
@@ -448,15 +544,22 @@ input:disabled {
   }
 
   .filters {
-    flex-direction: column;
-    gap: 16px;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
   }
 
   .left-filters,
   .right-filters {
-    flex-direction: column;
-    width: 100%;
-    align-items: stretch;
+    display: contents;
+  }
+
+  .left-filters .filter-group:nth-child(3) {
+    grid-column: 1 / -1;
+  }
+
+  .filter-group {
+    min-width: 0;
   }
 
   .filter-group,
