@@ -205,6 +205,7 @@ const handleSave = async () => {
 
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
@@ -485,7 +486,6 @@ const handleSave = async () => {
   const totalJobs = filteredRows.reduce((sum, r) => {
     return sum + Number(r.jobsDelivered || 0);
   }, 0);
-
   const totalPages = Math.max(1, Math.ceil(filteredRows.length / rowsPerPage));
   const indexOfLast = currentPage * rowsPerPage;
   const currentRows = filteredRows.slice(
@@ -506,7 +506,6 @@ const handleSave = async () => {
       .replace(/\s/g, "_");
     return `${date}_at_${time}`;
   };
-
   const downloadPDF = async () => {
     setIsGeneratingPDF(true);
     try {
@@ -1378,7 +1377,6 @@ const handleSave = async () => {
               </tbody>
             </table>
           </div>
-
           <div className="report-footer">
             <div className="last-update">
               <strong>Total Records:</strong> {filteredRows.length}
@@ -1411,7 +1409,6 @@ const handleSave = async () => {
                 }}
                 className="page-input"
               />
-
               <button
                 disabled={currentPage === totalPages}
                 onClick={() => setCurrentPage(currentPage + 1)}
