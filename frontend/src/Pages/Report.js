@@ -514,7 +514,8 @@ const handleSave = async () => {
         String(r.year) === String(nowDate.getFullYear())
     )
   );
-  const devClass = () => "";
+  // Colour of the summary value: 0% -> green (no deviation), anything above 0% -> red
+  const devClass = (v) => (v === null || v === undefined ? "" : v === 0 ? "up" : "down");
   const totalPages = Math.max(1, Math.ceil(filteredRows.length / rowsPerPage));
   const indexOfLast = currentPage * rowsPerPage;
   const currentRows = filteredRows.slice(
