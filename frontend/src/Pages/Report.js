@@ -44,6 +44,21 @@ const DeviationCell = ({ internalQc, amdocsQc }) => {
   );
 };
 
+const formatPercent = (n) => `${Math.abs(Math.round(n * 100) / 100)}%`;
+
+const getAverageDeviation = (list) => {
+  let sum = 0;
+  let count = 0;
+  list.forEach((r) => {
+    const internal = parsePercentValue(r.internal_qc);
+    const amdocs = parsePercentValue(r.amdocs_qc);
+    if (internal === null || amdocs === null) return;
+    sum += amdocs - internal;
+    count += 1;
+  });
+  return count ? { value: sum / count, count } : { value: null, count: 0 };
+};
+
 const MONTH_SHORT = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
 const monthIndexOf = (name) => MONTH_SHORT.findIndex((m) => m.toLowerCase() === String(name).slice(0, 3).toLowerCase());
@@ -486,6 +501,13 @@ const handleSave = async () => {
   const totalJobs = filteredRows.reduce((sum, r) => {
     return sum + Number(r.jobsDelivered || 0);
   }, 0);
+  const nowDate = new Date();
+  const currentMonthLabel = `${MONTH_SHORT[nowDate.getMonth()]} ${nowDate.getFullYear()}`;
+  const totalDeviation = getAverageDeviation(filteredRows);
+  const currentMonthDeviation = getAverageDeviation(
+    filteredRows.filter((r) => `${r.month} ${r.year}` === currentMonthLabel)
+  );
+  const devClass = (v) => (v === null || v === 0 ? "" : v > 0 ? "up" : "down");
   const totalPages = Math.max(1, Math.ceil(filteredRows.length / rowsPerPage));
   const indexOfLast = currentPage * rowsPerPage;
   const currentRows = filteredRows.slice(
@@ -1005,6 +1027,7 @@ const handleSave = async () => {
             </div>
           </div>
 
+          <div className="info-deviation-row">
           <div className="table-update-info">
             <p>
               <span className="star-icon">* </span>{" "}
@@ -1016,6 +1039,25 @@ const handleSave = async () => {
               (<strong>{user?.name || "Unknown User"}</strong>){" "}
               at <strong>{formattedLastUpdated}</strong>
             </p>
+          </div>
+
+          <div className="deviation-summary">
+            <h3 className="deviation-title">Quality Deviation EMC vs Amdocs</h3>
+            <div className="deviation-row">
+              <div className="deviation-item">
+                <span className="deviation-label">Total Deviation</span>
+                <span className={`deviation-value ${devClass(totalDeviation.value)}`}>
+                  {totalDeviation.value !== null ? formatPercent(totalDeviation.value) : "-"}
+                </span>
+              </div>
+              <div className="deviation-item">
+                <span className="deviation-label">Current Month Deviation ({currentMonthLabel})</span>
+                <span className={`deviation-value ${devClass(currentMonthDeviation.value)}`}>
+                  {currentMonthDeviation.value !== null ? formatPercent(currentMonthDeviation.value) : "-"}
+                </span>
+              </div>
+            </div>
+          </div>
           </div>
 
           <div className="table-responsive-container">
