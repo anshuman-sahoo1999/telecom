@@ -441,7 +441,6 @@ input:disabled {
 .info-deviation-row .table-update-info {
   flex: 1;
   margin: 0;
-  padding: 6px 14px;
   align-self: center;
   display: flex;
   align-items: center;
