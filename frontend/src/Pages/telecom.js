@@ -952,7 +952,7 @@ export default function TelecomMap() {
         {role === "Admin" && <button className={`menuBtn ${activePage === "user-management" ? "active" : ""}`} onClick={() => goTo("user-management")}><FaUsers className="menuIcon" />{menuOpen && "User Management"}</button>}
         {(role === "Admin" || role === "TeamLead") && <button className={`menuBtn ${activePage === "organogram" ? "active" : ""}`} onClick={() => goTo("organogram")}><FaSitemap className="menuIcon" />{menuOpen && "Organogram"}</button>}
 
-        {(role === "MIS" || role === "Admin") && (
+        {role === "MIS" && (
           <div className="menuGroupContainer">
             <button
               className={`menuBtn ${(activePage === "jobcreation" || activePage === "jobsubmission" || activePage === "jobhistory") ? "active" : ""}`}
@@ -970,10 +970,6 @@ export default function TelecomMap() {
             )}
           </div>
         )}
-
-        {(role === "Admin" || role === "TeamLead") && <button className={`menuBtn ${activePage === "workstatus" ? "active" : ""}`} onClick={() => goTo("workstatus")}><FaClock className="menuIcon" />{menuOpen && "Timesheet / Work Status"}</button>}
-
-        {role === "MIS" && (<button className={`menuBtn ${activePage === "capacityforecast" ? "active" : ""}`} onClick={() => goTo("capacityforecast")}><FaChartLine className="menuIcon" />{menuOpen && "Capacity / Forecast"}</button>)}
 
         {/* Raw Data group: sub tabs -> Raw Data Upload, Raw Data Report (MIS + Admin) */}
         {(role === "MIS" || role === "Admin") && (
@@ -993,6 +989,10 @@ export default function TelecomMap() {
           )}
         </div>
         )}
+
+        {(role === "Admin" || role === "TeamLead") && <button className={`menuBtn ${activePage === "workstatus" ? "active" : ""}`} onClick={() => goTo("workstatus")}><FaClock className="menuIcon" />{menuOpen && "Timesheet / Work Status"}</button>}
+
+        {role === "MIS" && (<button className={`menuBtn ${activePage === "capacityforecast" ? "active" : ""}`} onClick={() => goTo("capacityforecast")}><FaChartLine className="menuIcon" />{menuOpen && "Capacity / Forecast"}</button>)}
 
         {role === "MIS" && (<button className={`menuBtn ${activePage === "domaincreation" ? "active" : ""}`} onClick={() => goTo("domaincreation")}><FaLayerGroup className="menuIcon" />{menuOpen && "Domain Creation"}</button>)}
       </div>
