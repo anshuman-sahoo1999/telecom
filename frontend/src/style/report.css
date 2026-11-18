@@ -450,8 +450,8 @@ input:disabled {
   flex-direction: column;
   justify-content: center;
   flex-shrink: 0;
-  min-width: 330px;
-  padding: 9px 18px;
+  min-width: 360px;
+  padding: 10px 20px;
   background: #ffffff;
   border: 1px solid #e2e8f0;
   border-radius: 6px;
@@ -496,7 +496,7 @@ input:disabled {
 /* Tablet */
 @media (max-width: 1024px) {
   .info-deviation-row { gap: 12px; }
-  .deviation-summary { min-width: 300px; }
+  .deviation-summary { min-width: 330px; }
   .deviation-title { font-size: 12.5px; }
 }
 
