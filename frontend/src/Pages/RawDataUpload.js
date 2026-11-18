@@ -61,15 +61,16 @@ export default function RawDataUpload() {
   const [viewSize, setViewSize] = useState(50);
 
   const [toast, setToast] = useState(null);
-  const timer = useRef(null);
   const inputRef = useRef(null);
 
-  const showToast = (text, type = "err") => {
-    setToast({ text, type });
-    clearTimeout(timer.current);
-    timer.current = setTimeout(() => setToast(null), 3500);
-  };
-  useEffect(() => () => clearTimeout(timer.current), []);
+  const showToast = useCallback((text, type = "err") => setToast({ text, type }), []);
+
+  // auto-hide toast after 3.5s
+  useEffect(() => {
+    if (!toast) return undefined;
+    const id = setTimeout(() => setToast(null), 3500);
+    return () => clearTimeout(id);
+  }, [toast]);
 
   const fetchFiles = useCallback(async () => {
     try {
@@ -80,7 +81,7 @@ export default function RawDataUpload() {
     } finally {
       setLoadingList(false);
     }
-  }, []);
+  }, [showToast]);
 
   useEffect(() => {
     fetchFiles();
