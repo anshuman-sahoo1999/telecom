@@ -432,7 +432,7 @@ input:disabled {
 /* ---------- Quality Deviation summary (EMC vs Amdocs) ---------- */
 .info-deviation-row {
   display: flex;
-  align-items: stretch;
+  align-items: center;
   justify-content: space-between;
   gap: 16px;
   margin: 16px 0;
@@ -441,8 +441,14 @@ input:disabled {
 .info-deviation-row .table-update-info {
   flex: 1;
   margin: 0;
+  padding: 6px 14px;
+  align-self: center;
   display: flex;
   align-items: center;
+}
+
+.info-deviation-row .table-update-info p {
+  line-height: 1.4;
 }
 
 .deviation-summary {
@@ -488,6 +494,12 @@ input:disabled {
   font-size: 14px;
   font-weight: 700;
   color: #0f172a;
+}
+
+.deviation-count {
+  font-size: 11px;
+  font-weight: 600;
+  color: #64748b;
 }
 
 .deviation-value.up   { color: #16a34a; }
