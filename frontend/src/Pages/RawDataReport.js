@@ -9,9 +9,7 @@ import "../style/rawdata.css";
 
 const PAGE_SIZES = [25, 50, 100, 500, "All"];
 
-// OTP, Final OTP, QC Rating, No. of Returns, Final No. of Returns -> shown as whole-number % (0.84 -> 84%)
 const PERCENT_KEYS = ["otp", "final_otp", "qc_rating", "no_of_returns", "final_no_of_returns"];
-const PERCENT_HEADERS = ["otp", "finalotp", "qcrating", "noofreturns", "finalnoofreturns"];
 const fmtPct = (v) => {
   const n = Number(v);
   return Number.isNaN(n) ? String(v) : `${Math.round(n * 100)}%`;
