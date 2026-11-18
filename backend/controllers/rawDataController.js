@@ -265,6 +265,25 @@ exports.getFiles = async (req, res) => {
   }
 };
 
+/* GET /api/rawdata/file/:fileName  ->  all rows of one imported file (View) */
+exports.getFileData = async (req, res) => {
+  try {
+    await ensureTable();
+    const rows = await q(
+      `SELECT ${KEYS.join(", ")} FROM raw_data WHERE file_name = ? ORDER BY id ASC`,
+      [req.params.fileName]
+    );
+    res.json({
+      success: true,
+      columns: COLUMNS.map(({ header, key }) => ({ header, key })),
+      total: rows.length,
+      data: rows.map(toApiRow),
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+};
+
 /* DELETE /api/rawdata/file/:fileName */
 exports.deleteFile = async (req, res) => {
   try {
