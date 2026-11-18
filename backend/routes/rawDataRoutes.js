@@ -8,7 +8,6 @@ const upload = multer({
   limits: { fileSize: 50 * 1024 * 1024 }, // 50 MB
 });
 
-// Wrap multer so upload errors (e.g. file too large) return clean JSON
 const uploadSingle = (req, res, next) =>
   upload.single("file")(req, res, (err) => {
     if (!err) return next();
@@ -21,6 +20,7 @@ const uploadSingle = (req, res, next) =>
 
 router.post("/import-excel", uploadSingle, ctrl.importExcel);
 router.get("/files", ctrl.getFiles);
+router.get("/file/:fileName", ctrl.getFileData);
 router.delete("/file/:fileName", ctrl.deleteFile);
 router.get("/domains", ctrl.getDomains);
 router.get("/export/excel", ctrl.exportExcel);
