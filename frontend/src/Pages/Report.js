@@ -1051,7 +1051,7 @@ const handleSave = async () => {
                 </span>
               </div>
               <div className="deviation-item">
-                <span className="deviation-label">Current Month Deviation ({currentMonthLabel})</span>
+                <span className="deviation-label">Current Deviation ({currentMonthLabel})</span>
                 <span className={`deviation-value ${devClass(currentMonthDeviation.value)}`}>
                   {currentMonthDeviation.value !== null ? formatPercent(currentMonthDeviation.value) : "-"}
                 </span>
