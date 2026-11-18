@@ -30,6 +30,8 @@ const COLUMNS = [
 ];
 
 const KEYS = COLUMNS.map((c) => c.key);
+// shown as whole-number % in the Excel export (value stays numeric, e.g. 0.84 -> 84%)
+const PERCENT_KEYS = ["otp", "final_otp", "qc_rating", "no_of_returns", "final_no_of_returns"];
 const REQUIRED_HEADERS = ["ID", "Domain"];
 
 const norm = (s) => String(s === null || s === undefined ? "" : s).toLowerCase().replace(/[^a-z0-9]/g, "");
@@ -357,6 +359,15 @@ exports.exportExcel = async (req, res) => {
         o[c.key] = r[c.key] === null || r[c.key] === undefined ? "" : r[c.key];
       });
       ws.addRow(o);
+    });
+
+    // percent columns -> "0%" number format
+    const pctCols = COLUMNS.map((c, i) => (PERCENT_KEYS.includes(c.key) ? i + 1 : 0)).filter(Boolean);
+    ws.eachRow((row, n) => {
+      if (n === 1) return;
+      pctCols.forEach((ci) => {
+        row.getCell(ci).numFmt = "0%";
+      });
     });
 
     const head = ws.getRow(1);
