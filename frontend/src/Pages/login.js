@@ -59,13 +59,11 @@ const parsePercent = (val) => {
 // Amdocs QC: blank / invalid => null (calculation me count nahi hoga)
 const getQc = (item) => parsePercent(firstFilled(item?.amdocsQc, item?.amdocs_qc));
 
-// OTP blank hai? (blank, "-", "NA", "N/A", 0, 0%) => blank maana jayega, calculation me count nahi hoga
+// OTP blank hai? (blank, "-", "NA", "N/A") => count nahi hoga. 0 / 0% VALID value hai => count hoga
 const isOtpBlank = (val) => {
   if (val === null || val === undefined || val === false) return true;
   const s = val.toString().trim().toLowerCase();
   if (s === "" || s === "-" || s === "na" || s === "n/a") return true;
-  const n = Number(s.replace(/%$/, "").trim());
-  if (!isNaN(n) && n === 0) return true;
   return false;
 };
 
