@@ -27,6 +27,27 @@ const formatPercentage = (value) => {
 };
 
 const displayPct = (v) => formatPercentage(v);
+
+// OTP: 0 / 0% bhi valid value hai (count hoga). Sirf khali OTP null/"" maana jayega.
+const formatOtp = (value) => {
+  if (value === null || value === undefined || value === "") return "";
+  const str = value.toString().trim();
+  if (str === "" || str === "-") return "";
+  if (["na", "n/a"].includes(str.toLowerCase())) return "";
+  if (str.endsWith("%")) return str;
+  const num = Number(str);
+  if (!isNaN(num)) {
+    if (num === 0) return "0%";
+    if (num > 0 && num <= 1) return `${Number((num * 100).toFixed(2))}%`;
+    return `${num}%`;
+  }
+  return str;
+};
+const displayOtp = (v) => formatOtp(v);
+const otpVal = (v) => {
+  const f = formatOtp(v);
+  return f === "" ? null : f;
+};
 const qcVal = (v) => {
   if (v === undefined || v === null) return null;
   if (isZeroValue(v)) return null;
@@ -186,7 +207,7 @@ const workInsertParams = ({ domain, state, jobId, month, receiveDate, ecdDate, s
   submissionDate || null,
   qcVal(amdocsQc),
   qcVal(internalQc),
-  qcVal(otp),
+  otpVal(otp),
 ];
 
 const monthNames = [
@@ -283,7 +304,7 @@ exports.createJob = (req, res) => {
 
   const finalAmdocsQc = qcVal(amdocsQc !== undefined ? amdocsQc : amdocs_qc);
   const finalInternalQc = qcVal(internalQc !== undefined ? internalQc : internal_qc);
-  const finalOtp = qcVal(otp) || qcVal(internalOtp) || null;
+  const finalOtp = otpVal(otp) || otpVal(internalOtp) || null;
 
   const cleanJobId = clean(jobId);
   const cleanDomain = normalize(domain);
@@ -431,12 +452,12 @@ exports.getAllJobs = (req, res) => {
 
       // OTP / QC hamesha percentage: DB me "1" ho to "100%", 0 / blank => ""
       jcRows.forEach((row) => {
-        row.otp = displayPct(row.otp);
+        row.otp = displayOtp(row.otp);
         row.amdocsQc = displayPct(row.amdocsQc);
         row.internalQc = displayPct(row.internalQc);
       });
       wuRows.forEach((row) => {
-        row.otp = displayPct(row.otp);
+        row.otp = displayOtp(row.otp);
         row.amdocs_qc = displayPct(row.amdocs_qc);
         row.internal_qc = displayPct(row.internal_qc);
 
@@ -552,7 +573,7 @@ exports.updateJob = (req, res) => {
 
   const finalInternalQc = qcVal(internalQc !== undefined ? internalQc : internal_qc);
   const finalAmdocsQc = qcVal(amdocsQc !== undefined ? amdocsQc : amdocs_qc);
-  const finalOtp = qcVal(otp) || qcVal(internalOtp) || null;
+  const finalOtp = otpVal(otp) || otpVal(internalOtp) || null;
   const cleanMonth = cleanSingleMonth(month);
   // Date ke saath time (alag aaye ya date ke andar ho) "MM-DD-YYYY HH:mm" ban jata hai
   const finalReceiveDate = joinDateTime(
