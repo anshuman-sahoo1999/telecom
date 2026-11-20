@@ -387,7 +387,25 @@ const formatPercentage = (value) => {
   return str;
 };
 
-const cleanOtp = (v) => formatPercentage(v);
+// OTP: 0 / 0% bhi VALID value hai ("0%" ban kar save hoga aur count hoga).
+// Sirf bilkul khali (blank / null / "-" / NA) OTP hi blank maana jayega.
+const formatOtp = (value) => {
+  if (value === null || value === undefined || value === "") return "";
+  let str = value.toString().replace(QC_ARROW_RE, "").trim();
+  if (str === "" || str === "-") return "";
+  if (["na", "n/a"].includes(str.toLowerCase())) return "";
+  if (str.endsWith("%")) return str;
+
+  const num = Number(str);
+  if (!isNaN(num)) {
+    if (num === 0) return "0%";
+    const abs = Math.abs(num);
+    if (abs > 0 && abs <= 1) return `${Number((num * 100).toFixed(2))}%`;
+    return `${num}%`;
+  }
+  return str;
+};
+const cleanOtp = (v) => formatOtp(v);
 const blankIfZero = (v) => (isZeroValue(v) ? "" : v);
 // SPEED: header ka "compressed" naam baar-baar regex se na banana pade, isliye yaad rakhte hain
 const compressCache = new Map();
